@@ -7,7 +7,13 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.domain.dates import FUSO_HORARIO
 from app.extensions import db
-from app.services import collector, collector_lock, settings_service, watchdog_service
+from app.services import (
+    collector,
+    collector_lock,
+    retention_service,
+    settings_service,
+    watchdog_service,
+)
 
 logger = logging.getLogger("collector")
 
@@ -34,6 +40,13 @@ def _executar_watchdog(app) -> None:
             telegram_client=telegram_client,
         )
         db.session.commit()
+
+
+def _executar_retencao(app) -> None:
+    with app.app_context():
+        retention_service.limpar_dados_antigos(
+            retention_days=settings_service.get_retention_days()
+        )
 
 
 def iniciar(app) -> BackgroundScheduler:
@@ -66,6 +79,16 @@ def iniciar(app) -> BackgroundScheduler:
         minutes=1,
         args=[app],
         id="watchdog_check",
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        _executar_retencao,
+        "cron",
+        hour=3,
+        minute=0,
+        args=[app],
+        id="retencao_diaria",
         max_instances=1,
         coalesce=True,
     )

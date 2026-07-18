@@ -1,12 +1,15 @@
 # Power Central — Monitoramento de Comunicação de Alarmes
 
 Sistema interno de monitoramento de comunicação de clientes de alarme
-(Novo Millenium / PowerCentral). Arquitetura completa, modelo de dados e
-plano de fases em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
+(Novo Millenium / PowerCentral).
 
-> Este README cobre **setup de desenvolvimento**. O manual de operação em
-> PT-BR para a equipe de suporte (instalação como serviço Windows, backup,
-> troubleshooting) é entregue na Fase 5.
+- Arquitetura, modelo de dados e plano de fases: [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md)
+- Instalação, operação do dia a dia e troubleshooting (PT-BR, para a
+  equipe de suporte): [`docs/OPERACAO.md`](docs/OPERACAO.md)
+
+> Este README cobre **setup de desenvolvimento**. Para instalar em
+> produção (serviço Windows, HTTPS interno, backup), use o manual de
+> operação acima.
 
 ## Status
 
@@ -15,7 +18,7 @@ plano de fases em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
 - [x] Fase 2 — Coletor, persistência e alertas Telegram
 - [x] Fase 3 — Web: autenticação + dashboard
 - [x] Fase 4 — Admin, atualização manual e auditoria
-- [ ] Fase 5 — Hardening, deploy Windows e documentação
+- [x] Fase 5 — Hardening, deploy Windows e documentação
 
 ## Setup local
 
@@ -37,6 +40,16 @@ flask db upgrade                     # cria o schema em instance/power_central.d
 flask seed-admin                     # cria o primeiro usuário administrador
 ```
 
+### Rodando localmente
+
+```bash
+flask run                            # servidor de desenvolvimento
+flask collect --dry-run              # roda um ciclo do coletor com dados de exemplo
+```
+
+Em produção, o processo é `waitress-serve --call app:create_app` com
+`START_SCHEDULER=true` — ver `docs/OPERACAO.md` seção 4 e `scripts/install_service.ps1`.
+
 ### Testes
 
 ```bash
@@ -47,13 +60,14 @@ pytest
 
 ```
 app/
-  config.py, extensions.py, security.py, logging_config.py, cli.py
+  config.py, extensions.py, security.py, logging_config.py, cli.py, scheduler.py
   models/        # SQLAlchemy — schema (users, settings, ciclos, contas, alertas, auditoria, watchdog)
-  domain/        # regras de negócio puras (Fase 1)
-  integrations/  # clientes SoftGuard/Telegram (Fase 1/2)
-  services/      # orquestração: coletor, alertas, watchdog, auditoria (Fase 2+)
-  web/           # blueprints Flask, templates, estáticos (Fase 3+)
+  domain/        # regras de negócio puras: classificação, datas, diff de estado, ordenação, formatação
+  integrations/  # clientes SoftGuard/Telegram (+ stub documentado para Auvo, fase futura)
+  services/      # orquestração: coletor, alertas, watchdog, settings, auditoria, retenção, trigger manual
+  web/           # blueprints Flask (auth, dashboard, admin), templates, estáticos
 migrations/      # Alembic (via Flask-Migrate)
-tests/           # pytest — unit/, fixtures/
-docs/            # arquitetura e (futuramente) manual de operação
+tests/           # pytest — unit/ e integration/
+scripts/         # instalação como serviço Windows (NSSM) + exemplo de Caddyfile
+docs/            # ARQUITETURA.md (design) e OPERACAO.md (manual PT-BR)
 ```

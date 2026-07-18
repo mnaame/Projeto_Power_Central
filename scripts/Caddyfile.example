@@ -1,0 +1,13 @@
+# Exemplo de Caddyfile para expor o Power Central via HTTPS dentro da
+# rede interna. Copie para C:\caddy\Caddyfile e ajuste o endereço.
+#
+# "tls internal" faz o Caddy emitir e gerenciar um certificado local
+# (self-signed via sua própria CA interna) — funciona sem depender de
+# internet, mas o navegador vai reclamar de certificado não confiável
+# até que o certificado raiz do Caddy seja instalado nas máquinas da
+# equipe (veja "docs/OPERACAO.md", seção HTTPS interno).
+
+power-central.novomillenium.local {
+    tls internal
+    reverse_proxy 127.0.0.1:8000
+}
