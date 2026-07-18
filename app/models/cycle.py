@@ -1,4 +1,5 @@
 from app.extensions import db
+from app.models.types import TZDateTime
 from app.utils.time import utcnow
 
 CYCLE_STATUSES = ("running", "success", "error")
@@ -15,8 +16,8 @@ class CollectionCycle(db.Model):
     __tablename__ = "collection_cycles"
 
     id = db.Column(db.Integer, primary_key=True)
-    started_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
-    finished_at = db.Column(db.DateTime, nullable=True)
+    started_at = db.Column(TZDateTime, nullable=False, default=utcnow, index=True)
+    finished_at = db.Column(TZDateTime, nullable=True)
     status = db.Column(db.String(16), nullable=False, default="running")
     source = db.Column(db.String(16), nullable=False, default="scheduled")
     triggered_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
@@ -56,9 +57,9 @@ class CycleAccount(db.Model):
     )
     account_number = db.Column(db.String(32), nullable=False, index=True)
     account_name = db.Column(db.String(255), nullable=True)
-    tst_failure_since = db.Column(db.DateTime, nullable=True)
+    tst_failure_since = db.Column(TZDateTime, nullable=True)
     last_event_code = db.Column(db.String(16), nullable=True)
-    last_event_at = db.Column(db.DateTime, nullable=True)
+    last_event_at = db.Column(TZDateTime, nullable=True)
     classification = db.Column(db.String(20), nullable=False)
 
     __table_args__ = (
@@ -78,10 +79,12 @@ class AlertSent(db.Model):
     __tablename__ = "alerts_sent"
 
     id = db.Column(db.Integer, primary_key=True)
+    # Nulo para alertas de watchdog (RF8), que não estão ligados a um ciclo
+    # específico — o alerta é sobre a AUSÊNCIA de ciclos bem-sucedidos.
     cycle_id = db.Column(
-        db.Integer, db.ForeignKey("collection_cycles.id"), nullable=False, index=True
+        db.Integer, db.ForeignKey("collection_cycles.id"), nullable=True, index=True
     )
-    sent_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
+    sent_at = db.Column(TZDateTime, nullable=False, default=utcnow, index=True)
     message_type = db.Column(db.String(24), nullable=False)
     accounts_added = db.Column(db.JSON, nullable=True)
     accounts_removed = db.Column(db.JSON, nullable=True)

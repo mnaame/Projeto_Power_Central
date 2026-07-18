@@ -26,6 +26,10 @@ class Config:
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
     LOG_DIR = os.environ.get("LOG_DIR", str(BASE_DIR / "logs"))
 
+    # Só True no processo real do serviço (ver wsgi/serviço Windows na Fase
+    # 5) — nunca em comandos de CLI (migrations, seed-admin) nem em testes.
+    START_SCHEDULER = os.environ.get("START_SCHEDULER", "false").lower() == "true"
+
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true"
@@ -45,6 +49,7 @@ class TestingConfig(Config):
     DEBUG = True
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     WTF_CSRF_ENABLED = False
+    START_SCHEDULER = False
 
 
 CONFIG_MAP = {

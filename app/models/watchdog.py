@@ -1,4 +1,5 @@
 from app.extensions import db
+from app.models.types import TZDateTime
 
 
 class WatchdogState(db.Model):
@@ -8,9 +9,9 @@ class WatchdogState(db.Model):
     __tablename__ = "watchdog_state"
 
     id = db.Column(db.Integer, primary_key=True)
-    last_successful_cycle_at = db.Column(db.DateTime, nullable=True)
+    last_successful_cycle_at = db.Column(TZDateTime, nullable=True)
     alert_active = db.Column(db.Boolean, nullable=False, default=False)
-    alert_sent_at = db.Column(db.DateTime, nullable=True)
+    alert_sent_at = db.Column(TZDateTime, nullable=True)
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<WatchdogState alert_active={self.alert_active}>"

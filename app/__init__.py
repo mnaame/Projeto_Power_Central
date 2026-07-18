@@ -26,6 +26,11 @@ def create_app(config_name: str | None = None) -> Flask:
 
     register_cli(app)
 
+    if app.config.get("START_SCHEDULER"):
+        from app.scheduler import iniciar
+
+        iniciar(app)
+
     @app.route("/health")
     def health():
         try:

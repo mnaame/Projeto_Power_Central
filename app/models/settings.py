@@ -1,4 +1,5 @@
 from app.extensions import db
+from app.models.types import TZDateTime
 from app.utils.time import utcnow
 
 
@@ -13,7 +14,7 @@ class Setting(db.Model):
 
     key = db.Column(db.String(64), primary_key=True)
     value = db.Column(db.Text, nullable=True)
-    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+    updated_at = db.Column(TZDateTime, nullable=False, default=utcnow, onupdate=utcnow)
     updated_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
 
     def __repr__(self) -> str:  # pragma: no cover

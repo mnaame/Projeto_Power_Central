@@ -1,4 +1,5 @@
 from app.extensions import db
+from app.models.types import TZDateTime
 from app.utils.time import utcnow
 
 AUDIT_RESULTS = ("success", "failure")
@@ -12,7 +13,7 @@ class AuditLog(db.Model):
     __tablename__ = "audit_log"
 
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
+    timestamp = db.Column(TZDateTime, nullable=False, default=utcnow, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     username_attempted = db.Column(db.String(64), nullable=True)
     ip_address = db.Column(db.String(45), nullable=True)
