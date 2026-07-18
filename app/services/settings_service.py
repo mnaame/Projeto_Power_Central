@@ -12,6 +12,8 @@ DEFAULTS: dict[str, str] = {
     "confirming_codes": "TST,CLO,OPN",
     "collector_interval_minutes": "5",
     "watchdog_threshold_minutes": "15",
+    "manual_cooldown_seconds": "60",
+    "retention_days": "90",
     "show_false_positives_in_panel": "true",
     "telegram_bot_token": "",
     "telegram_chat_id": "",
@@ -53,6 +55,14 @@ def get_collector_interval_minutes() -> int:
 
 def get_watchdog_threshold_minutes() -> float:
     return float(get("watchdog_threshold_minutes"))
+
+
+def get_manual_cooldown_seconds() -> int:
+    return int(get("manual_cooldown_seconds"))
+
+
+def get_retention_days() -> int:
+    return int(get("retention_days"))
 
 
 def show_false_positives_in_panel() -> bool:

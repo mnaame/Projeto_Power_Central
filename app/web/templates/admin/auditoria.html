@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Auditoria{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title"><h2>Auditoria</h2></div>
+
+  <form method="get" class="card" style="display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: flex-end; margin-bottom: var(--space-4);">
+    <div class="field" style="margin-bottom: 0;">
+      <label for="filtro-acao">Ação</label>
+      <select id="filtro-acao" name="acao">
+        <option value="">Todas</option>
+        {% for acao in acoes_disponiveis %}
+        <option value="{{ acao }}" {{ 'selected' if acao == filtro_acao }}>{{ acao }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field" style="margin-bottom: 0;">
+      <label for="filtro-resultado">Resultado</label>
+      <select id="filtro-resultado" name="resultado">
+        <option value="">Todos</option>
+        <option value="success" {{ 'selected' if filtro_resultado == 'success' }}>Sucesso</option>
+        <option value="failure" {{ 'selected' if filtro_resultado == 'failure' }}>Falha</option>
+      </select>
+    </div>
+    <div class="field" style="margin-bottom: 0;">
+      <label for="filtro-usuario">Usuário</label>
+      <input id="filtro-usuario" type="text" name="usuario" value="{{ filtro_usuario }}" placeholder="nome de usuário">
+    </div>
+    <button type="submit" class="btn btn-primary">Filtrar</button>
+    <a class="btn btn-ghost" href="{{ url_for('admin.auditoria') }}">Limpar</a>
+  </form>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Quando</th>
+          <th>Usuário</th>
+          <th>IP</th>
+          <th>Ação</th>
+          <th>Resultado</th>
+          <th>Detalhes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for evento in paginacao.items %}
+        <tr>
+          <td class="is-numeric">{{ evento.timestamp|data_local }}</td>
+          <td>{{ evento.username_attempted or '—' }}</td>
+          <td class="tabular-nums">{{ evento.ip_address or '—' }}</td>
+          <td>{{ evento.action }}</td>
+          <td>
+            <span class="chip {{ 'chip-ok' if evento.result == 'success' else 'chip-critical' }}">
+              {{ 'Sucesso' if evento.result == 'success' else 'Falha' }}
+            </span>
+          </td>
+          <td class="account-name">{{ evento.details or '' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="muted">Nenhum evento encontrado com esses filtros.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if paginacao.pages > 1 %}
+  <div style="display: flex; gap: var(--space-2); margin-top: var(--space-4); align-items: center;">
+    {% if paginacao.has_prev %}
+    <a class="btn btn-ghost" href="{{ url_for('admin.auditoria', pagina=paginacao.prev_num, acao=filtro_acao, resultado=filtro_resultado, usuario=filtro_usuario) }}">Anterior</a>
+    {% endif %}
+    <span class="muted">Página {{ paginacao.page }} de {{ paginacao.pages }}</span>
+    {% if paginacao.has_next %}
+    <a class="btn btn-ghost" href="{{ url_for('admin.auditoria', pagina=paginacao.next_num, acao=filtro_acao, resultado=filtro_resultado, usuario=filtro_usuario) }}">Próxima</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

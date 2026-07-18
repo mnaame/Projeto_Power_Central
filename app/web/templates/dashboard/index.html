@@ -4,6 +4,15 @@
 
 {% block content %}
 <h1 class="visually-hidden">Painel de monitoramento de comunicação</h1>
+
+<div class="section-title" style="margin-bottom: var(--space-4);">
+  <span class="muted" style="font-size: var(--font-size-sm);">Atualiza sozinho a cada 30s</span>
+  <form method="post" action="{{ url_for('dashboard.atualizar') }}" data-loading-submit>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-primary">Atualizar agora</button>
+  </form>
+</div>
+
 <div id="dashboard-content" class="poll-target"
      data-poll-target="{{ url_for('dashboard.painel_parcial') }}"
      data-poll-interval="30000">

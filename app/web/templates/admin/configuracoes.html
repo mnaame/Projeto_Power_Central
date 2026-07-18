@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Configurações{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title"><h2>Regras de negócio</h2></div>
+  <div class="card" style="max-width: 560px;">
+    <form method="post" action="{{ url_for('admin.salvar_configuracoes') }}" novalidate>
+      {{ form.csrf_token }}
+
+      <div class="field">
+        {{ form.window_hours.label }}
+        {{ form.window_hours() }}
+        {% for mensagem in form.window_hours.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.confirming_codes.label }}
+        {{ form.confirming_codes() }}
+        {% for mensagem in form.confirming_codes.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.collector_interval_minutes.label }}
+        {{ form.collector_interval_minutes() }}
+        {% for mensagem in form.collector_interval_minutes.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.watchdog_threshold_minutes.label }}
+        {{ form.watchdog_threshold_minutes() }}
+        {% for mensagem in form.watchdog_threshold_minutes.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.manual_cooldown_seconds.label }}
+        {{ form.manual_cooldown_seconds() }}
+        {% for mensagem in form.manual_cooldown_seconds.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.retention_days.label }}
+        {{ form.retention_days() }}
+        {% for mensagem in form.retention_days.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field" style="display: flex; align-items: center; gap: var(--space-2);">
+        {{ form.show_false_positives_in_panel() }}
+        {{ form.show_false_positives_in_panel.label }}
+      </div>
+
+      <button type="submit" class="btn btn-primary">Salvar configurações</button>
+    </form>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Telegram</h2></div>
+  <div class="card" style="max-width: 560px;">
+    <p class="muted">
+      Status:
+      <span class="chip {{ 'chip-ok' if telegram_configurado else 'chip-neutral' }}">
+        {{ 'Configurado' if telegram_configurado else 'Não configurado' }}
+      </span>
+    </p>
+
+    <form method="post" action="{{ url_for('admin.salvar_telegram') }}" novalidate style="margin-bottom: var(--space-5);">
+      {{ telegram_form.csrf_token }}
+      <div class="field">
+        {{ telegram_form.bot_token.label }}
+        {{ telegram_form.bot_token(placeholder="gerado no BotFather", autocomplete="off") }}
+      </div>
+      <div class="field">
+        {{ telegram_form.chat_id.label }}
+        {{ telegram_form.chat_id(placeholder="ex.: -1001234567890") }}
+      </div>
+      <button type="submit" class="btn btn-primary">Salvar Telegram</button>
+    </form>
+
+    <form method="post" action="{{ url_for('admin.testar_telegram') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-ghost" {{ 'disabled' if not telegram_configurado }}>
+        Enviar mensagem de teste
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -23,7 +23,12 @@
 
       {% if current_user.is_authenticated %}
       <nav class="app-nav" aria-label="Navegação principal">
-        <a class="app-nav-link is-active" href="{{ url_for('dashboard.index') }}">Painel</a>
+        <a class="app-nav-link {{ 'is-active' if request.endpoint == 'dashboard.index' }}" href="{{ url_for('dashboard.index') }}">Painel</a>
+        {% if current_user.is_admin %}
+        <a class="app-nav-link {{ 'is-active' if request.endpoint == 'admin.usuarios' }}" href="{{ url_for('admin.usuarios') }}">Usuários</a>
+        <a class="app-nav-link {{ 'is-active' if request.endpoint in ('admin.configuracoes', 'admin.salvar_configuracoes') }}" href="{{ url_for('admin.configuracoes') }}">Configurações</a>
+        <a class="app-nav-link {{ 'is-active' if request.endpoint == 'admin.auditoria' }}" href="{{ url_for('admin.auditoria') }}">Auditoria</a>
+        {% endif %}
         <span class="app-nav-user">
           {{ current_user.username }}
           <span class="chip chip-neutral">{{ 'Administrador' if current_user.is_admin else 'Operador' }}</span>

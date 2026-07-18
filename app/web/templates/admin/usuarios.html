@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Usuários{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title"><h2>Novo usuário</h2></div>
+  <div class="card" style="max-width: 480px;">
+    <form method="post" novalidate>
+      {{ form.csrf_token }}
+      <div class="field">
+        {{ form.username.label }}
+        {{ form.username(autocomplete="off") }}
+        {% for mensagem in form.username.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      <div class="field">
+        {{ form.password.label }}
+        {{ form.password(autocomplete="new-password") }}
+        {% for mensagem in form.password.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      <div class="field">
+        {{ form.role.label }}
+        {{ form.role() }}
+      </div>
+      <button type="submit" class="btn btn-primary">Criar usuário</button>
+    </form>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Usuários cadastrados</h2></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Usuário</th>
+          <th>Papel</th>
+          <th>Status</th>
+          <th>Último login</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for usuario in usuarios %}
+        <tr>
+          <td>{{ usuario.username }}</td>
+          <td><span class="chip chip-neutral">{{ 'Administrador' if usuario.role == 'admin' else 'Operador' }}</span></td>
+          <td><span class="chip {{ 'chip-ok' if usuario.active else 'chip-critical' }}">{{ 'Ativo' if usuario.active else 'Inativo' }}</span></td>
+          <td class="is-numeric">{{ usuario.last_login_at|data_local }}</td>
+          <td>
+            <div style="display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: flex-start;">
+              <form method="post" action="{{ url_for('admin.alternar_status', user_id=usuario.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-ghost" {{ 'disabled' if usuario.id == current_user.id }}>
+                  {{ 'Desativar' if usuario.active else 'Ativar' }}
+                </button>
+              </form>
+              <details>
+                <summary class="btn btn-ghost">Trocar senha</summary>
+                <form method="post" action="{{ url_for('admin.trocar_senha', user_id=usuario.id) }}"
+                      style="margin-top: var(--space-2); display: flex; gap: var(--space-2);">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <label class="visually-hidden" for="senha-{{ usuario.id }}">Nova senha para {{ usuario.username }}</label>
+                  <input id="senha-{{ usuario.id }}" type="password" name="password" placeholder="Nova senha" style="width: 180px;">
+                  <button type="submit" class="btn btn-primary">Salvar</button>
+                </form>
+              </details>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

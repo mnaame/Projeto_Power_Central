@@ -310,7 +310,8 @@ td.is-numeric, th.is-numeric {
   margin-bottom: var(--space-1);
 }
 
-.field input {
+.field input,
+.field select {
   width: 100%;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
@@ -321,8 +322,22 @@ td.is-numeric, th.is-numeric {
   font-size: var(--font-size-md);
 }
 
-.field input:focus-visible {
+.field input[type="checkbox"] {
+  width: auto;
+}
+
+.field input:focus-visible,
+.field select:focus-visible {
   border-color: var(--color-accent);
+}
+
+/* <details><summary> usado como botão (ex.: "Trocar senha" na lista de usuários) */
+summary.btn {
+  list-style: none;
+}
+
+summary.btn::-webkit-details-marker {
+  display: none;
 }
 
 .field-error {

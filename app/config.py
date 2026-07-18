@@ -51,6 +51,8 @@ class TestingConfig(Config):
     WTF_CSRF_ENABLED = False
     START_SCHEDULER = False
     RATELIMIT_ENABLED = False
+    # Chave Fernet fixa só para testes — nunca usar em produção.
+    ENCRYPTION_KEY = "DPmdqP8812octmZoWCmLjRSJg8b2xHd1-sTRyY64Rd0="
 
 
 CONFIG_MAP = {

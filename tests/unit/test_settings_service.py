@@ -10,6 +10,8 @@ def test_get_retorna_padrao_quando_nao_configurado(app):
     assert settings_service.get_confirming_codes() == ("TST", "CLO", "OPN")
     assert settings_service.get_collector_interval_minutes() == 5
     assert settings_service.get_watchdog_threshold_minutes() == 15.0
+    assert settings_service.get_manual_cooldown_seconds() == 60
+    assert settings_service.get_retention_days() == 90
 
 
 def test_set_e_get_roundtrip(app):

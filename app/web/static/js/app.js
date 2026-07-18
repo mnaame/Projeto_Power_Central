@@ -35,6 +35,19 @@
       var intervaloMs = parseInt(alvo.getAttribute("data-poll-interval") || "30000", 10);
       iniciarPolling(alvo, url, intervaloMs);
     }
+
+    document.addEventListener("submit", function (evento) {
+      var formulario = evento.target;
+      if (!formulario.matches("[data-loading-submit]")) {
+        return;
+      }
+      var botaoEnvio = formulario.querySelector("button[type=submit]");
+      if (botaoEnvio && !botaoEnvio.disabled) {
+        botaoEnvio.dataset.textoOriginal = botaoEnvio.textContent;
+        botaoEnvio.textContent = "Atualizando...";
+        botaoEnvio.disabled = true;
+      }
+    });
   });
 
   function iniciarPolling(alvo, url, intervaloMs) {

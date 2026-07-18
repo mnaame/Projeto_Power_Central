@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from flask import Blueprint, render_template
-from flask_login import login_required
+from flask import Blueprint, current_app, flash, redirect, render_template, url_for
+from flask_login import current_user, login_required
 
 from app.domain.ordering import ordenar_por_falha_mais_antiga
+from app.extensions import db
 from app.models.cycle import AlertSent, CollectionCycle
 from app.models.watchdog import WatchdogState
-from app.services import settings_service
+from app.services import audit_service, settings_service, trigger_service
 
 bp = Blueprint("dashboard", __name__)
 
@@ -91,3 +92,42 @@ def painel_parcial():
     """Fragmento HTML recarregado por polling (RF2) — mesma renderização
     usada dentro da página completa."""
     return render_template("dashboard/_conteudo.html", **_dados_dashboard())
+
+
+@bp.route("/dashboard/atualizar", methods=["POST"])
+@login_required
+def atualizar():
+    """Botão "Atualizar agora" (RF4) — operador e admin podem disparar."""
+    try:
+        cycle = trigger_service.disparar_manual(config=current_app.config, user_id=current_user.id)
+        audit_service.registrar(
+            action="manual_update",
+            result="success" if cycle.status == "success" else "failure",
+            user=current_user,
+            details={"cycle_id": cycle.id, "status": cycle.status, "error": cycle.error_message},
+        )
+        db.session.commit()
+        if cycle.status == "success":
+            flash("Atualização concluída.", "info")
+        else:
+            flash(f"Atualização terminou com erro: {cycle.error_message}", "warning")
+    except trigger_service.CicloEmAndamentoError:
+        audit_service.registrar(
+            action="manual_update",
+            result="failure",
+            user=current_user,
+            details={"motivo": "ciclo_em_andamento"},
+        )
+        db.session.commit()
+        flash("Já existe uma atualização em andamento. Aguarde terminar.", "warning")
+    except trigger_service.CooldownAtivoError as exc:
+        audit_service.registrar(
+            action="manual_update",
+            result="failure",
+            user=current_user,
+            details={"motivo": "cooldown", "segundos_restantes": exc.segundos_restantes},
+        )
+        db.session.commit()
+        flash(f"Aguarde mais {exc.segundos_restantes}s antes de atualizar de novo.", "warning")
+
+    return redirect(url_for("dashboard.index"))

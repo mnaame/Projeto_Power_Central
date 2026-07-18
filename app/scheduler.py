@@ -7,7 +7,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.domain.dates import FUSO_HORARIO
 from app.extensions import db
-from app.services import collector, settings_service, watchdog_service
+from app.services import collector, collector_lock, settings_service, watchdog_service
 
 logger = logging.getLogger("collector")
 
@@ -15,8 +15,14 @@ _scheduler: BackgroundScheduler | None = None
 
 
 def _executar_ciclo_agendado(app) -> None:
-    with app.app_context():
-        collector.executar_ciclo(config=app.config, source="scheduled")
+    if not collector_lock.tentar_adquirir():
+        logger.info("Ciclo agendado pulado: já há uma execução em andamento (manual).")
+        return
+    try:
+        with app.app_context():
+            collector.executar_ciclo(config=app.config, source="scheduled")
+    finally:
+        collector_lock.liberar()
 
 
 def _executar_watchdog(app) -> None:
@@ -74,3 +80,11 @@ def parar() -> None:
     if _scheduler is not None:
         _scheduler.shutdown(wait=False)
         _scheduler = None
+
+
+def atualizar_intervalo_coletor(minutos: int) -> None:
+    """Aplica um novo intervalo (RF7) ao job já em execução, sem precisar
+    reiniciar o serviço. Não faz nada se o scheduler não estiver ativo
+    (dev/testes/CLI) — a config já fica salva para a próxima subida."""
+    if _scheduler is not None:
+        _scheduler.reschedule_job("ciclo_coletor", trigger="interval", minutes=minutos)
