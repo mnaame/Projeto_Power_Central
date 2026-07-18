@@ -13,7 +13,7 @@ plano de fases em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
 - [x] Fase 0 — Fundação (config, modelos, migration inicial)
 - [x] Fase 1 — Domínio + cliente SoftGuard
 - [x] Fase 2 — Coletor, persistência e alertas Telegram
-- [ ] Fase 3 — Web: autenticação + dashboard
+- [x] Fase 3 — Web: autenticação + dashboard
 - [ ] Fase 4 — Admin, atualização manual e auditoria
 - [ ] Fase 5 — Hardening, deploy Windows e documentação
 

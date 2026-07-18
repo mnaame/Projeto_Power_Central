@@ -50,6 +50,7 @@ class TestingConfig(Config):
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     WTF_CSRF_ENABLED = False
     START_SCHEDULER = False
+    RATELIMIT_ENABLED = False
 
 
 CONFIG_MAP = {

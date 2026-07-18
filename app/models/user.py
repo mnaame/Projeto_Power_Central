@@ -1,3 +1,5 @@
+from flask_login import UserMixin
+
 from app.extensions import db
 from app.models.types import TZDateTime
 from app.utils.time import utcnow
@@ -5,7 +7,7 @@ from app.utils.time import utcnow
 ROLES = ("admin", "operador")
 
 
-class User(db.Model):
+class User(UserMixin, db.Model):
     __tablename__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -23,6 +25,10 @@ class User(db.Model):
     @property
     def is_admin(self) -> bool:
         return self.role == "admin"
+
+    @property
+    def is_active(self) -> bool:  # sobrepõe o padrão (sempre True) do UserMixin
+        return self.active
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<User {self.username} ({self.role})>"

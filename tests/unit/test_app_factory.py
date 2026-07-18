@@ -6,4 +6,8 @@ def test_health_endpoint_reports_db_ok(client):
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.get_json() == {"status": "ok", "db_ok": True}
+    payload = response.get_json()
+    assert payload["status"] == "ok"
+    assert payload["db_ok"] is True
+    assert payload["last_cycle_at"] is None
+    assert payload["watchdog_alert_active"] is False

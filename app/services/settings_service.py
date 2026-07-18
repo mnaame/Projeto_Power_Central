@@ -12,6 +12,7 @@ DEFAULTS: dict[str, str] = {
     "confirming_codes": "TST,CLO,OPN",
     "collector_interval_minutes": "5",
     "watchdog_threshold_minutes": "15",
+    "show_false_positives_in_panel": "true",
     "telegram_bot_token": "",
     "telegram_chat_id": "",
 }
@@ -52,6 +53,10 @@ def get_collector_interval_minutes() -> int:
 
 def get_watchdog_threshold_minutes() -> float:
     return float(get("watchdog_threshold_minutes"))
+
+
+def show_false_positives_in_panel() -> bool:
+    return get("show_false_positives_in_panel").strip().lower() == "true"
 
 
 def _fernet(encryption_key: str) -> Fernet:

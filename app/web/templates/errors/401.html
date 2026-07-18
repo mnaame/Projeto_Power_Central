@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Sessão necessária{% endblock %}
+
+{% block content %}
+<div class="card error-state" style="max-width: 480px; margin: var(--space-8) auto;">
+  <h1 style="font-size: var(--font-size-xl);">Faça login para continuar</h1>
+  <p class="muted">Sua sessão expirou ou você ainda não entrou no sistema.</p>
+  <a class="btn btn-primary" href="{{ url_for('auth.login') }}">Ir para o login</a>
+</div>
+{% endblock %}

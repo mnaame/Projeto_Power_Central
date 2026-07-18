@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Entrar{% endblock %}
+
+{% block content %}
+<div style="max-width: 380px; margin: var(--space-8) auto;">
+  <div class="card">
+    <h1 style="font-size: var(--font-size-xl); margin-bottom: var(--space-1);">Entrar</h1>
+    <p class="muted" style="margin-bottom: var(--space-5);">Acesso restrito à equipe Novo Millenium.</p>
+
+    {% if erro %}
+      <div class="banner banner-critical" role="alert">{{ erro }}</div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {{ form.csrf_token }}
+
+      <div class="field">
+        {{ form.username.label }}
+        {{ form.username(autofocus=true, autocomplete="username") }}
+        {% for mensagem in form.username.errors %}
+          <div class="field-error">{{ mensagem }}</div>
+        {% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.password.label }}
+        {{ form.password(autocomplete="current-password") }}
+        {% for mensagem in form.password.errors %}
+          <div class="field-error">{{ mensagem }}</div>
+        {% endfor %}
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width: 100%;">Entrar</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

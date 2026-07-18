@@ -1,0 +1,172 @@
+{% if watchdog and watchdog.alert_active %}
+<div class="banner banner-critical" role="alert">
+  <strong>Alerta de watchdog:</strong>&nbsp;o coletor está sem executar com sucesso além do
+  limite esperado. Verifique o serviço na máquina de monitoramento.
+</div>
+{% endif %}
+
+{% if ultimo_ciclo and ultimo_ciclo.status == 'error' %}
+<div class="banner banner-warning" role="alert">
+  <strong>O último ciclo terminou com erro.</strong>
+  {% if ultimo_ciclo.error_message %}{{ ultimo_ciclo.error_message }}{% endif %}
+  O sistema tentará novamente automaticamente no próximo ciclo.
+</div>
+{% endif %}
+
+<div class="stat-grid">
+  <div class="stat-tile">
+    <div class="stat-tile-label">Sem comunicação agora</div>
+    <div class="stat-tile-value {{ 'is-critical' if contas_sem_comunicacao else 'is-ok' }}">
+      {{ contas_sem_comunicacao|length }}
+    </div>
+    <div class="stat-tile-hint">{{ 'Requer atenção' if contas_sem_comunicacao else 'Tudo normal' }}</div>
+  </div>
+
+  <div class="stat-tile">
+    <div class="stat-tile-label">Falsos positivos</div>
+    <div class="stat-tile-value">{{ contas_falso_positivo|length }}</div>
+    <div class="stat-tile-hint">Falha de auto-teste, mas comunicando — fora do alerta</div>
+  </div>
+
+  <div class="stat-tile">
+    <div class="stat-tile-label">Último ciclo</div>
+    <div class="stat-tile-value" style="font-size: var(--font-size-lg);">
+      {% if ultimo_ciclo %}
+        {% set rotulos_status = {'success': 'Sucesso', 'error': 'Erro', 'running': 'Em execução'} %}
+        {% set estilos_status = {'success': 'chip-ok', 'error': 'chip-critical', 'running': 'chip-warning'} %}
+        <span class="chip {{ estilos_status[ultimo_ciclo.status] }}">{{ rotulos_status[ultimo_ciclo.status] }}</span>
+      {% else %}
+        <span class="chip chip-neutral">Sem execuções</span>
+      {% endif %}
+    </div>
+    <div class="stat-tile-hint">
+      {% if ultimo_ciclo and ultimo_ciclo.finished_at %}
+        {{ ultimo_ciclo.finished_at|data_local }} ({{ ultimo_ciclo.finished_at|duracao_ate_agora }} atrás)
+      {% else %}
+        —
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stat-tile">
+    <div class="stat-tile-label">Último alerta enviado</div>
+    <div class="stat-tile-value" style="font-size: var(--font-size-lg);">
+      {% if ultimo_alerta %}
+        {% set rotulos_alerta = {'entrada': 'Entrada', 'saida': 'Saída', 'normalizacao': 'Normalização', 'watchdog': 'Watchdog', 'watchdog_recovery': 'Watchdog recuperado'} %}
+        <span class="chip {{ 'chip-ok' if ultimo_alerta.success else 'chip-warning' }}">
+          {{ rotulos_alerta[ultimo_alerta.message_type] }}
+        </span>
+      {% else %}
+        <span class="chip chip-neutral">Nenhum ainda</span>
+      {% endif %}
+    </div>
+    <div class="stat-tile-hint">{{ ultimo_alerta.sent_at|data_local if ultimo_alerta else '—' }}</div>
+  </div>
+</div>
+
+<div class="section card chart-card">
+  <div class="section-title">
+    <h2>Evolução — clientes sem comunicação</h2>
+    <span class="muted" style="font-size: var(--font-size-xs);">últimos {{ serie_grafico|length }} ciclos</span>
+  </div>
+  {% if serie_grafico %}
+  <svg viewBox="0 0 {{ grafico_largura }} {{ grafico_altura }}" role="img"
+       aria-label="Gráfico de evolução de clientes sem comunicação ao longo do tempo">
+    <g class="chart-grid">
+      <line x1="0" y1="{{ (grafico_altura * 0.25)|round(1) }}" x2="{{ grafico_largura }}" y2="{{ (grafico_altura * 0.25)|round(1) }}"></line>
+      <line x1="0" y1="{{ (grafico_altura * 0.5)|round(1) }}" x2="{{ grafico_largura }}" y2="{{ (grafico_altura * 0.5)|round(1) }}"></line>
+      <line x1="0" y1="{{ (grafico_altura * 0.75)|round(1) }}" x2="{{ grafico_largura }}" y2="{{ (grafico_altura * 0.75)|round(1) }}"></line>
+    </g>
+    <polyline class="chart-line" points="{{ pontos_grafico }}"></polyline>
+    {% for ponto in serie_grafico %}
+    <circle class="chart-point" cx="{{ ponto.x }}" cy="{{ ponto.y }}" r="2.5">
+      <title>{{ ponto.valor }} sem comunicação — {{ ponto.quando|data_local }}</title>
+    </circle>
+    {% endfor %}
+  </svg>
+  {% else %}
+  <p class="muted">Ainda não há histórico suficiente para o gráfico.</p>
+  {% endif %}
+</div>
+
+<div class="section">
+  <div class="section-title">
+    <h2>Clientes sem comunicação real</h2>
+  </div>
+
+  {% if contas_sem_comunicacao %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Conta</th>
+          <th>Em falha desde</th>
+          <th>Último evento</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for conta in contas_sem_comunicacao %}
+        <tr>
+          <td>
+            <span class="tabular-nums">{{ conta.account_number }}</span>
+            <div class="account-name">{{ conta.account_name or 'sem nome' }}</div>
+          </td>
+          <td class="is-numeric">
+            {{ conta.tst_failure_since|data_local }}
+            <div class="account-name">{{ conta.tst_failure_since|duracao_ate_agora }} atrás</div>
+          </td>
+          <td>
+            <span class="chip chip-neutral">{{ conta.last_event_code or 'nenhum' }}</span>
+            <div class="account-name">{{ conta.last_event_at|data_local }} ({{ conta.last_event_at|duracao_ate_agora }} atrás)</div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card empty-state">
+    <div class="empty-state-icon" aria-hidden="true">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20 6 9 17l-5-5"></path>
+      </svg>
+    </div>
+    <h3>Nenhum cliente sem comunicação</h3>
+    <p class="muted">Todos os painéis monitorados estão comunicando normalmente.</p>
+  </div>
+  {% endif %}
+</div>
+
+{% if mostrar_falsos_positivos and contas_falso_positivo %}
+<div class="section">
+  <div class="section-title">
+    <h2>Falsos positivos
+      <span class="muted" style="font-weight: var(--font-weight-regular); font-size: var(--font-size-sm);">
+        (em falha de auto-teste, mas comunicando)
+      </span>
+    </h2>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Conta</th><th>Em falha desde</th><th>Último evento</th></tr>
+      </thead>
+      <tbody>
+        {% for conta in contas_falso_positivo %}
+        <tr>
+          <td>
+            <span class="tabular-nums">{{ conta.account_number }}</span>
+            <div class="account-name">{{ conta.account_name or 'sem nome' }}</div>
+          </td>
+          <td class="is-numeric">{{ conta.tst_failure_since|data_local }}</td>
+          <td>
+            <span class="chip chip-ok">{{ conta.last_event_code }}</span>
+            <div class="account-name">{{ conta.last_event_at|data_local }}</div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}

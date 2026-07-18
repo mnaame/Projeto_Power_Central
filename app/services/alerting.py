@@ -2,33 +2,18 @@ from __future__ import annotations
 
 import html
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Sequence
 
 from app.domain.classification import SEM_COMUNICACAO, ContaClassificada
 from app.domain.diffing import contas_sem_comunicacao, detectar_mudanca
+from app.domain.formatting import formatar_duracao
+from app.domain.ordering import ordenar_por_falha_mais_antiga
 from app.extensions import db
 from app.integrations.telegram_client import TelegramClient, TelegramError
 from app.models.cycle import AlertSent, CollectionCycle
 
 logger = logging.getLogger("collector")
-
-_SEM_DATA = datetime(9999, 1, 1, tzinfo=timezone.utc)
-
-
-def _formatar_duracao(desde: datetime | None, agora: datetime) -> str:
-    if desde is None:
-        return "desconhecido"
-    total_minutos = max(int((agora - desde).total_seconds() // 60), 0)
-    dias, resto_min = divmod(total_minutos, 24 * 60)
-    horas, minutos = divmod(resto_min, 60)
-    partes = []
-    if dias:
-        partes.append(f"{dias}d")
-    if dias or horas:
-        partes.append(f"{horas}h")
-    partes.append(f"{minutos}min")
-    return " ".join(partes)
 
 
 def _formatar_data(data: datetime | None) -> str:
@@ -43,16 +28,11 @@ def _linha_conta(conta: ContaClassificada, *, agora: datetime) -> str:
     return (
         f"<b>{numero}</b> — {nome}\n"
         f"Em falha desde: {_formatar_data(conta.tst_failure_since)} "
-        f"({_formatar_duracao(conta.tst_failure_since, agora)})\n"
+        f"({formatar_duracao(conta.tst_failure_since, agora)})\n"
         f"Último evento: {html.escape(conta.last_event_code or 'nenhum')} em "
         f"{_formatar_data(conta.last_event_at)} "
-        f"({_formatar_duracao(conta.last_event_at, agora)})"
+        f"({formatar_duracao(conta.last_event_at, agora)})"
     )
-
-
-def _chave_ordenacao(conta: ContaClassificada) -> tuple[bool, datetime]:
-    data = conta.tst_failure_since
-    return (data is None, data or _SEM_DATA)
 
 
 def montar_relatorio_sem_comunicacao(
@@ -62,7 +42,7 @@ def montar_relatorio_sem_comunicacao(
     (regra 5), somente contas SEM_COMUNICACAO — falsos positivos ficam de
     fora por padrão (regra 6.3)."""
     sem_comunicacao = [c for c in contas if c.classification == SEM_COMUNICACAO]
-    ordenadas = sorted(sem_comunicacao, key=_chave_ordenacao)
+    ordenadas = ordenar_por_falha_mais_antiga(sem_comunicacao)
 
     cabecalho = f"<b>Clientes sem comunicação real ({len(ordenadas)})</b>"
     if not ordenadas:

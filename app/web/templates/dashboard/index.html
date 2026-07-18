@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}Painel{% endblock %}
+
+{% block content %}
+<h1 class="visually-hidden">Painel de monitoramento de comunicação</h1>
+<div id="dashboard-content" class="poll-target"
+     data-poll-target="{{ url_for('dashboard.painel_parcial') }}"
+     data-poll-interval="30000">
+  {% include "dashboard/_conteudo.html" %}
+</div>
+{% endblock %}
