@@ -5,7 +5,14 @@ from app.utils.time import utcnow
 CYCLE_STATUSES = ("running", "success", "error")
 CYCLE_SOURCES = ("scheduled", "manual", "watchdog")
 CLASSIFICATIONS = ("sem_comunicacao", "falso_positivo")
-ALERT_MESSAGE_TYPES = ("entrada", "saida", "normalizacao", "watchdog", "watchdog_recovery")
+ALERT_MESSAGE_TYPES = (
+    "entrada",
+    "saida",
+    "normalizacao",
+    "watchdog",
+    "watchdog_recovery",
+    "periodico",
+)
 
 
 class CollectionCycle(db.Model):
@@ -93,7 +100,8 @@ class AlertSent(db.Model):
 
     __table_args__ = (
         db.CheckConstraint(
-            "message_type IN ('entrada', 'saida', 'normalizacao', 'watchdog', 'watchdog_recovery')",
+            "message_type IN ('entrada', 'saida', 'normalizacao', 'watchdog', "
+            "'watchdog_recovery', 'periodico')",
             name="ck_alerts_sent_message_type",
         ),
     )

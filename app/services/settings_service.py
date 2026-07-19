@@ -15,6 +15,8 @@ DEFAULTS: dict[str, str] = {
     "manual_cooldown_seconds": "60",
     "retention_days": "90",
     "show_false_positives_in_panel": "true",
+    "periodic_report_enabled": "false",
+    "periodic_report_interval_minutes": "60",
     "telegram_bot_token": "",
     "telegram_chat_id": "",
 }
@@ -67,6 +69,14 @@ def get_retention_days() -> int:
 
 def show_false_positives_in_panel() -> bool:
     return get("show_false_positives_in_panel").strip().lower() == "true"
+
+
+def periodic_report_enabled() -> bool:
+    return get("periodic_report_enabled").strip().lower() == "true"
+
+
+def get_periodic_report_interval_minutes() -> int:
+    return int(get("periodic_report_interval_minutes"))
 
 
 def _fernet(encryption_key: str) -> Fernet:

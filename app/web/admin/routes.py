@@ -110,6 +110,8 @@ def configuracoes():
         manual_cooldown_seconds=settings_service.get_manual_cooldown_seconds(),
         retention_days=settings_service.get_retention_days(),
         show_false_positives_in_panel=settings_service.show_false_positives_in_panel(),
+        periodic_report_enabled=settings_service.periodic_report_enabled(),
+        periodic_report_interval_minutes=settings_service.get_periodic_report_interval_minutes(),
     )
     telegram_configurado = (
         settings_service.get_telegram_credentials(
@@ -162,6 +164,16 @@ def salvar_configuracoes():
             "true" if form.show_false_positives_in_panel.data else "false",
             updated_by_id=current_user.id,
         )
+        settings_service.set(
+            "periodic_report_enabled",
+            "true" if form.periodic_report_enabled.data else "false",
+            updated_by_id=current_user.id,
+        )
+        settings_service.set(
+            "periodic_report_interval_minutes",
+            str(form.periodic_report_interval_minutes.data),
+            updated_by_id=current_user.id,
+        )
 
         audit_service.registrar(
             action="settings_changed",
@@ -175,6 +187,8 @@ def salvar_configuracoes():
                 "manual_cooldown_seconds": form.manual_cooldown_seconds.data,
                 "retention_days": form.retention_days.data,
                 "show_false_positives_in_panel": form.show_false_positives_in_panel.data,
+                "periodic_report_enabled": form.periodic_report_enabled.data,
+                "periodic_report_interval_minutes": form.periodic_report_interval_minutes.data,
             },
         )
         db.session.commit()

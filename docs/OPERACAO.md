@@ -167,8 +167,17 @@ hora (tem um intervalo mínimo entre cliques, configurável).
 Em **Configurações** (só admin): janela de horas sem comunicação, lista de
 códigos que comprovam comunicação (`TST, CLO, OPN` por padrão), intervalo
 do coletor, limite do watchdog, cooldown do botão manual, retenção de
-histórico, e a configuração do Telegram (com botão "Enviar mensagem de
-teste" para confirmar que o bot está certo antes de depender dele).
+histórico, o **relatório periódico** (opcional, desligado por padrão:
+envia a lista atual no Telegram no intervalo escolhido — ex.: de hora em
+hora — mesmo sem mudança; os alertas por mudança continuam funcionando
+independentemente), e a configuração do Telegram (com botão "Enviar
+mensagem de teste" para confirmar que o bot está certo antes de depender
+dele).
+
+> Atenção: o relatório periódico e o ciclo automático de coleta dependem
+> do agendador interno, que só roda no processo do serviço
+> (`START_SCHEDULER=true` — o `install_service.ps1` configura isso). Com
+> `flask run` "puro", nada roda sozinho: só o botão "Atualizar agora".
 
 Em **Usuários**: criar, ativar/desativar e trocar senha de qualquer
 usuário (não é possível desativar o próprio usuário logado).

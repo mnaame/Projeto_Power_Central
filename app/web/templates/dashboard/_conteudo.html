@@ -52,7 +52,7 @@
     <div class="stat-tile-label">Último alerta enviado</div>
     <div class="stat-tile-value" style="font-size: var(--font-size-lg);">
       {% if ultimo_alerta %}
-        {% set rotulos_alerta = {'entrada': 'Entrada', 'saida': 'Saída', 'normalizacao': 'Normalização', 'watchdog': 'Watchdog', 'watchdog_recovery': 'Watchdog recuperado'} %}
+        {% set rotulos_alerta = {'entrada': 'Entrada', 'saida': 'Saída', 'normalizacao': 'Normalização', 'watchdog': 'Watchdog', 'watchdog_recovery': 'Watchdog recuperado', 'periodico': 'Relatório periódico'} %}
         <span class="chip {{ 'chip-ok' if ultimo_alerta.success else 'chip-warning' }}">
           {{ rotulos_alerta[ultimo_alerta.message_type] }}
         </span>

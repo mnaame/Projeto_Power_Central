@@ -36,6 +36,13 @@ class ConfiguracoesForm(FlaskForm):
         "Retenção de histórico (dias)", validators=[DataRequired(), NumberRange(min=7, max=3650)]
     )
     show_false_positives_in_panel = BooleanField("Mostrar falsos positivos no painel")
+    periodic_report_enabled = BooleanField(
+        "Enviar relatório periódico no Telegram (mesmo sem mudança na lista)"
+    )
+    periodic_report_interval_minutes = IntegerField(
+        "Intervalo do relatório periódico (minutos)",
+        validators=[DataRequired(), NumberRange(min=5, max=1440)],
+    )
 
 
 class TelegramForm(FlaskForm):

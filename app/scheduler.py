@@ -10,6 +10,7 @@ from app.extensions import db
 from app.services import (
     collector,
     collector_lock,
+    periodic_report,
     retention_service,
     settings_service,
     watchdog_service,
@@ -40,6 +41,14 @@ def _executar_watchdog(app) -> None:
             telegram_client=telegram_client,
         )
         db.session.commit()
+
+
+def _executar_relatorio_periodico(app) -> None:
+    with app.app_context():
+        telegram_client = collector.criar_cliente_telegram(app.config)
+        periodic_report.talvez_enviar(
+            agora=datetime.now(FUSO_HORARIO), telegram_client=telegram_client
+        )
 
 
 def _executar_retencao(app) -> None:
@@ -79,6 +88,15 @@ def iniciar(app) -> BackgroundScheduler:
         minutes=1,
         args=[app],
         id="watchdog_check",
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        _executar_relatorio_periodico,
+        "interval",
+        minutes=1,
+        args=[app],
+        id="relatorio_periodico",
         max_instances=1,
         coalesce=True,
     )
