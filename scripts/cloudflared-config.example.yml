@@ -1,0 +1,16 @@
+# Exemplo de configuração do Cloudflare Tunnel para o Power Central.
+# Copie para %UserProfile%\.cloudflared\config.yml e ajuste os 3 valores
+# abaixo com os dados gerados por "cloudflared tunnel create power-central"
+# (veja docs/OPERACAO.md, seção 4.2).
+
+tunnel: COLE-AQUI-O-ID-DO-TUNEL
+credentials-file: C:\Users\SEU-USUARIO\.cloudflared\COLE-AQUI-O-ID-DO-TUNEL.json
+
+ingress:
+  # Ajuste o hostname para o domínio/subdomínio real da empresa.
+  # A porta deve bater com a usada pelo waitress (padrão do
+  # install_service.ps1: 8000).
+  - hostname: power-central.suaempresa.com.br
+    service: http://127.0.0.1:8000
+  # Regra "catch-all" obrigatória — qualquer outro hostname cai aqui.
+  - service: http_status:404

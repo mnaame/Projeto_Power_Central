@@ -126,12 +126,12 @@ Para desinstalar o serviço (não apaga banco nem arquivos):
 .\uninstall_service.ps1
 ```
 
-### 4.1 HTTPS interno (recomendado)
+### 4.1 HTTPS só na rede interna (Caddy)
 
 Por padrão o serviço escuta só em `127.0.0.1:8000` (não é alcançável por
-outros computadores da rede). Para acesso da equipe via rede interna com
-HTTPS, use um reverse proxy — [Caddy](https://caddyserver.com/) é o mais
-simples:
+outros computadores, nem da rede nem da internet). Para acesso da equipe
+via rede interna com HTTPS, sem sair da rede da empresa, use um reverse
+proxy — [Caddy](https://caddyserver.com/) é o mais simples:
 
 1. Baixe o Caddy (executável único) e coloque em `C:\caddy\caddy.exe`.
 2. Copie `scripts/Caddyfile.example` para `C:\caddy\Caddyfile` e ajuste o
@@ -144,6 +144,94 @@ simples:
    deixa esse certificado em `%ProgramData%\Caddy\pki\authorities\local\root.crt`;
    distribua-o via GPO ou manualmente (Gerenciador de Certificados do
    Windows → Autoridades de Certificação Raiz Confiáveis → Importar).
+
+### 4.2 Acesso de fora da rede (Cloudflare Tunnel)
+
+Para acessar o painel de fora da rede da empresa (ex.: gestor no celular,
+suporte remoto), sem abrir porta nenhuma no roteador/firewall, use o
+[Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/).
+O `cloudflared` roda na mesma máquina do serviço, faz uma conexão de saída
+para a Cloudflare, e é a Cloudflare quem expõe o endereço público com
+HTTPS válido — nada entra na sua rede, só sai.
+
+**Pré-requisito**: um domínio associado à sua conta Cloudflare (grátis —
+se ainda não tem nenhum, dá para registrar um barato em qualquer
+registrador e apontar os nameservers para a Cloudflare, ou usar um
+subdomínio de um domínio que a empresa já tenha).
+
+1. Instale o `cloudflared`:
+   ```powershell
+   winget install --id Cloudflare.cloudflared
+   ```
+   (ou baixe o `.msi` em <https://github.com/cloudflare/cloudflared/releases>)
+
+2. Autentique com a conta Cloudflare (abre o navegador):
+   ```powershell
+   cloudflared tunnel login
+   ```
+
+3. Crie o túnel nomeado:
+   ```powershell
+   cloudflared tunnel create power-central
+   ```
+   Isso gera um ID de túnel e um arquivo de credenciais em
+   `%UserProfile%\.cloudflared\`. Anote o ID.
+
+4. Copie `scripts/cloudflared-config.example.yml` para
+   `%UserProfile%\.cloudflared\config.yml` e ajuste `tunnel`,
+   `credentials-file` e `hostname` com os seus dados.
+
+5. Aponte o DNS (cria o registro automaticamente na Cloudflare):
+   ```powershell
+   cloudflared tunnel route dns power-central power-central.suaempresa.com.br
+   ```
+
+6. Instale como serviço Windows (sobrevive a reinício, igual ao serviço
+   do Power Central):
+   ```powershell
+   cloudflared service install
+   ```
+
+7. Teste de fora da rede (ex.: com o wifi do celular desligado, usando
+   dados móveis): `https://power-central.suaempresa.com.br` deve abrir a
+   tela de login, com cadeado válido.
+
+Depois de configurar o túnel, **ajuste o `.env`** — o tráfego agora chega
+por HTTPS de verdade (a Cloudflare termina o TLS na borda dela):
+
+```
+FLASK_ENV=production
+SESSION_COOKIE_SECURE=true
+```
+
+E reinicie o serviço: `Restart-Service PowerCentral`. Sem
+`SESSION_COOKIE_SECURE=true`, o cookie de sessão continuaria aceitando
+conexão insegura — inofensivo enquanto só a rede interna acessava, mas
+importante agora que o link é público.
+
+#### Camada extra fortemente recomendada: Cloudflare Access
+
+Os dados deste painel mostram **quais locais estão com o alarme sem
+comunicação agora** — informação sensível do ponto de vista de segurança
+física, não um painel qualquer. Antes de divulgar o link publicamente,
+adicione o [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/)
+(gratuito até 50 usuários): ele exige confirmação de e-mail corporativo
+**antes** da requisição sequer chegar no servidor — um bot varrendo a
+internet nunca vê nem a tela de login do sistema.
+
+1. No painel Cloudflare → **Zero Trust** → **Access** → **Applications** →
+   **Add an application** → **Self-hosted**.
+2. Domínio: o mesmo do túnel (`power-central.suaempresa.com.br`).
+3. Política: **Allow** para e-mails do domínio da empresa (ex.:
+   `@novomillenium.com.br`) ou uma lista específica de e-mails da equipe.
+4. Salvar.
+
+A partir daí, o acesso vira duas camadas: e-mail corporativo confirmado
+pela Cloudflare primeiro, login do Power Central depois.
+
+> Estes passos dependem do painel da própria Cloudflare (login na conta,
+> DNS, políticas de Access) — precisam ser feitos por alguém com acesso à
+> conta da empresa lá, não é algo automatizável por fora.
 
 ## 5. Uso do dia a dia
 
