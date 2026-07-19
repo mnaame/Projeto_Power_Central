@@ -131,8 +131,10 @@ class SoftGuardClient:
                 },
             )
             payload = self._json(response)
-            total = payload.get("total", 0)
-            pagina = payload.get("data", [])
+            total = int(payload.get("total", 0) or 0)
+            # A API real devolve as contas em "rows" (validado contra o
+            # portal em produção); "data" fica como fallback defensivo.
+            pagina = payload.get("rows", payload.get("data", []))
             contas.extend(pagina)
 
             if not pagina:

@@ -67,10 +67,11 @@ def test_login_invalid_session_raises(requests_mock):
 
 
 def test_buscar_contas_pagina_ate_o_total(requests_mock):
+    # Formato real da API (validado em produção): envelope success/total/rows.
     _mock_login_ok(requests_mock)
 
-    pagina1 = {"total": 3, "data": [{"cue_ncuenta": "1"}, {"cue_ncuenta": "2"}]}
-    pagina2 = {"total": 3, "data": [{"cue_ncuenta": "3"}]}
+    pagina1 = {"success": True, "total": 3, "rows": [{"cue_ncuenta": "1"}, {"cue_ncuenta": "2"}]}
+    pagina2 = {"success": True, "total": 3, "rows": [{"cue_ncuenta": "3"}]}
 
     requests_mock.get(
         f"{CREDS.base_url}/Rest/Search/CuentaByDealer",
@@ -83,11 +84,24 @@ def test_buscar_contas_pagina_ate_o_total(requests_mock):
     assert [c["cue_ncuenta"] for c in contas] == ["1", "2", "3"]
 
 
+def test_buscar_contas_aceita_fallback_data(requests_mock):
+    _mock_login_ok(requests_mock)
+    requests_mock.get(
+        f"{CREDS.base_url}/Rest/Search/CuentaByDealer",
+        json={"total": 1, "data": [{"cue_ncuenta": "7"}]},
+    )
+
+    client = _client()
+    contas = client.buscar_contas_em_falha_tst()
+
+    assert [c["cue_ncuenta"] for c in contas] == ["7"]
+
+
 def test_buscar_contas_faz_login_automatico_se_necessario(requests_mock):
     _mock_login_ok(requests_mock)
     requests_mock.get(
         f"{CREDS.base_url}/Rest/Search/CuentaByDealer",
-        json={"total": 0, "data": []},
+        json={"success": True, "total": 0, "rows": []},
     )
 
     client = _client()
