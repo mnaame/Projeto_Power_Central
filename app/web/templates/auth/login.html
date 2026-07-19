@@ -4,6 +4,17 @@
 
 {% block content %}
 <div style="max-width: 380px; margin: var(--space-8) auto;">
+  <div style="display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4);">
+    {% if logo_disponivel %}
+      <img class="sidebar-logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo Novo Millenium">
+    {% else %}
+      <span class="sidebar-logo sidebar-logo-mark" aria-hidden="true">NM</span>
+    {% endif %}
+    <span>
+      <span class="sidebar-brand-name">Power Central</span>
+      <span class="sidebar-brand-sub">Novo Millenium — monitoramento de comunicação</span>
+    </span>
+  </div>
   <div class="card">
     <h1 style="font-size: var(--font-size-xl); margin-bottom: var(--space-1);">Entrar</h1>
     <p class="muted" style="margin-bottom: var(--space-5);">Acesso restrito à equipe Novo Millenium.</p>

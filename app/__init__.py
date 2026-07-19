@@ -40,10 +40,11 @@ def create_app(config_name: str | None = None) -> Flask:
 
     register_cli(app)
 
-    from app.web import register_blueprints
+    from app.web import register_blueprints, register_context
     from app.web.filters import registrar_filtros
 
     register_blueprints(app)
+    register_context(app)
     registrar_filtros(app)
 
     @app.errorhandler(401)
