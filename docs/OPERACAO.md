@@ -92,6 +92,31 @@ acima. Para testar o coletor sem mexer no portal real:
 Se tudo estiver certo, pare o `flask run` (Ctrl+C) e siga para a instalação
 como serviço.
 
+### 3.5 Mostrar rapidinho para alguém na mesma rede (sem instalar nada)
+
+Para uma demonstração pontual (ex.: mostrar para o chefe, no mesmo
+escritório/wifi), sem instalar como serviço nem mexer em HTTPS:
+
+```powershell
+.venv\Scripts\python.exe -m flask run --host=0.0.0.0 --port=5000
+```
+
+Descubra o IP da sua máquina na rede local:
+
+```powershell
+ipconfig
+```
+
+Procure "Endereço IPv4" (algo como `192.168.0.42`). A outra pessoa, **na
+mesma rede**, acessa em `http://192.168.0.42:5000` (troque pelo IP real).
+Na primeira vez, o Windows Firewall costuma perguntar se libera o
+Python/porta em "redes privadas" — clique em Permitir.
+
+Isso é só para teste pontual: some quando você fecha o `flask run`
+(Ctrl+C), e o tráfego não é criptografado (aceitável dentro de uma rede
+interna confiável, mas não deixe assim de forma permanente). Para algo
+que fique no ar sozinho, veja a seção 4 abaixo.
+
 ## 4. Instalar como serviço do Windows
 
 O serviço mantém o sistema rodando sozinho, inclusive depois de reiniciar a
@@ -109,7 +134,18 @@ cd C:\power_central\scripts
 ```
 
 O script aplica as migrations, registra o serviço `PowerCentral` com
-reinício automático em caso de falha, e já inicia o serviço.
+reinício automático em caso de falha, e já inicia o serviço. Por padrão o
+serviço só aceita conexão da própria máquina (`127.0.0.1`). Para que
+outros computadores da **mesma rede local** também acessem (sem HTTPS —
+igual à seção 3.5, só que permanente), acrescente `-BindHost "0.0.0.0"`:
+
+```powershell
+.\install_service.ps1 -InstallPath "C:\power_central" -Port 8000 -BindHost "0.0.0.0"
+```
+
+O script já libera a porta no firewall e mostra o IP para acessar. Para
+HTTPS (interno ou de fora da rede), mantenha o padrão `127.0.0.1` e use
+as seções 4.1/4.2 abaixo.
 
 Para conferir se está rodando:
 

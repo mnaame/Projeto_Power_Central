@@ -22,17 +22,28 @@
     Pasta onde o projeto foi clonado/copiado (padrao: pasta atual)
 
 .PARAMETER Port
-    Porta TCP local onde a aplicacao vai escutar (padrao: 8000). Fica
-    atras do reverse proxy (ver docs/OPERACAO.md) — nao expor direto na rede.
+    Porta TCP onde a aplicacao vai escutar (padrao: 8000).
+
+.PARAMETER BindHost
+    Endereco em que o waitress escuta (padrao: 127.0.0.1 — só a própria
+    máquina, mais seguro, para usar atrás de reverse proxy/Cloudflare
+    Tunnel). Use "0.0.0.0" para liberar acesso de outros computadores da
+    MESMA rede local (sem HTTPS — ok para uso interno confiável; ver
+    docs/OPERACAO.md seção 4 para HTTPS interno ou acesso externo).
 
 .EXAMPLE
     .\install_service.ps1 -InstallPath "C:\power_central" -Port 8000
+
+.EXAMPLE
+    # Libera para qualquer computador da rede local acessar (sem HTTPS)
+    .\install_service.ps1 -InstallPath "C:\power_central" -Port 8000 -BindHost "0.0.0.0"
 #>
 
 param(
     [string]$ServiceName = "PowerCentral",
     [string]$InstallPath = (Get-Location).Path,
-    [int]$Port = 8000
+    [int]$Port = 8000,
+    [string]$BindHost = "127.0.0.1"
 )
 
 $ErrorActionPreference = "Stop"
@@ -83,7 +94,7 @@ $env:FLASK_APP = "app:create_app"
 Pop-Location
 
 Write-Host "Instalando o servico '$ServiceName'..."
-& $nssm install $ServiceName $waitress "--host=127.0.0.1 --port=$Port --call app:create_app"
+& $nssm install $ServiceName $waitress "--host=$BindHost --port=$Port --call app:create_app"
 & $nssm set $ServiceName AppDirectory $InstallPath
 & $nssm set $ServiceName AppEnvironmentExtra "START_SCHEDULER=true"
 & $nssm set $ServiceName Start SERVICE_AUTO_START
@@ -95,7 +106,20 @@ Write-Host "Instalando o servico '$ServiceName'..."
 Write-Host "Iniciando o servico..."
 & $nssm start $ServiceName
 
-Write-Host ""
-Write-Host "Pronto. O painel deve responder em http://127.0.0.1:$Port (ou via reverse proxy, se configurado)."
+if ($BindHost -eq "0.0.0.0") {
+    $regraExistente = Get-NetFirewallRule -DisplayName "Power Central ($Port)" -ErrorAction SilentlyContinue
+    if (-not $regraExistente) {
+        New-NetFirewallRule -DisplayName "Power Central ($Port)" -Direction Inbound -LocalPort $Port -Protocol TCP -Action Allow | Out-Null
+        Write-Host "Regra de firewall criada, liberando a porta $Port para a rede."
+    }
+    $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notmatch "Loopback" -and $_.IPAddress -notlike "169.254.*" } | Select-Object -First 1).IPAddress
+    Write-Host ""
+    Write-Host "Pronto. Na MESMA rede local, outros computadores acessam em http://${ip}:$Port"
+    Write-Host "(sem HTTPS — ok para uso interno confiavel; para HTTPS ou acesso de fora da rede, veja docs/OPERACAO.md secao 4)"
+} else {
+    Write-Host ""
+    Write-Host "Pronto. O painel responde em http://127.0.0.1:$Port nesta maquina."
+    Write-Host "Para outros computadores acessarem, reinstale com -BindHost '0.0.0.0', ou configure um reverse proxy (docs/OPERACAO.md secao 4)."
+}
 Write-Host "Se ainda nao existe nenhum administrador, crie um com:"
 Write-Host "  $venvPython -m flask seed-admin"
