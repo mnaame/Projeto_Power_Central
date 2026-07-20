@@ -41,7 +41,12 @@ class DevelopmentConfig(Config):
 
 class ProductionConfig(Config):
     DEBUG = False
-    SESSION_COOKIE_SECURE = True
+    # SESSION_COOKIE_SECURE NÃO é fixado aqui de propósito — segue o que
+    # vier do .env (padrão "false"). "production" não implica HTTPS: o
+    # serviço pode ficar em HTTP puro na rede local (-BindHost 0.0.0.0,
+    # ver scripts/install_service.ps1) ou atrás de HTTPS de verdade
+    # (Caddy/Cloudflare Tunnel). Fixar True aqui quebrava o cookie de
+    # sessão sempre que "production" rodasse sem HTTPS na frente.
 
 
 class TestingConfig(Config):
