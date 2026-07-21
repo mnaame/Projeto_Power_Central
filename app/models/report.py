@@ -25,6 +25,8 @@ class ReportRun(db.Model):
     extra_counts = db.Column(db.JSON, nullable=True)
     file_path = db.Column(db.String(500), nullable=True)
 
+    generated_by = db.relationship("User", foreign_keys=[generated_by_user_id])
+
     __table_args__ = (
         db.CheckConstraint(
             "module IN ('atendimentos', 'disparos')", name="ck_report_runs_module"

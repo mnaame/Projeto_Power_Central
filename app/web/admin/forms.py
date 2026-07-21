@@ -44,6 +44,30 @@ class ConfiguracoesForm(FlaskForm):
         validators=[DataRequired(), NumberRange(min=5, max=1440)],
     )
 
+    # Relatório de Atendimentos (A.5)
+    atend_codigos_evento = StringField(
+        "Códigos de evento (separados por vírgula)", validators=[DataRequired()]
+    )
+    atend_incluir_automaticos = BooleanField("Incluir fechamentos automáticos")
+    atend_incluir_abertos = BooleanField("Incluir eventos ainda em aberto")
+    atend_resolucao_indica_arme = StringField(
+        "Termos de resolução que indicam arme (separados por vírgula)",
+        validators=[DataRequired()],
+    )
+
+    # Relatório de Disparos (B.5)
+    disp_horas_primeira_execucao = IntegerField(
+        "Primeira execução: horas para trás",
+        validators=[DataRequired(), NumberRange(min=1, max=720)],
+    )
+    disp_limite_recorrente = IntegerField(
+        "Disparos para virar 'RECORRENTE'",
+        validators=[DataRequired(), NumberRange(min=2, max=500)],
+    )
+    disp_ignorar_zonas = StringField(
+        "Ignorar zonas contendo (separados por vírgula)", validators=[DataRequired()]
+    )
+
 
 class TelegramForm(FlaskForm):
     bot_token = StringField("Token do bot", validators=[Optional(), Length(max=200)])

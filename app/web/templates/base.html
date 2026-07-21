@@ -52,6 +52,19 @@
           </svg>
           Painel
         </a>
+        <a class="sidebar-link {{ 'is-active' if request.path.startswith('/relatorios/atendimentos') }}" href="{{ url_for('reports.pagina', modulo='atendimentos') }}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <path d="M14 2v6h6M9 13h6M9 17h6"></path>
+          </svg>
+          Atendimentos
+        </a>
+        <a class="sidebar-link {{ 'is-active' if request.path.startswith('/relatorios/disparos') }}" href="{{ url_for('reports.pagina', modulo='disparos') }}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M12 3 2 21h20z"></path><path d="M12 10v5M12 18h.01"></path>
+          </svg>
+          Disparos
+        </a>
         {% if current_user.is_admin %}
         <a class="sidebar-link {{ 'is-active' if request.endpoint == 'admin.usuarios' }}" href="{{ url_for('admin.usuarios') }}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">

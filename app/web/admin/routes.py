@@ -112,6 +112,13 @@ def configuracoes():
         show_false_positives_in_panel=settings_service.show_false_positives_in_panel(),
         periodic_report_enabled=settings_service.periodic_report_enabled(),
         periodic_report_interval_minutes=settings_service.get_periodic_report_interval_minutes(),
+        atend_codigos_evento=", ".join(settings_service.get_atend_codigos_evento()),
+        atend_incluir_automaticos=settings_service.atend_incluir_automaticos(),
+        atend_incluir_abertos=settings_service.atend_incluir_abertos(),
+        atend_resolucao_indica_arme=", ".join(settings_service.get_atend_resolucao_indica_arme()),
+        disp_horas_primeira_execucao=settings_service.get_disp_horas_primeira_execucao(),
+        disp_limite_recorrente=settings_service.get_disp_limite_recorrente(),
+        disp_ignorar_zonas=", ".join(settings_service.get_disp_ignorar_zonas()),
     )
     telegram_configurado = (
         settings_service.get_telegram_credentials(
@@ -175,6 +182,48 @@ def salvar_configuracoes():
             updated_by_id=current_user.id,
         )
 
+        def _lista_normalizada(bruto: str, *, maiusculas: bool = False) -> str:
+            itens = [item.strip() for item in bruto.split(",") if item.strip()]
+            if maiusculas:
+                itens = [item.upper() for item in itens]
+            return ",".join(itens)
+
+        settings_service.set(
+            "atend_codigos_evento",
+            _lista_normalizada(form.atend_codigos_evento.data, maiusculas=True),
+            updated_by_id=current_user.id,
+        )
+        settings_service.set(
+            "atend_incluir_automaticos",
+            "true" if form.atend_incluir_automaticos.data else "false",
+            updated_by_id=current_user.id,
+        )
+        settings_service.set(
+            "atend_incluir_abertos",
+            "true" if form.atend_incluir_abertos.data else "false",
+            updated_by_id=current_user.id,
+        )
+        settings_service.set(
+            "atend_resolucao_indica_arme",
+            _lista_normalizada(form.atend_resolucao_indica_arme.data),
+            updated_by_id=current_user.id,
+        )
+        settings_service.set(
+            "disp_horas_primeira_execucao",
+            str(form.disp_horas_primeira_execucao.data),
+            updated_by_id=current_user.id,
+        )
+        settings_service.set(
+            "disp_limite_recorrente",
+            str(form.disp_limite_recorrente.data),
+            updated_by_id=current_user.id,
+        )
+        settings_service.set(
+            "disp_ignorar_zonas",
+            _lista_normalizada(form.disp_ignorar_zonas.data, maiusculas=True),
+            updated_by_id=current_user.id,
+        )
+
         audit_service.registrar(
             action="settings_changed",
             result="success",
@@ -189,6 +238,13 @@ def salvar_configuracoes():
                 "show_false_positives_in_panel": form.show_false_positives_in_panel.data,
                 "periodic_report_enabled": form.periodic_report_enabled.data,
                 "periodic_report_interval_minutes": form.periodic_report_interval_minutes.data,
+                "atend_codigos_evento": form.atend_codigos_evento.data,
+                "atend_incluir_automaticos": form.atend_incluir_automaticos.data,
+                "atend_incluir_abertos": form.atend_incluir_abertos.data,
+                "atend_resolucao_indica_arme": form.atend_resolucao_indica_arme.data,
+                "disp_horas_primeira_execucao": form.disp_horas_primeira_execucao.data,
+                "disp_limite_recorrente": form.disp_limite_recorrente.data,
+                "disp_ignorar_zonas": form.disp_ignorar_zonas.data,
             },
         )
         db.session.commit()

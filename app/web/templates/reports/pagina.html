@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}{{ info.titulo }}{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>{{ info.titulo }}</h2>
+  </div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">{{ info.descricao }}</p>
+
+  <form method="post" action="{{ url_for('reports.gerar', modulo=modulo) }}" data-loading-submit
+        class="card" style="display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: flex-end;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="field" style="margin-bottom: 0;">
+      <label for="periodo">Período</label>
+      <select id="periodo" name="periodo">
+        {% if modulo == 'disparos' %}
+        <option value="auto" selected>Desde o último relatório
+          {%- if janela_auto %} ({{ janela_auto[0]|data_local }} → agora){% endif -%}
+        </option>
+        {% endif %}
+        <option value="ontem" {{ 'selected' if modulo != 'disparos' }}>Ontem</option>
+        <option value="7dias">Últimos 7 dias</option>
+        <option value="manual">Período manual</option>
+      </select>
+    </div>
+
+    <div class="field" style="margin-bottom: 0;">
+      <label for="inicio">Início (manual)</label>
+      <input id="inicio" type="date" name="inicio">
+    </div>
+    <div class="field" style="margin-bottom: 0;">
+      <label for="fim">Fim (manual)</label>
+      <input id="fim" type="date" name="fim">
+    </div>
+
+    <button type="submit" class="btn btn-primary">Gerar relatório</button>
+  </form>
+</div>
+
+{% if ultimo_ok %}
+<div class="section">
+  <div class="section-title">
+    <h2>Último relatório</h2>
+    <a class="btn btn-ghost" href="{{ url_for('reports.download', run_id=ultimo_ok.id) }}">Baixar Excel</a>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-tile">
+      <div class="stat-tile-label">{{ 'Atendimentos no relatório' if modulo == 'atendimentos' else 'Clientes com disparo' }}</div>
+      <div class="stat-tile-value">{{ ultimo_ok.row_count }}</div>
+      <div class="stat-tile-hint">Período: {{ ultimo_ok.period_start|data_local }} → {{ ultimo_ok.period_end|data_local }}</div>
+    </div>
+    {% if modulo == 'atendimentos' %}
+    <div class="stat-tile">
+      <div class="stat-tile-label">Descartados</div>
+      <div class="stat-tile-value">{{ (ultimo_ok.extra_counts or {}).get('descartados', 0) }}</div>
+      <div class="stat-tile-hint">Detalhe na aba DESCARTADOS do Excel</div>
+    </div>
+    {% else %}
+    <div class="stat-tile">
+      <div class="stat-tile-label">Total de disparos</div>
+      <div class="stat-tile-value">{{ (ultimo_ok.extra_counts or {}).get('total_disparos', 0) }}</div>
+      <div class="stat-tile-hint">Somando todos os clientes</div>
+    </div>
+    {% endif %}
+    <div class="stat-tile">
+      <div class="stat-tile-label">Gerado em</div>
+      <div class="stat-tile-value" style="font-size: var(--font-size-lg);">{{ ultimo_ok.generated_at|data_local }}</div>
+      <div class="stat-tile-hint">{{ ultimo_ok.generated_at|duracao_ate_agora }} atrás</div>
+    </div>
+  </div>
+
+  {% if linhas %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>{% for titulo in cabecalho %}<th>{{ titulo }}</th>{% endfor %}</tr>
+      </thead>
+      <tbody>
+        {% for linha in linhas %}
+        <tr>
+          {% for valor in linha %}
+          <td style="white-space: pre-line;">{{ valor }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if total_paginas > 1 %}
+  <div style="display: flex; gap: var(--space-2); margin-top: var(--space-4); align-items: center;">
+    {% if pagina_atual > 1 %}
+    <a class="btn btn-ghost" href="{{ url_for('reports.pagina', modulo=modulo, pagina=pagina_atual - 1) }}">Anterior</a>
+    {% endif %}
+    <span class="muted">Página {{ pagina_atual }} de {{ total_paginas }} ({{ total_linhas }} linhas)</span>
+    {% if pagina_atual < total_paginas %}
+    <a class="btn btn-ghost" href="{{ url_for('reports.pagina', modulo=modulo, pagina=pagina_atual + 1) }}">Próxima</a>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% else %}
+  <div class="card empty-state">
+    <h3>Relatório vazio</h3>
+    <p class="muted">Nenhuma linha no período coberto — isso também é um resultado válido.</p>
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<div class="section">
+  <div class="card empty-state">
+    <h3>Nenhum relatório gerado ainda</h3>
+    <p class="muted">Escolha o período acima e clique em "Gerar relatório".</p>
+  </div>
+</div>
+{% endif %}
+
+{% if historico %}
+<div class="section">
+  <div class="section-title"><h2>Histórico de gerações</h2></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Gerado em</th>
+          <th>Por</th>
+          <th>Período</th>
+          <th class="is-numeric">Linhas</th>
+          <th>Status</th>
+          <th>Arquivo</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in historico %}
+        <tr>
+          <td class="is-numeric">{{ run.generated_at|data_local }}</td>
+          <td>{{ run.generated_by.username if run.generated_by else '—' }}</td>
+          <td class="is-numeric">{{ run.period_start|data_local }} → {{ run.period_end|data_local }}</td>
+          <td class="is-numeric">{{ run.row_count if run.row_count is not none else '—' }}</td>
+          <td>
+            {% set estilos = {'success': 'chip-ok', 'error': 'chip-critical', 'running': 'chip-warning'} %}
+            {% set rotulos = {'success': 'Sucesso', 'error': 'Erro', 'running': 'Em execução'} %}
+            <span class="chip {{ estilos[run.status] }}">{{ rotulos[run.status] }}</span>
+          </td>
+          <td>
+            {% if run.status == 'success' and run.file_path %}
+            <a href="{{ url_for('reports.download', run_id=run.id) }}">Baixar</a>
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

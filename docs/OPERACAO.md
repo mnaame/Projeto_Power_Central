@@ -286,6 +286,26 @@ importa), quantos são falsos positivos, o status do último ciclo e do
 sozinho a cada 30 segundos; o botão **Atualizar agora** força um ciclo na
 hora (tem um intervalo mínimo entre cliques, configurável).
 
+### 5.2.1 Relatórios (Atendimentos e Disparos)
+
+Duas páginas na barra lateral, para operador e admin:
+
+- **Atendimentos**: escolha o período (ontem, últimos 7 dias ou manual) e
+  clique "Gerar relatório". A prévia na tela é idêntica ao Excel; o botão
+  "Baixar Excel" traz o arquivo com a aba principal e a aba DESCARTADOS
+  (eventos fora do relatório, com o motivo — ex.: cliente armou).
+- **Disparos**: por padrão cobre "desde o último relatório até agora"
+  (janela móvel — o próximo começa onde o anterior terminou); também
+  aceita período manual. Uma linha por cliente, com quantidade, zonas e
+  tempo de conclusão; as colunas "TEMPO PARA LIGAR" e "CONCLUSÃO" ficam
+  para o monitor preencher no Excel.
+
+Cada geração fica no **Histórico de gerações** (quem gerou, período,
+linhas) com re-download do arquivo arquivado; tudo vai para a auditoria.
+Os arquivos seguem a mesma retenção configurável (padrão 90 dias). As
+regras dos dois módulos (códigos de evento, termos de arme, limite
+recorrente, zonas ignoradas etc.) são editáveis em Configurações (admin).
+
 ### 5.3 Administração
 
 Em **Configurações** (só admin): janela de horas sem comunicação, lista de

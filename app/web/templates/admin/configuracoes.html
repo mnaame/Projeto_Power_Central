@@ -61,6 +61,50 @@
         {% for mensagem in form.periodic_report_interval_minutes.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
       </div>
 
+      <h3 style="margin-top: var(--space-5);">Relatório de Atendimentos</h3>
+
+      <div class="field">
+        {{ form.atend_codigos_evento.label }}
+        {{ form.atend_codigos_evento() }}
+        {% for mensagem in form.atend_codigos_evento.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field" style="display: flex; align-items: center; gap: var(--space-2);">
+        {{ form.atend_incluir_automaticos() }}
+        {{ form.atend_incluir_automaticos.label }}
+      </div>
+
+      <div class="field" style="display: flex; align-items: center; gap: var(--space-2);">
+        {{ form.atend_incluir_abertos() }}
+        {{ form.atend_incluir_abertos.label }}
+      </div>
+
+      <div class="field">
+        {{ form.atend_resolucao_indica_arme.label }}
+        {{ form.atend_resolucao_indica_arme() }}
+        {% for mensagem in form.atend_resolucao_indica_arme.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <h3 style="margin-top: var(--space-5);">Relatório de Disparos</h3>
+
+      <div class="field">
+        {{ form.disp_horas_primeira_execucao.label }}
+        {{ form.disp_horas_primeira_execucao() }}
+        {% for mensagem in form.disp_horas_primeira_execucao.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.disp_limite_recorrente.label }}
+        {{ form.disp_limite_recorrente() }}
+        {% for mensagem in form.disp_limite_recorrente.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.disp_ignorar_zonas.label }}
+        {{ form.disp_ignorar_zonas() }}
+        {% for mensagem in form.disp_ignorar_zonas.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
       <button type="submit" class="btn btn-primary">Salvar configurações</button>
     </form>
   </div>
