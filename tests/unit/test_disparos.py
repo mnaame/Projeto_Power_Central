@@ -175,3 +175,22 @@ def test_cliente_sem_disparo_valido_fica_fora():
     ]
     clientes = consolidar_clientes(eventos)
     assert [c.conta_id for c in clientes] == ["222"]
+
+
+def test_filtrar_para_janela_corta_bur_da_folga_mas_mantem_armes():
+    from app.domain.disparos import filtrar_para_janela
+
+    desde = BASE
+    hasta = BASE + timedelta(hours=1)
+    eventos = [
+        _evento("CLO", desde - timedelta(minutes=4)),               # folga: mantém (arme)
+        _evento("BUR", desde - timedelta(minutes=2), rec_iid="1"),  # folga: corta (disparo)
+        _evento("BUR", desde + timedelta(minutes=30), rec_iid="2"), # dentro: mantém
+        _evento("OPN", hasta + timedelta(minutes=3)),               # folga: mantém (desarme)
+        _evento("BUR", hasta + timedelta(minutes=2), rec_iid="3"),  # folga: corta
+    ]
+
+    filtrados = filtrar_para_janela(eventos, desde=desde, hasta=hasta)
+    codigos = [e["rec_calarma"] for e in filtrados]
+    assert codigos == ["CLO", "BUR", "OPN"]
+    assert filtrados[1]["rec_iid"] == "2"

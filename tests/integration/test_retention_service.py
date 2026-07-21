@@ -28,7 +28,7 @@ def test_remove_ciclos_e_auditoria_mais_antigos_que_a_retencao(app):
 
     resultado = retention_service.limpar_dados_antigos(retention_days=90, agora=AGORA)
 
-    assert resultado == {"ciclos_removidos": 1, "auditoria_removida": 1}
+    assert resultado == {"ciclos_removidos": 1, "auditoria_removida": 1, "relatorios_removidos": 0}
     assert db.session.get(CollectionCycle, antigo.id) is None
     assert db.session.get(CollectionCycle, recente.id) is not None
     assert AuditLog.query.count() == 1
@@ -51,5 +51,5 @@ def test_nao_remove_nada_quando_tudo_esta_dentro_da_retencao(app):
 
     resultado = retention_service.limpar_dados_antigos(retention_days=90, agora=AGORA)
 
-    assert resultado == {"ciclos_removidos": 0, "auditoria_removida": 0}
+    assert resultado == {"ciclos_removidos": 0, "auditoria_removida": 0, "relatorios_removidos": 0}
     assert CollectionCycle.query.count() == 1

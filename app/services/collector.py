@@ -14,7 +14,7 @@ from app.services import alerting, settings_service, watchdog_service
 logger = logging.getLogger("collector")
 
 
-def _credenciais_softguard(config) -> SoftGuardCredentials:
+def credenciais_softguard(config) -> SoftGuardCredentials:
     return SoftGuardCredentials(
         host=config["SOFTGUARD_HOST"],
         port=config["SOFTGUARD_PORT"],
@@ -66,7 +66,7 @@ def executar_ciclo(
     db.session.flush()
 
     try:
-        client = softguard_client or SoftGuardClient(_credenciais_softguard(config))
+        client = softguard_client or SoftGuardClient(credenciais_softguard(config))
         contas_brutas = client.buscar_contas_em_falha_tst()
 
         agora_local = datetime.now(timezone.utc).astimezone(FUSO_HORARIO)

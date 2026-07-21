@@ -144,6 +144,25 @@ def avaliar_disparos_da_conta(
     return avaliados
 
 
+def filtrar_para_janela(
+    eventos: Sequence[Mapping[str, object]], *, desde: datetime, hasta: datetime
+) -> list[Mapping[str, object]]:
+    """A consulta leva folga de 6 min em cada ponta SÓ para enxergar
+    armes/desarmes na borda (regra B.2). Este filtro garante que apenas
+    BUR de dentro do período contam como disparo — armes/desarmes da
+    folga são mantidos para a avaliação de rotina."""
+    resultado: list[Mapping[str, object]] = []
+    for evento in eventos:
+        codigo = _codigo_evento(evento)
+        if codigo != CODIGO_DISPARO:
+            resultado.append(evento)
+            continue
+        quando = _quando(evento)
+        if quando is not None and desde <= quando <= hasta:
+            resultado.append(evento)
+    return resultado
+
+
 def agrupar_por_conta(
     eventos: Sequence[Mapping[str, object]],
 ) -> dict[str, list[Mapping[str, object]]]:

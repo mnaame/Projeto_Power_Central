@@ -19,6 +19,15 @@ DEFAULTS: dict[str, str] = {
     "periodic_report_interval_minutes": "60",
     "telegram_bot_token": "",
     "telegram_chat_id": "",
+    # Módulo Atendimentos (A.5)
+    "atend_codigos_evento": "NYE,NYC",
+    "atend_incluir_automaticos": "false",
+    "atend_incluir_abertos": "false",
+    "atend_resolucao_indica_arme": "ativado,armado remotamente,armamento confirmado",
+    # Módulo Disparos (B.5)
+    "disp_horas_primeira_execucao": "24",
+    "disp_limite_recorrente": "15",
+    "disp_ignorar_zonas": "PANICO",
 }
 
 _TELEGRAM_TOKEN_KEY = "telegram_bot_token"
@@ -77,6 +86,44 @@ def periodic_report_enabled() -> bool:
 
 def get_periodic_report_interval_minutes() -> int:
     return int(get("periodic_report_interval_minutes"))
+
+
+def _lista(chave: str) -> tuple[str, ...]:
+    return tuple(item.strip() for item in get(chave).split(",") if item.strip())
+
+
+# --- Módulo Atendimentos (A.5) ---
+
+
+def get_atend_codigos_evento() -> tuple[str, ...]:
+    return _lista("atend_codigos_evento")
+
+
+def atend_incluir_automaticos() -> bool:
+    return get("atend_incluir_automaticos").strip().lower() == "true"
+
+
+def atend_incluir_abertos() -> bool:
+    return get("atend_incluir_abertos").strip().lower() == "true"
+
+
+def get_atend_resolucao_indica_arme() -> tuple[str, ...]:
+    return _lista("atend_resolucao_indica_arme")
+
+
+# --- Módulo Disparos (B.5) ---
+
+
+def get_disp_horas_primeira_execucao() -> int:
+    return int(get("disp_horas_primeira_execucao"))
+
+
+def get_disp_limite_recorrente() -> int:
+    return int(get("disp_limite_recorrente"))
+
+
+def get_disp_ignorar_zonas() -> tuple[str, ...]:
+    return _lista("disp_ignorar_zonas")
 
 
 def _fernet(encryption_key: str) -> Fernet:
