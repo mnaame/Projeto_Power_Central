@@ -12,24 +12,6 @@
 </head>
 <body>
   <div class="app-shell">
-    <div class="app-content">
-      <main class="app-main">
-        {% with mensagens = get_flashed_messages(with_categories=true) %}
-          {% if mensagens %}
-            {% for categoria, mensagem in mensagens %}
-              <div class="banner banner-{{ 'critical' if categoria == 'error' else categoria }}" role="status">{{ mensagem }}</div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
-
-        {% block content %}{% endblock %}
-      </main>
-
-      <footer class="app-footer">
-        Power Central · uso interno — Novo Millenium
-      </footer>
-    </div>
-
     {% if current_user.is_authenticated %}
     <aside class="app-sidebar">
       <a class="sidebar-brand" href="{{ url_for('dashboard.index') }}">
@@ -109,6 +91,24 @@
       </div>
     </aside>
     {% endif %}
+
+    <div class="app-content">
+      <main class="app-main">
+        {% with mensagens = get_flashed_messages(with_categories=true) %}
+          {% if mensagens %}
+            {% for categoria, mensagem in mensagens %}
+              <div class="banner banner-{{ 'critical' if categoria == 'error' else categoria }}" role="status">{{ mensagem }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+      </main>
+
+      <footer class="app-footer">
+        Power Central · uso interno — Novo Millenium
+      </footer>
+    </div>
   </div>
 </body>
 </html>
