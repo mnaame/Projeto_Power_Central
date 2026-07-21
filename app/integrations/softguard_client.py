@@ -4,7 +4,8 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any
+from datetime import datetime
+from typing import Any, Sequence
 from urllib.parse import urljoin
 
 import requests
@@ -15,6 +16,11 @@ DESKTOP_APP_PATH = "/apps/Desktop/25.08.0/"
 LOGIN_PATH = "/OAuthLogin.ashx"
 TOKEN_VALID_PATH = "/rest/token/IsValid"
 SEARCH_PATH = "/Rest/Search/CuentaByDealer"
+HISTORICO_PATH = "/Rest/Search/ReporteHistorico"
+TIMELINE_PATH = "/Rest/search/EventoTimeLineFull"
+
+# Formato de data exigido por FechaDesde/FechaHasta do ReporteHistorico.
+FORMATO_DATA_HISTORICO = "%m-%d-%Y %H:%M:%S"
 
 DEFAULT_TIMEOUT_SECONDS = 15
 DEFAULT_PAGE_SIZE = 100
@@ -105,43 +111,86 @@ class SoftGuardClient:
         if payload.get("Status") != 1:
             raise SoftGuardAuthError(f"Sessão inválida: {payload!r}")
 
-    def buscar_contas_em_falha_tst(
-        self, *, page_size: int = DEFAULT_PAGE_SIZE
+    def _buscar_paginado(
+        self, path: str, params_base: dict[str, Any], *, page_size: int
     ) -> list[dict[str, Any]]:
-        """Retorna todas as contas em falha de TST (paginação completa),
-        exatamente como a API devolve — sem parsing de datas nem regra de
-        negócio, isso é responsabilidade da camada de domínio."""
+        """Loop de paginação page/start/limit até `total`, comum às
+        consultas de busca do portal. Devolve as linhas cruas — parsing e
+        regra de negócio são responsabilidade da camada de domínio."""
         if not self._logged_in:
             self.login()
 
-        contas: list[dict[str, Any]] = []
+        linhas: list[dict[str, Any]] = []
         start = 0
         total: int | None = None
 
         while total is None or start < total:
+            params = dict(params_base)
+            params.update(
+                {"page": (start // page_size) + 1, "start": start, "limit": page_size}
+            )
             response = self._request(
-                "GET",
-                urljoin(self._credentials.base_url, SEARCH_PATH),
-                params={
-                    "page": (start // page_size) + 1,
-                    "start": start,
-                    "limit": page_size,
-                    "sort": json.dumps(ORDENACAO_PADRAO),
-                    "filter": json.dumps(FILTRO_FALHA_TST),
-                },
+                "GET", urljoin(self._credentials.base_url, path), params=params
             )
             payload = self._json(response)
             total = int(payload.get("total", 0) or 0)
-            # A API real devolve as contas em "rows" (validado contra o
+            # A API real devolve as linhas em "rows" (validado contra o
             # portal em produção); "data" fica como fallback defensivo.
             pagina = payload.get("rows", payload.get("data", []))
-            contas.extend(pagina)
+            linhas.extend(pagina)
 
             if not pagina:
                 break
             start += page_size
 
-        return contas
+        return linhas
+
+    def buscar_contas_em_falha_tst(
+        self, *, page_size: int = DEFAULT_PAGE_SIZE
+    ) -> list[dict[str, Any]]:
+        """Retorna todas as contas em falha de TST (paginação completa)."""
+        return self._buscar_paginado(
+            SEARCH_PATH,
+            {"sort": json.dumps(ORDENACAO_PADRAO), "filter": json.dumps(FILTRO_FALHA_TST)},
+            page_size=page_size,
+        )
+
+    def buscar_historico(
+        self,
+        *,
+        codigos_alarme: Sequence[str],
+        desde: datetime,
+        hasta: datetime,
+        page_size: int = DEFAULT_PAGE_SIZE,
+    ) -> list[dict[str, Any]]:
+        """Consulta a tela "História do evento" (ReporteHistorico) para os
+        códigos e o período dados. `desde`/`hasta` são usados como recebidos
+        — ajustes de borda (+1s, folga de minutos) são de quem chama."""
+        return self._buscar_paginado(
+            HISTORICO_PATH,
+            {
+                "FechaDesde": desde.strftime(FORMATO_DATA_HISTORICO),
+                "FechaHasta": hasta.strftime(FORMATO_DATA_HISTORICO),
+                "CodigosAlarma": ",".join(codigos_alarme),
+                "table": "p_recepcion",
+                "OrdenarFecha": "DESC",
+                "Mostrar": 5000,
+            },
+            page_size=page_size,
+        )
+
+    def buscar_timeline(self, id_evento: str | int, *, limit: int = 500) -> list[dict[str, Any]]:
+        """Linha do tempo completa de um evento (EventoTimeLineFull)."""
+        if not self._logged_in:
+            self.login()
+
+        response = self._request(
+            "GET",
+            urljoin(self._credentials.base_url, TIMELINE_PATH),
+            params={"IdEvento": id_evento, "limit": limit},
+        )
+        payload = self._json(response)
+        return payload.get("rows", payload.get("data", []))
 
     def _request(self, method: str, url: str, **kwargs) -> requests.Response:
         ultima_excecao: Exception | None = None

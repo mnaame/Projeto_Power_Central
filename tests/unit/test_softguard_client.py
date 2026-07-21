@@ -135,3 +135,54 @@ def test_resposta_nao_json_gera_softguard_error(requests_mock):
     client = _client()
     with pytest.raises(SoftGuardError):
         client.login()
+
+
+def test_buscar_historico_monta_parametros_e_pagina(requests_mock):
+    from datetime import datetime
+    from urllib.parse import parse_qs, urlparse
+
+    _mock_login_ok(requests_mock)
+    requests_mock.get(
+        f"{CREDS.base_url}/Rest/Search/ReporteHistorico",
+        [
+            {"json": {"success": True, "total": 3, "rows": [{"rec_iid": "1"}, {"rec_iid": "2"}]}},
+            {"json": {"success": True, "total": 3, "rows": [{"rec_iid": "3"}]}},
+        ],
+    )
+
+    client = _client()
+    eventos = client.buscar_historico(
+        codigos_alarme=("NYE", "NYC"),
+        desde=datetime(2026, 7, 18, 0, 0, 0),
+        hasta=datetime(2026, 7, 18, 23, 59, 59),
+        page_size=2,
+    )
+
+    assert [e["rec_iid"] for e in eventos] == ["1", "2", "3"]
+
+    query = parse_qs(urlparse(requests_mock.request_history[-1].url).query)
+    assert query["FechaDesde"] == ["07-18-2026 00:00:00"]
+    assert query["FechaHasta"] == ["07-18-2026 23:59:59"]
+    assert query["CodigosAlarma"] == ["NYE,NYC"]
+    assert query["table"] == ["p_recepcion"]
+    assert query["OrdenarFecha"] == ["DESC"]
+    assert query["Mostrar"] == ["5000"]
+
+
+def test_buscar_timeline_retorna_passos(requests_mock):
+    from urllib.parse import parse_qs, urlparse
+
+    _mock_login_ok(requests_mock)
+    requests_mock.get(
+        f"{CREDS.base_url}/Rest/search/EventoTimeLineFull",
+        json={"success": True, "total": 2, "rows": [{"etl_cAccion": "Inicio"}, {"etl_cAccion": "Procesar"}]},
+    )
+
+    client = _client()
+    passos = client.buscar_timeline("9385")
+
+    assert [p["etl_cAccion"] for p in passos] == ["Inicio", "Procesar"]
+
+    query = parse_qs(urlparse(requests_mock.request_history[-1].url).query)
+    assert query["IdEvento"] == ["9385"]
+    assert query["limit"] == ["500"]

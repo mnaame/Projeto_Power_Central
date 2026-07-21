@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 def formatar_duracao(desde: datetime | None, agora: datetime) -> str:
@@ -18,3 +18,14 @@ def formatar_duracao(desde: datetime | None, agora: datetime) -> str:
         partes.append(f"{horas}h")
     partes.append(f"{minutos}min")
     return " ".join(partes)
+
+
+def formatar_duracao_hms(duracao: timedelta | None) -> str:
+    """Formato padronizado dos relatórios (módulos Atendimentos e
+    Disparos): HH"H"MM"M"SS"S" — ex.: 01H23M45S."""
+    if duracao is None:
+        return ""
+    total_segundos = max(int(duracao.total_seconds()), 0)
+    horas, resto = divmod(total_segundos, 3600)
+    minutos, segundos = divmod(resto, 60)
+    return f"{horas:02d}H{minutos:02d}M{segundos:02d}S"
