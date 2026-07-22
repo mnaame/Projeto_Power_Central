@@ -239,6 +239,25 @@ def test_janela_manual_nao_altera_encadeamento_automatico(app):
     assert proximo.period_start > DESDE  # não voltou 30 dias
 
 
+def test_janela_manual_com_fim_no_futuro_nao_trava_encadeamento_automatico(app):
+    client = FakeSoftGuardClient()
+    agora = datetime.now(timezone.utc)
+
+    # relatório manual com fim no futuro (ex.: "hoje até 23:59" gerado de manhã)
+    manual = report_service.gerar_disparos(
+        config=app.config, user_id=None, softguard_client=client,
+        desde=agora - timedelta(hours=2), hasta=agora + timedelta(hours=10),
+    )
+    assert manual.status == "success"
+
+    # o próximo automático não pode ficar "preso" no fim futuro do manual
+    proximo = report_service.gerar_disparos(
+        config=app.config, user_id=None, softguard_client=client
+    )
+    assert proximo.status == "success"
+    assert proximo.period_start <= proximo.period_end
+
+
 def test_retencao_remove_relatorio_antigo_e_arquivo(app, tmp_path):
     arquivo = tmp_path / "antigo.xlsx"
     arquivo.write_bytes(b"conteudo")

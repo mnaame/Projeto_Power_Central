@@ -80,8 +80,12 @@ Orquestra: consulta → domínio → persistência → .xlsx → auditoria.
 - Para Atendimentos: busca timeline por evento (limitando concorrência a
   chamadas sequenciais — volume esperado de dezenas/poucas centenas);
 - Para Disparos: janela móvel = `period_end` do último `report_runs`
-  bem-sucedido do módulo (persistido no banco, auditável); primeira vez =
-  `horas_primeira_execucao` (padrão 24h) para trás; override manual na UI;
+  bem-sucedido do módulo **cujo period_end já passou** (persistido no
+  banco, auditável) — um manual sobre período antigo não reseta o
+  encadeamento pra trás, e um manual com fim no futuro (ex.: "hoje" gerado
+  de manhã) não trava os automáticos seguintes numa data que ainda não
+  chegou; primeira vez = `horas_primeira_execucao` (padrão 24h) para trás;
+  override manual na UI (aceita hora/minuto, não só o dia);
   tempo de conclusão via timeline dos disparos com `rec_ioperador != 0`,
   do mais recente para trás até achar fechamento real (regra do módulo A);
 - .xlsx com **openpyxl** (dependência nova): cabeçalho verde `#21A366`

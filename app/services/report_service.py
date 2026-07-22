@@ -177,9 +177,16 @@ def gerar_atendimentos(
 
 def janela_disparos(*, agora: datetime) -> tuple[datetime, datetime]:
     """Janela móvel (B.3): do fim do último relatório bem-sucedido até
-    agora; primeira execução volta `disp_horas_primeira_execucao`."""
+    agora; primeira execução volta `disp_horas_primeira_execucao`.
+
+    Considera só relatórios cujo period_end já passou (<= agora): um
+    relatório manual sobre um período antigo não deve "resetar" o
+    encadeamento para trás, mas um manual com fim no futuro (ex.: dia de
+    hoje, gerado de manhã) também não pode "travar" os automáticos
+    seguintes numa data que ainda não chegou."""
     ultimo = (
         ReportRun.query.filter_by(module="disparos", status="success")
+        .filter(ReportRun.period_end <= agora)
         .order_by(ReportRun.period_end.desc())
         .first()
     )
