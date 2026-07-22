@@ -47,7 +47,11 @@ def _parse_data(valor: str) -> datetime:
     return datetime.strptime(valor, "%Y-%m-%d").replace(tzinfo=FUSO_HORARIO)
 
 
-def _periodo_do_form() -> tuple[datetime, datetime] | None:
+def _parse_data_hora(valor: str) -> datetime:
+    return datetime.strptime(valor, "%Y-%m-%dT%H:%M").replace(tzinfo=FUSO_HORARIO)
+
+
+def _periodo_do_form(modulo: str) -> tuple[datetime, datetime] | None:
     """None = janela automática (só Disparos usa)."""
     preset = request.form.get("periodo", "ontem")
     agora = _agora()
@@ -60,9 +64,13 @@ def _periodo_do_form() -> tuple[datetime, datetime] | None:
         return inicio, hoje - timedelta(seconds=1)
     if preset == "7dias":
         return hoje - timedelta(days=7), agora
-    # manual
-    inicio = _parse_data(request.form["inicio"])
-    fim = _parse_data(request.form["fim"]) + timedelta(hours=23, minutes=59, seconds=59)
+    # manual — Disparos permite escolher hora/minuto; Atendimentos usa dia inteiro
+    if modulo == "disparos":
+        inicio = _parse_data_hora(request.form["inicio"])
+        fim = _parse_data_hora(request.form["fim"])
+    else:
+        inicio = _parse_data(request.form["inicio"])
+        fim = _parse_data(request.form["fim"]) + timedelta(hours=23, minutes=59, seconds=59)
     if fim < inicio:
         raise ValueError("Período inválido: fim antes do início.")
     return inicio, fim
@@ -132,7 +140,7 @@ def gerar(modulo: str):
         abort(404)
 
     try:
-        periodo = _periodo_do_form()
+        periodo = _periodo_do_form(modulo)
     except (ValueError, KeyError):
         flash("Período inválido — confira as datas.", "warning")
         return redirect(url_for("reports.pagina", modulo=modulo))

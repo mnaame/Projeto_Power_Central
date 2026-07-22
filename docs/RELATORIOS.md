@@ -50,13 +50,21 @@ Regras A.3, funções sobre listas de dicts brutos:
 
 ### 2.3 `domain/disparos.py` (puro, sem I/O)
 
-Regras B.3, sobre eventos BUR/CLO/CLV/ROP/OPN/OPV agrupados por
+Regras B.3, sobre eventos BUR/CLO/CLV/ROP/OPN/OPV/RCL agrupados por
 `rec_iidcuenta`:
 
 - disparo = BUR; conta TODOS os válidos (sem agrupar);
 - exclui BUR até **5 min depois** de arme (CLO/CLV/ROP) e até **5 min
-  antes** de desarme (OPN/OPV) — por isso a consulta leva folga de 6 min
-  em cada ponta do período;
+  antes** de desarme (OPN/OPV/RCL) — por isso a consulta leva folga de 6
+  min em cada ponta do período; RCL (`Alarme Desarmado Remotamente`)
+  confirmado como código real de desarme via app, validado contra dados
+  de produção (22/07/2026);
+- ciclo curto: se um arme é seguido de um desarme em **até 15 min**, todo
+  disparo dentro desse ciclo é descartado (`MOTIVO_CICLO_CURTO`) — mesmo
+  que fique fora das duas janelas de 5 min acima. Só se aplica quando o
+  ciclo inteiro é curto (indício de teste/engano); um disparo ocorrido,
+  por exemplo, 10 min após um arme que ficou horas armado **continua
+  válido**, pois pode ser uma invasão real;
 - ignora zonas com `PANICO`/`PÂNICO` na descrição (sem acento,
   case-insensitive; lista configurável);
 - ocorrência: `ALEATORIO`, ou `ALEATORIO E RECORRENTE` a partir de

@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.domain.disparos import (
+    MOTIVO_CICLO_CURTO,
     MOTIVO_ROTINA_ARME,
     MOTIVO_ROTINA_DESARME,
     MOTIVO_ZONA_IGNORADA,
@@ -77,7 +78,7 @@ def test_todos_os_codigos_de_arme_e_desarme_contam():
         )
         assert avaliados[0].valido is False, arme
 
-    for desarme in ("OPN", "OPV"):
+    for desarme in ("OPN", "OPV", "RCL"):
         avaliados = avaliar_disparos_da_conta(
             [_evento("BUR", BASE), _evento(desarme, BASE + timedelta(minutes=2))]
         )
@@ -90,6 +91,57 @@ def test_disparo_em_zona_de_panico_e_excluido():
     )
     assert avaliados[0].valido is False
     assert avaliados[0].motivo_exclusao == MOTIVO_ZONA_IGNORADA
+
+
+# ---------- ciclo curto (arme seguido de desarme em até 15 min) ----------
+
+
+def test_disparo_no_meio_de_ciclo_curto_e_excluido():
+    # arme às 22:00, desarme às 22:14 (ciclo de 14 min) — o disparo fica
+    # 7 min longe de cada ponta, fora das janelas de 5 min de cada lado,
+    # mas deve ser descartado porque o ciclo inteiro foi curto.
+    eventos = [
+        _evento("CLO", BASE),
+        _evento("BUR", BASE + timedelta(minutes=7)),
+        _evento("OPN", BASE + timedelta(minutes=14)),
+    ]
+    avaliados = avaliar_disparos_da_conta(eventos)
+    assert avaliados[0].valido is False
+    assert avaliados[0].motivo_exclusao == MOTIVO_CICLO_CURTO
+
+
+def test_disparo_fora_de_ciclo_curto_continua_valido_mesmo_perto_do_arme():
+    # arme às 22:00, disparo 10 min depois, mas o desarme só vem 4h
+    # depois — não é um ciclo curto (período armado normal), então o
+    # disparo tem que continuar contando (poderia ser invasão real).
+    eventos = [
+        _evento("CLO", BASE),
+        _evento("BUR", BASE + timedelta(minutes=10)),
+        _evento("OPN", BASE + timedelta(hours=4)),
+    ]
+    avaliados = avaliar_disparos_da_conta(eventos)
+    assert avaliados[0].valido is True
+
+
+def test_ciclo_curto_com_rcl_como_desarme():
+    eventos = [
+        _evento("ROP", BASE),
+        _evento("BUR", BASE + timedelta(minutes=6)),
+        _evento("RCL", BASE + timedelta(minutes=12)),
+    ]
+    avaliados = avaliar_disparos_da_conta(eventos)
+    assert avaliados[0].valido is False
+    assert avaliados[0].motivo_exclusao == MOTIVO_CICLO_CURTO
+
+
+def test_ciclo_de_16min_nao_e_curto():
+    eventos = [
+        _evento("CLO", BASE),
+        _evento("BUR", BASE + timedelta(minutes=8)),
+        _evento("OPN", BASE + timedelta(minutes=16)),
+    ]
+    avaliados = avaliar_disparos_da_conta(eventos)
+    assert avaliados[0].valido is True
 
 
 def test_disparo_isolado_e_valido():

@@ -12,9 +12,10 @@ from app.domain.dates import parse_softguard_datetime
 
 CODIGO_DISPARO = "BUR"
 CODIGOS_ARME = ("CLO", "CLV", "ROP")
-CODIGOS_DESARME = ("OPN", "OPV")
+CODIGOS_DESARME = ("OPN", "OPV", "RCL")
 
 MINUTOS_ROTINA = 5  # BUR até 5 min APÓS arme / até 5 min ANTES de desarme = rotina
+MINUTOS_CICLO_CURTO = 15  # arme seguido de desarme em até 15 min = ciclo de teste/engano
 
 ZONAS_IGNORADAS_PADRAO: tuple[str, ...] = ("PANICO",)
 
@@ -25,6 +26,7 @@ LIMITE_RECORRENTE_PADRAO = 15
 MOTIVO_ROTINA_ARME = "até 5 min após arme (rotina de saída)"
 MOTIVO_ROTINA_DESARME = "até 5 min antes de desarme (rotina de entrada)"
 MOTIVO_ZONA_IGNORADA = "zona ignorada (pânico)"
+MOTIVO_CICLO_CURTO = "arme seguido de desarme em até 15 min (ciclo curto)"
 
 
 @dataclass(frozen=True)
@@ -86,6 +88,29 @@ def _quando(evento: Mapping[str, object]) -> datetime | None:
     return None
 
 
+def _ciclos_curtos(
+    armes: Sequence[datetime], desarmes: Sequence[datetime], *, limite: timedelta
+) -> list[tuple[datetime, datetime]]:
+    """Pareia cada arme com o desarme que o fecha (o próximo desarme na
+    linha do tempo) e devolve só os ciclos cuja duração é <= limite —
+    ciclos assim indicam um arme seguido de teste/engano, não um período
+    armado de verdade."""
+    eventos = sorted(
+        [(t, "arme") for t in armes] + [(t, "desarme") for t in desarmes],
+        key=lambda item: item[0],
+    )
+    ciclos: list[tuple[datetime, datetime]] = []
+    for i, (t, tipo) in enumerate(eventos):
+        if tipo != "arme":
+            continue
+        for t2, tipo2 in eventos[i + 1 :]:
+            if tipo2 == "desarme":
+                if t2 - t <= limite:
+                    ciclos.append((t, t2))
+                break
+    return ciclos
+
+
 def avaliar_disparos_da_conta(
     eventos: Sequence[Mapping[str, object]],
     *,
@@ -113,6 +138,9 @@ def avaliar_disparos_da_conta(
             disparos.append(evento)
 
     janela = timedelta(minutes=MINUTOS_ROTINA)
+    ciclos_curtos = _ciclos_curtos(
+        armes, desarmes, limite=timedelta(minutes=MINUTOS_CICLO_CURTO)
+    )
     avaliados: list[DisparoAvaliado] = []
 
     for disparo in disparos:
@@ -129,6 +157,8 @@ def avaliar_disparos_da_conta(
                 motivo = MOTIVO_ROTINA_ARME
             elif any(timedelta(0) <= desarme - quando <= janela for desarme in desarmes):
                 motivo = MOTIVO_ROTINA_DESARME
+            elif any(inicio <= quando <= fim for inicio, fim in ciclos_curtos):
+                motivo = MOTIVO_CICLO_CURTO
 
         avaliados.append(
             DisparoAvaliado(

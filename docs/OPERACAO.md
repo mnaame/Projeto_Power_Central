@@ -296,9 +296,10 @@ Duas páginas na barra lateral, para operador e admin:
   (eventos fora do relatório, com o motivo — ex.: cliente armou).
 - **Disparos**: por padrão cobre "desde o último relatório até agora"
   (janela móvel — o próximo começa onde o anterior terminou); também
-  aceita período manual. Uma linha por cliente, com quantidade, zonas e
-  tempo de conclusão; as colunas "TEMPO PARA LIGAR" e "CONCLUSÃO" ficam
-  para o monitor preencher no Excel.
+  aceita período manual com data **e hora/minuto** (diferente de
+  Atendimentos, que é por dia inteiro). Uma linha por cliente, com
+  quantidade, zonas e tempo de conclusão; as colunas "TEMPO PARA LIGAR" e
+  "CONCLUSÃO" ficam para o monitor preencher no Excel.
 
 Cada geração fica no **Histórico de gerações** (quem gerou, período,
 linhas) com re-download do arquivo arquivado; tudo vai para a auditoria.

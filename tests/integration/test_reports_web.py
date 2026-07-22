@@ -143,6 +143,20 @@ def test_gerar_disparos_com_janela_automatica(app, operador_client):
     assert abs(duracao - timedelta(hours=24)) < timedelta(minutes=1)
 
 
+def test_gerar_disparos_com_periodo_manual_hora_minuto(app, operador_client):
+    resposta = operador_client.post(
+        "/relatorios/disparos/gerar",
+        data={"periodo": "manual", "inicio": "2026-07-01T08:30", "fim": "2026-07-01T14:15"},
+        follow_redirects=True,
+    )
+    assert resposta.status_code == 200
+
+    run = ReportRun.query.filter_by(module="disparos").one()
+    assert run.status == "success"
+    assert run.period_start == datetime(2026, 7, 1, 8, 30, tzinfo=FUSO)
+    assert run.period_end == datetime(2026, 7, 1, 14, 15, tzinfo=FUSO)
+
+
 def test_gerar_com_periodo_manual(app, operador_client):
     resposta = operador_client.post(
         "/relatorios/atendimentos/gerar",

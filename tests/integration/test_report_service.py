@@ -191,7 +191,7 @@ def test_gerar_disparos_fim_a_fim_com_janela_movel(app):
     chamada = client.chamadas_historico[0]
     assert chamada["desde"] == (DESDE - timedelta(minutes=6)).astimezone(FUSO)
     assert chamada["hasta"] == (HASTA + timedelta(minutes=6)).astimezone(FUSO)
-    assert set(chamada["codigos"]) == {"BUR", "CLO", "CLV", "ROP", "OPN", "OPV"}
+    assert set(chamada["codigos"]) == {"BUR", "CLO", "CLV", "ROP", "OPN", "OPV", "RCL"}
 
     wb = load_workbook(run.file_path)
     aba = wb["DISPAROS"]

@@ -29,11 +29,19 @@
 
     <div class="field" style="margin-bottom: 0;">
       <label for="inicio">Início (manual)</label>
+      {% if modulo == 'disparos' %}
+      <input id="inicio" type="datetime-local" name="inicio">
+      {% else %}
       <input id="inicio" type="date" name="inicio">
+      {% endif %}
     </div>
     <div class="field" style="margin-bottom: 0;">
       <label for="fim">Fim (manual)</label>
+      {% if modulo == 'disparos' %}
+      <input id="fim" type="datetime-local" name="fim">
+      {% else %}
       <input id="fim" type="date" name="fim">
+      {% endif %}
     </div>
 
     <button type="submit" class="btn btn-primary">Gerar relatório</button>
