@@ -71,14 +71,26 @@ def _criar_cliente(config) -> SoftGuardClient:
     return SoftGuardClient(credenciais_softguard(config))
 
 
-def _tempo_conclusao_via_timeline(client, ids_eventos) -> str:
-    """Regra B.2: do disparo atendido mais recente para trás, o primeiro
-    com fechamento real dá o tempo (mesma lógica de fechamento do A.3)."""
+def _tempos_via_timeline(client, ids_eventos) -> tuple[str, str]:
+    """Regra B.2/B.5: anda do disparo atendido mais recente para trás.
+    Tempo de conclusão = primeiro evento com fechamento real (mesma
+    lógica de fechamento do A.3). Tempo para ligar = primeiro evento com
+    uma chamada registrada na própria linha do tempo (pode ser um disparo
+    diferente do usado para a conclusão) — validado contra timeline real
+    (evento MIL-0172, chamada "Atendida - Bem Sucedida")."""
+    tempo_conclusao = ""
+    tempo_ligar = ""
     for id_evento in ids_eventos:
+        if tempo_conclusao and tempo_ligar:
+            break
         analise = dom_atend.analisar_timeline(client.buscar_timeline(id_evento))
-        if analise.inicio is not None and analise.fechamento is not None:
-            return formatar_duracao_hms(analise.fechamento - analise.inicio)
-    return ""
+        if analise.inicio is None:
+            continue
+        if not tempo_conclusao and analise.fechamento is not None:
+            tempo_conclusao = formatar_duracao_hms(analise.fechamento - analise.inicio)
+        if not tempo_ligar and analise.chamada is not None:
+            tempo_ligar = formatar_duracao_hms(analise.chamada - analise.inicio)
+    return tempo_conclusao, tempo_ligar
 
 
 def gerar_atendimentos(
@@ -242,14 +254,14 @@ def gerar_disparos(
 
             linhas = []
             for cliente in clientes:
-                tempo = _tempo_conclusao_via_timeline(client, cliente.ids_eventos_atendidos)
+                tempo, tempo_ligar = _tempos_via_timeline(client, cliente.ids_eventos_atendidos)
                 linhas.append(
                     (
                         cliente.cliente,
                         f"{cliente.quantidade}x",
                         cliente.ocorrencia,
                         tempo,
-                        "X",  # preenchido pelo monitor
+                        tempo_ligar or "X",
                         "\n".join(cliente.zonas),
                         "",  # preenchido pelo monitor
                     )

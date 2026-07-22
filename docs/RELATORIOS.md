@@ -86,8 +86,12 @@ Orquestra: consulta → domínio → persistência → .xlsx → auditoria.
   de manhã) não trava os automáticos seguintes numa data que ainda não
   chegou; primeira vez = `horas_primeira_execucao` (padrão 24h) para trás;
   override manual na UI (aceita hora/minuto, não só o dia);
-  tempo de conclusão via timeline dos disparos com `rec_ioperador != 0`,
-  do mais recente para trás até achar fechamento real (regra do módulo A);
+  tempo de conclusão e tempo para ligar via timeline dos disparos com
+  `rec_ioperador != 0`, do mais recente para trás até achar,
+  respectivamente, fechamento real (regra do módulo A) e uma chamada
+  registrada (texto "chamada" na linha do tempo — validado contra timeline
+  real, evento MIL-0172, "Chamada Atendida - Bem Sucedida"); cada um cai
+  no "X" (preenchimento manual) só se não achar o marcador correspondente;
 - .xlsx com **openpyxl** (dependência nova): cabeçalho verde `#21A366`
   texto branco, primeira linha congelada, auto-filtro, quebra de texto
   (SITUAÇÃO / ZONA); Atendimentos com 2ª aba DESCARTADOS

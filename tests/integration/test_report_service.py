@@ -205,6 +205,48 @@ def test_gerar_disparos_fim_a_fim_com_janela_movel(app):
     assert linha[6] is None or linha[6] == ""
 
 
+def test_gerar_disparos_preenche_tempo_para_ligar_quando_ha_chamada(app):
+    meio = DESDE + timedelta(hours=12)
+    timeline_com_chamada = [
+        {
+            "etl_tFechaHora": "7/18/2026 9:30:00 PM",
+            "etl_cAccion": "Inicio",
+            "etl_cObservacion": "Evento recebido na Central",
+            "etl_iAccionCode": "",
+            "ope_cnombre": "",
+        },
+        {
+            "etl_tFechaHora": "7/18/2026 9:48:00 PM",
+            "etl_cAccion": "Chamada",
+            "etl_cObservacion": "(*84 -31987388855 Chamada Atendida - Bem Sucedida) [00:00:51]",
+            "etl_iAccionCode": "",
+            "ope_cnombre": "",
+        },
+        {
+            "etl_tFechaHora": "7/18/2026 9:48:32 PM",
+            "etl_cAccion": "Procesar",
+            "etl_cObservacion": "Processa tudo - processado",
+            "etl_iAccionCode": "122",
+            "ope_cnombre": "MARIA",
+        },
+    ]
+    client = FakeSoftGuardClient(
+        eventos=[_evento_bur("700", meio)],
+        timelines={"700": timeline_com_chamada},
+    )
+
+    run = report_service.gerar_disparos(
+        config=app.config, user_id=None, desde=DESDE, hasta=HASTA, softguard_client=client
+    )
+    assert run.status == "success"
+
+    wb = load_workbook(run.file_path)
+    aba = wb["DISPAROS"]
+    linha = [c.value for c in aba[2]]
+    assert linha[3] == "00H18M32S"  # tempo de conclusão
+    assert linha[4] == "00H18M00S"  # tempo para ligar (chamada - início)
+
+
 def test_janela_movel_encadeia_com_o_relatorio_anterior(app):
     client = FakeSoftGuardClient()
 

@@ -92,6 +92,32 @@ def test_fechamento_por_autoproceso_define_monitor_automatico():
     assert analise.monitor == "Automático"
 
 
+def test_chamada_atendida_define_momento_da_ligacao():
+    # timeline real reconstruída do evento MIL-0172 (21/07/2026 03:26:58) —
+    # chamada às 03:44:59 (18min01s depois do início) e fechamento às
+    # 03:45:31 (18min33s depois), validado contra os valores preenchidos
+    # manualmente ("18M00S" / "00H18M32S", diferença de ~1s por arredondamento).
+    timeline = [
+        _passo("7/21/2026 3:26:58 AM", "Inicio", "Evento recebido na Central"),
+        _passo("7/21/2026 3:27:20 AM", "IngresoComentarios", "--- PROCEDIMENTO --- [DEALER: MIL]"),
+        _passo(
+            "7/21/2026 3:44:59 AM",
+            "Chamada",
+            "(*84 -31987388855 Chamada Atendida - Bem Sucedida) [00:00:51]",
+        ),
+        _passo("7/21/2026 3:45:31 AM", "IngresoComentarios", "Local com trabalho noturno."),
+        _passo("7/21/2026 3:45:31 AM", "Procesar", "Processa tudo - processado", codigo="122"),
+    ]
+    analise = analisar_timeline(timeline)
+    assert analise.chamada == datetime(2026, 7, 21, 3, 44, 59, tzinfo=FUSO)
+    assert analise.fechamento == datetime(2026, 7, 21, 3, 45, 31, tzinfo=FUSO)
+
+
+def test_sem_chamada_registrada_fica_none():
+    analise = analisar_timeline(_timeline_fechada_manual())
+    assert analise.chamada is None
+
+
 def test_fechamento_por_texto_processado():
     timeline = [
         _passo("7/18/2026 9:30:00 PM", "Inicio", "Evento recebido na Central"),

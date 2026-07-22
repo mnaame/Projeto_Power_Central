@@ -298,8 +298,11 @@ Duas páginas na barra lateral, para operador e admin:
   (janela móvel — o próximo começa onde o anterior terminou); também
   aceita período manual com data **e hora/minuto** (diferente de
   Atendimentos, que é por dia inteiro). Uma linha por cliente, com
-  quantidade, zonas e tempo de conclusão; as colunas "TEMPO PARA LIGAR" e
-  "CONCLUSÃO" ficam para o monitor preencher no Excel.
+  quantidade, zonas, tempo de conclusão e **tempo para ligar para o
+  cliente** — ambos automáticos, lidos da linha do tempo do disparo mais
+  recente atendido (fica "X" só quando não há chamada/fechamento
+  registrado nela). A coluna "CONCLUSÃO MONITORAMENTO DISPARO." continua
+  para o monitor preencher no Excel.
 
 Cada geração fica no **Histórico de gerações** (quem gerou, período,
 linhas) com re-download do arquivo arquivado; tudo vai para a auditoria.

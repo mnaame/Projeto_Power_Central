@@ -39,6 +39,7 @@ class AnaliseTimeline:
     fechado_por_autoproceso: bool
     monitor: str | None
     situacao: str | None
+    chamada: datetime | None
 
 
 @dataclass(frozen=True)
@@ -92,15 +93,33 @@ def _e_fechamento(passo: Mapping[str, object]) -> bool:
     return "processado" in texto_completo
 
 
+def _e_chamada(passo: Mapping[str, object]) -> bool:
+    # a linha do tempo do portal mistura a ligação junto com os demais
+    # passos (procedimento, espera, etc.); identificamos pelo texto —
+    # "Chamada Atendida - Bem Sucedida", sempre com o número discado
+    # (validado contra timeline real de disparo, evento MIL-0172).
+    texto_completo = _normalizar_para_busca(
+        f"{_texto(passo.get('etl_cAccion'))} {_texto(passo.get('etl_cObservacion'))}"
+    )
+    return "chamada" in texto_completo
+
+
 def analisar_timeline(passos: Sequence[Mapping[str, object]]) -> AnaliseTimeline:
-    """Extrai da linha do tempo: início, fechamento, monitor e situação
-    (regras A.3). Sem fechamento = evento em aberto."""
+    """Extrai da linha do tempo: início, fechamento, monitor, situação e
+    momento da chamada ao cliente (regras A.3 / B.5). Sem fechamento =
+    evento em aberto."""
     ordenados = _passos_ordenados(passos)
 
     inicio = None
     for passo in ordenados:
         if _texto(passo.get("etl_cAccion")) == ACAO_INICIO:
             inicio = passo["quando"]
+            break
+
+    chamada = None
+    for passo in ordenados:
+        if _e_chamada(passo):
+            chamada = passo["quando"]
             break
 
     passo_fechamento = None
@@ -116,6 +135,7 @@ def analisar_timeline(passos: Sequence[Mapping[str, object]]) -> AnaliseTimeline
             fechado_por_autoproceso=False,
             monitor=None,
             situacao=_ultimo_comentario_manual(ordenados, ate=None),
+            chamada=chamada,
         )
 
     autoproceso = _texto(passo_fechamento.get("etl_cAccion")) == ACAO_AUTOPROCESO
@@ -129,6 +149,7 @@ def analisar_timeline(passos: Sequence[Mapping[str, object]]) -> AnaliseTimeline
         fechado_por_autoproceso=autoproceso,
         monitor=monitor,
         situacao=_ultimo_comentario_manual(ordenados, ate=passo_fechamento["quando"]),
+        chamada=chamada,
     )
 
 
