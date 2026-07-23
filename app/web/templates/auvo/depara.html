@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}De-para Auvo{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>De-para PowerCentral ↔ Auvo</h2>
+    <a class="btn btn-ghost" href="{{ url_for('auvo.painel') }}">Voltar ao painel</a>
+  </div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Só contas com status <strong>OK</strong> e ID Auvo preenchido abrem chamado.
+    <strong>NAO</strong> = não abre; <strong>REVISAR</strong> = casamento ambíguo, precisa de revisão.
+    Duas contas podem apontar para o mesmo cliente Auvo (loja + tesouraria).
+  </p>
+
+  <div class="stat-grid">
+    <div class="stat-tile">
+      <div class="stat-tile-label">OK (abrem chamado)</div>
+      <div class="stat-tile-value is-ok">{{ contagens.get('OK', 0) }}</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Para revisar</div>
+      <div class="stat-tile-value {{ 'is-critical' if contagens.get('REVISAR', 0) else '' }}">{{ contagens.get('REVISAR', 0) }}</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Não abrem</div>
+      <div class="stat-tile-value">{{ contagens.get('NAO', 0) }}</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom: var(--space-4);">
+    <div style="display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: flex-end;">
+      <form method="get" action="{{ url_for('auvo.depara') }}"
+            style="display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: flex-end; flex: 1;">
+        <div class="field" style="margin-bottom: 0; flex: 1; min-width: 220px;">
+          <label for="q">Buscar (conta ou nome)</label>
+          <input id="q" type="text" name="q" value="{{ filtro }}" placeholder="ex.: 95 ou VILLEFORT">
+        </div>
+        <div class="field" style="margin-bottom: 0;">
+          <label for="status">Status</label>
+          <select id="status" name="status">
+            <option value="">Todos</option>
+            {% for opcao in ['OK', 'REVISAR', 'NAO'] %}
+            <option value="{{ opcao }}" {{ 'selected' if status_filtro == opcao }}>{{ opcao }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-ghost">Filtrar</button>
+      </form>
+
+      <form method="post" action="{{ url_for('auvo.importar_depara') }}" enctype="multipart/form-data"
+            style="display: flex; gap: var(--space-3); align-items: flex-end;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="field" style="margin-bottom: 0;">
+          <label for="arquivo">Importar CSV do protótipo</label>
+          <input id="arquivo" type="file" name="arquivo" accept=".csv">
+        </div>
+        <button type="submit" class="btn btn-ghost">Importar</button>
+      </form>
+
+      <form method="post" action="{{ url_for('auvo.regerar_depara') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-ghost"
+                title="Recasa por nome apenas as linhas REVISAR — as revisadas são preservadas">
+          Regerar de-para
+        </button>
+      </form>
+    </div>
+  </div>
+
+  {% if linhas %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Conta</th>
+          <th>Nome (PowerCentral)</th>
+          <th>Cliente (Auvo)</th>
+          <th class="is-numeric">Score</th>
+          <th>Vínculo (ID Auvo / status)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for linha in linhas %}
+        <tr>
+          <td class="is-numeric">{{ linha.conta_power }}</td>
+          <td>
+            {{ linha.nome_power }}
+            {% if linha.status == 'REVISAR' %}
+            <span class="chip chip-warning">revisar</span>
+            {% endif %}
+            {% if linha.id_auvo in duplicados %}
+            <span class="chip chip-neutral" title="Mais de uma conta aponta para este cliente Auvo">compartilhado</span>
+            {% endif %}
+          </td>
+          <td>{{ linha.nome_auvo or '—' }}</td>
+          <td class="is-numeric">{{ '%.2f'|format(linha.score) if linha.score is not none else '—' }}</td>
+          <td>
+            <form method="post" action="{{ url_for('auvo.editar_depara', linha_id=linha.id) }}"
+                  style="display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="q" value="{{ filtro }}">
+              <input type="hidden" name="status_filtro" value="{{ status_filtro }}">
+              <input type="text" name="id_auvo" value="{{ linha.id_auvo or '' }}"
+                     inputmode="numeric" aria-label="ID Auvo"
+                     style="width: 110px; padding: var(--space-1) var(--space-2);
+                     border-radius: var(--radius-md); border: 1px solid var(--color-border-strong);
+                     background: var(--color-surface); color: var(--color-text-primary);">
+              <select name="status" aria-label="Status"
+                      style="padding: var(--space-1) var(--space-2);
+                      border-radius: var(--radius-md); border: 1px solid var(--color-border-strong);
+                      background: var(--color-surface); color: var(--color-text-primary);">
+                {% for opcao in ['OK', 'REVISAR', 'NAO'] %}
+                <option value="{{ opcao }}" {{ 'selected' if linha.status == opcao }}>{{ opcao }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn btn-ghost" style="padding: var(--space-1) var(--space-3);">Salvar</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted" style="margin-top: var(--space-3);">{{ linhas|length }} conta(s) exibida(s).</p>
+  {% else %}
+  <div class="card empty-state">
+    <h3>Nenhuma conta no de-para</h3>
+    <p class="muted">Importe o CSV do protótipo acima para começar.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

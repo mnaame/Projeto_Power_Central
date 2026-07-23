@@ -415,7 +415,8 @@ td.is-numeric, th.is-numeric {
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   width: 100%;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
@@ -426,13 +427,19 @@ td.is-numeric, th.is-numeric {
   font-size: var(--font-size-md);
 }
 
+.field textarea {
+  resize: vertical;
+  min-height: 64px;
+}
+
 .field input[type="checkbox"] {
   width: auto;
   accent-color: var(--color-accent);
 }
 
 .field input:focus-visible,
-.field select:focus-visible {
+.field select:focus-visible,
+.field textarea:focus-visible {
   border-color: var(--color-accent);
 }
 

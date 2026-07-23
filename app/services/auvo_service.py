@@ -118,7 +118,7 @@ def _em_cooldown(conta: str, horas: float) -> bool:
 def _registrar(
     *,
     gatilho: str,
-    conta: str,
+    conta: str | None,
     cliente: str,
     resultado: str,
     origem_user_id: int | None = None,
@@ -253,6 +253,87 @@ def abrir_chamado(
         request_body=payload,
         response_body=resposta if isinstance(resposta, (dict, list)) else None,
     )
+
+
+def testar_criacao(
+    *,
+    config,
+    customer_id: int | None,
+    client: AuvoClient | None = None,
+    origem_user_id: int | None = None,
+) -> list[dict]:
+    """Teste de criação em níveis (§6.4): mínimo → +cliente/tipo →
+    +responsável, devolvendo a resposta de cada nível — a ferramenta que
+    destravou a integração original. Cria tarefas REAIS na Auvo (ignora o
+    modo simulação de propósito: o objetivo é validar a API); cada nível
+    fica no histórico com gatilho='teste'."""
+    auvo = client or criar_cliente(config)
+    if auvo is None:
+        return [
+            {
+                "nivel": "credenciais",
+                "ok": False,
+                "detalhe": "Credenciais da Auvo não configuradas.",
+            }
+        ]
+
+    base: dict = {
+        "orientation": (
+            "Teste Power Central\n"
+            "Tarefa de teste criada pelo botão 'Testar criação' — pode ser fechada."
+        ),
+        "priority": settings_service.get_auvo_priority(),
+    }
+    criador = settings_service.get_auvo_criador_id()
+    if criador is not None:
+        base["idUserFrom"] = criador
+
+    niveis: list[tuple[str, dict]] = [("mínimo (sem cliente)", dict(base))]
+    if customer_id is not None:
+        nivel2 = dict(base)
+        nivel2["customerId"] = customer_id
+        task_type = settings_service.get_auvo_task_type()
+        if task_type is not None:
+            nivel2["taskType"] = task_type
+        niveis.append(("com cliente e tipo", nivel2))
+        responsavel = settings_service.get_auvo_responsavel_id()
+        if responsavel is not None:
+            nivel3 = dict(nivel2)
+            nivel3["idUserTo"] = responsavel
+            niveis.append(("com responsável", nivel3))
+
+    resultados: list[dict] = []
+    for rotulo, payload in niveis:
+        try:
+            resposta = auvo.criar_tarefa(payload)
+        except AuvoError as exc:
+            _registrar(
+                gatilho="teste",
+                conta=None,
+                cliente=rotulo,
+                resultado="falha",
+                origem_user_id=origem_user_id,
+                request_body=exc.corpo_enviado or payload,
+                response_body=exc.resposta,
+                erro=str(exc),
+            )
+            resultados.append(
+                {"nivel": rotulo, "ok": False, "detalhe": str(exc), "resposta": exc.resposta}
+            )
+            continue
+        id_tarefa = _extrair_task_id(resposta)
+        _registrar(
+            gatilho="teste",
+            conta=None,
+            cliente=rotulo,
+            resultado="aberta",
+            origem_user_id=origem_user_id,
+            id_tarefa_auvo=id_tarefa,
+            request_body=payload,
+            response_body=resposta if isinstance(resposta, (dict, list)) else None,
+        )
+        resultados.append({"nivel": rotulo, "ok": True, "id_tarefa": id_tarefa})
+    return resultados
 
 
 # ----------------------------------------------------------------------

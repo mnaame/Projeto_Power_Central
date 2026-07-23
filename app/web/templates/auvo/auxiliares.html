@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>{{ titulo }}</h2>
+    <a class="btn btn-ghost" href="{{ url_for('auvo.configuracao') }}">Voltar à configuração</a>
+  </div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Use o ID da primeira coluna para preencher a configuração.
+  </p>
+
+  {% if linhas %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>ID</th><th>Nome / Descrição</th><th>Extra</th></tr></thead>
+      <tbody>
+        {% for linha in linhas %}
+        <tr>
+          <td class="is-numeric">{{ linha.id or '—' }}</td>
+          <td>{{ linha.nome or '—' }}</td>
+          <td class="muted">{{ linha.extra or '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted" style="margin-top: var(--space-3);">{{ linhas|length }} registro(s).</p>
+  {% else %}
+  <div class="card empty-state">
+    <h3>Nada retornado</h3>
+    <p class="muted">A Auvo não devolveu registros para esta consulta.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

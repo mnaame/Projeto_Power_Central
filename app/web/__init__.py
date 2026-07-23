@@ -24,6 +24,7 @@ def register_context(app) -> None:
 def register_blueprints(app) -> None:
     from app.web.admin.routes import bp as admin_bp
     from app.web.auth.routes import bp as auth_bp
+    from app.web.auvo.routes import bp as auvo_bp
     from app.web.dashboard.routes import bp as dashboard_bp
     from app.web.reports.routes import bp as reports_bp
 
@@ -31,3 +32,4 @@ def register_blueprints(app) -> None:
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(reports_bp)
+    app.register_blueprint(auvo_bp)

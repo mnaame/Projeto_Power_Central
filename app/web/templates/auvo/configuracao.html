@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Configuração Auvo{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>Configuração — Chamados Auvo</h2>
+    <a class="btn btn-ghost" href="{{ url_for('auvo.painel') }}">Voltar ao painel</a>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Modo de operação</h2></div>
+  <div class="card" style="max-width: 560px;">
+    <p>
+      Modo atual:
+      {% if simulacao %}
+      <span class="chip chip-neutral">Simulação</span>
+      <span class="muted">— nada é enviado à Auvo; o histórico registra o que seria aberto.</span>
+      {% else %}
+      <span class="chip chip-warning">Produção</span>
+      <span class="muted">— chamados reais são abertos e técnico é despachado.</span>
+      {% endif %}
+    </p>
+
+    {% if simulacao %}
+    <form method="post" action="{{ url_for('auvo.alternar_modo') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="modo" value="producao">
+      <div class="field" style="display: flex; align-items: flex-start; gap: var(--space-2);">
+        <input type="checkbox" id="confirmar" name="confirmar" value="sim" style="margin-top: 4px;">
+        <label for="confirmar" style="margin-bottom: 0;">
+          Entendo que em produção o sistema abrirá tarefas reais na Auvo
+          e técnicos serão despachados a campo.
+        </label>
+      </div>
+      <button type="submit" class="btn btn-primary">Ligar modo produção</button>
+    </form>
+    {% else %}
+    <form method="post" action="{{ url_for('auvo.alternar_modo') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="modo" value="simulacao">
+      <button type="submit" class="btn btn-primary">Voltar para simulação</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Credenciais da API</h2></div>
+  <div class="card" style="max-width: 560px;">
+    <p class="muted">
+      Status:
+      <span class="chip {{ 'chip-ok' if credenciais_configuradas else 'chip-neutral' }}">
+        {{ 'Configurado' if credenciais_configuradas else 'Não configurado' }}
+      </span>
+      — geradas no painel da Auvo; ficam cifradas no banco.
+    </p>
+    <form method="post" action="{{ url_for('auvo.salvar_credenciais') }}" novalidate>
+      {{ credenciais_form.csrf_token }}
+      <div class="field">
+        {{ credenciais_form.api_key.label }}
+        {{ credenciais_form.api_key(autocomplete="off", type="password", placeholder="apiKey") }}
+      </div>
+      <div class="field">
+        {{ credenciais_form.api_token.label }}
+        {{ credenciais_form.api_token(autocomplete="off", type="password", placeholder="apiToken") }}
+      </div>
+      <button type="submit" class="btn btn-primary">Salvar credenciais</button>
+    </form>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>IDs, réguas e templates</h2></div>
+  <div class="card" style="max-width: 560px;">
+    <p class="muted" style="margin-bottom: var(--space-4);">
+      Descubra os IDs pelos botões:
+      <a href="{{ url_for('auvo.auxiliares', tipo='usuarios') }}">usuários</a> ·
+      <a href="{{ url_for('auvo.auxiliares', tipo='tipos') }}">tipos de tarefa</a> ·
+      <a href="{{ url_for('auvo.auxiliares', tipo='clientes') }}">clientes</a>
+    </p>
+    <form method="post" action="{{ url_for('auvo.salvar_configuracao') }}" novalidate>
+      {{ form.csrf_token }}
+
+      {% for campo in [form.criador_id, form.responsavel_id] %}
+      <div class="field">
+        {{ campo.label }}
+        {{ campo() }}
+        {% for mensagem in campo.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      {% endfor %}
+
+      <div class="field" style="display: flex; align-items: center; gap: var(--space-2);">
+        {{ form.atribuir_responsavel() }}
+        {{ form.atribuir_responsavel.label }}
+      </div>
+      <p class="muted" style="margin-top: calc(-1 * var(--space-3)); font-size: var(--font-size-xs);">
+        Desligado (ou responsável vazio): a tarefa é criada sem responsável e cai
+        em "Tarefas sem agendamento" na Auvo.
+      </p>
+
+      {% for campo in [form.task_type, form.priority, form.cooldown_horas,
+                       form.sem_comunicacao_horas_minimas, form.disparos_minimos_tarefa] %}
+      <div class="field">
+        {{ campo.label }}
+        {{ campo() }}
+        {% for mensagem in campo.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      {% endfor %}
+
+      <h3 style="margin-top: var(--space-5);">Templates das tarefas</h3>
+      <p class="muted" style="font-size: var(--font-size-xs);">
+        Placeholders: <code>{conta}</code> <code>{nome}</code> <code>{desde}</code>
+        <code>{sinal}</code> <code>{qtd}</code> <code>{zonas}</code>.
+        O título vira a 1ª linha da orientação da tarefa.
+      </p>
+
+      {% for campo in [form.template_semcom_titulo, form.template_semcom_descricao,
+                       form.template_disparos_titulo, form.template_disparos_descricao] %}
+      <div class="field">
+        {{ campo.label }}
+        {{ campo(rows=2) if campo.type == 'TextAreaField' else campo() }}
+        {% for mensagem in campo.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      {% endfor %}
+
+      <button type="submit" class="btn btn-primary">Salvar configuração</button>
+    </form>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Testar criação</h2></div>
+  <div class="card" style="max-width: 560px;">
+    <p class="muted">
+      Cria tarefas de teste REAIS na Auvo, em níveis (mínimo → +cliente/tipo →
+      +responsável), mostrando a resposta de cada nível — ignora o modo simulação
+      de propósito, para diagnosticar erros de campo.
+    </p>
+    <form method="post" action="{{ url_for('auvo.testar_criacao') }}" novalidate>
+      {{ testar_form.csrf_token }}
+      <div class="field">
+        {{ testar_form.customer_id.label }}
+        {{ testar_form.customer_id() }}
+        {% for mensagem in testar_form.customer_id.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      <button type="submit" class="btn btn-ghost">Criar tarefas de teste</button>
+    </form>
+
+    {% if resultados_teste %}
+    <div class="table-wrap" style="margin-top: var(--space-4);">
+      <table>
+        <thead><tr><th>Nível</th><th>Resultado</th><th>Detalhe</th></tr></thead>
+        <tbody>
+          {% for resultado in resultados_teste %}
+          <tr>
+            <td>{{ resultado.nivel }}</td>
+            <td>
+              <span class="chip {{ 'chip-ok' if resultado.ok else 'chip-critical' }}">
+                {{ 'criada' if resultado.ok else 'falhou' }}
+              </span>
+            </td>
+            <td>
+              {% if resultado.ok %}
+              Tarefa {{ resultado.id_tarefa or 'criada' }} — confira em "Tarefas sem agendamento".
+              {% else %}
+              {{ resultado.detalhe }}
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

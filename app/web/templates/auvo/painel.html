@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Chamados (Auvo){% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>Abertura de Chamados (Auvo)</h2>
+    {% if current_user.is_admin %}
+    <div style="display: flex; gap: var(--space-2);">
+      <a class="btn btn-ghost" href="{{ url_for('auvo.depara') }}">Gestão do de-para</a>
+      <a class="btn btn-ghost" href="{{ url_for('auvo.configuracao') }}">Configuração</a>
+    </div>
+    {% endif %}
+  </div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Tarefas abertas automaticamente na Auvo quando um cliente fica sem comunicação
+    ou acumula disparos aleatórios.
+  </p>
+
+  <div class="stat-grid">
+    <div class="stat-tile">
+      <div class="stat-tile-label">Modo</div>
+      <div class="stat-tile-value" style="font-size: var(--font-size-xl);">
+        {% if simulacao %}
+        <span class="chip chip-neutral">Simulação</span>
+        {% else %}
+        <span class="chip chip-warning">Produção</span>
+        {% endif %}
+      </div>
+      <div class="stat-tile-hint">
+        {{ 'Nada é enviado à Auvo — só registro do que seria.' if simulacao
+           else 'Chamados reais — técnico é despachado.' }}
+      </div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Abertas hoje (reais)</div>
+      <div class="stat-tile-value">{{ abertas_hoje }}</div>
+      <div class="stat-tile-hint">{{ simuladas_hoje }} simulada(s) hoje</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Contas em cooldown</div>
+      <div class="stat-tile-value">{{ em_cooldown }}</div>
+      <div class="stat-tile-hint">Não reabrem até vencer o cooldown</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Última atividade</div>
+      <div class="stat-tile-value" style="font-size: var(--font-size-lg);">
+        {{ ultimo.criado_em|data_local if ultimo else '—' }}
+      </div>
+      <div class="stat-tile-hint">
+        {{ ultimo.resultado if ultimo else 'Nenhum chamado registrado ainda' }}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Histórico de chamados</h2></div>
+
+  {% if historico %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Data/Hora</th>
+          <th>Gatilho</th>
+          <th>Conta</th>
+          <th>Cliente</th>
+          <th>Resultado</th>
+          <th>Tarefa Auvo</th>
+          <th>Origem</th>
+          <th>Detalhe</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set estilos = {'aberta': 'chip-ok', 'simulada': 'chip-neutral', 'falha': 'chip-critical',
+                          'repetida': 'chip-warning', 'sem_depara': 'chip-warning'} %}
+        {% set gatilhos = {'sem_comunicacao': 'Sem comunicação', 'disparos': 'Disparos', 'teste': 'Teste'} %}
+        {% for chamado in historico %}
+        <tr>
+          <td class="is-numeric">{{ chamado.criado_em|data_local }}</td>
+          <td>{{ gatilhos.get(chamado.gatilho, chamado.gatilho) }}</td>
+          <td class="is-numeric">{{ chamado.conta_power or '—' }}</td>
+          <td>{{ chamado.cliente or '—' }}</td>
+          <td><span class="chip {{ estilos.get(chamado.resultado, 'chip-neutral') }}">{{ chamado.resultado }}</span></td>
+          <td class="is-numeric">{{ chamado.id_tarefa_auvo or '—' }}</td>
+          <td>{{ chamado.origem.username if chamado.origem else 'robô' }}</td>
+          <td>
+            {% if chamado.erro or chamado.request_body %}
+            <details>
+              <summary class="muted" style="cursor: pointer;">ver</summary>
+              {% if chamado.erro %}<p class="field-error">{{ chamado.erro }}</p>{% endif %}
+              {% if chamado.request_body %}
+              <p class="muted" style="margin-bottom: var(--space-1);">Enviado:</p>
+              <pre style="white-space: pre-wrap; font-size: var(--font-size-xs);">{{ chamado.request_body | tojson(indent=1) }}</pre>
+              {% endif %}
+              {% if chamado.response_body %}
+              <p class="muted" style="margin-bottom: var(--space-1);">Resposta:</p>
+              <pre style="white-space: pre-wrap; font-size: var(--font-size-xs);">{{ chamado.response_body | tojson(indent=1) }}</pre>
+              {% endif %}
+            </details>
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if total_paginas > 1 %}
+  <div style="display: flex; gap: var(--space-2); margin-top: var(--space-4); align-items: center;">
+    {% if pagina_atual > 1 %}
+    <a class="btn btn-ghost" href="{{ url_for('auvo.painel', pagina=pagina_atual - 1) }}">Anterior</a>
+    {% endif %}
+    <span class="muted">Página {{ pagina_atual }} de {{ total_paginas }} ({{ total }} registros)</span>
+    {% if pagina_atual < total_paginas %}
+    <a class="btn btn-ghost" href="{{ url_for('auvo.painel', pagina=pagina_atual + 1) }}">Próxima</a>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% else %}
+  <div class="card empty-state">
+    <h3>Nenhum chamado registrado ainda</h3>
+    <p class="muted">
+      Os gatilhos automáticos registram aqui cada tentativa —
+      aberta, simulada, repetida, sem de-para ou falha.
+    </p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
