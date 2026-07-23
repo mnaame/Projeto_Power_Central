@@ -9,7 +9,7 @@ from app.extensions import db
 from app.integrations.softguard_client import SoftGuardClient, SoftGuardCredentials
 from app.integrations.telegram_client import TelegramClient, TelegramCredentials
 from app.models.cycle import CollectionCycle, CycleAccount
-from app.services import alerting, settings_service, watchdog_service
+from app.services import alerting, auvo_service, settings_service, watchdog_service
 
 logger = logging.getLogger("collector")
 
@@ -118,6 +118,15 @@ def executar_ciclo(
         )
 
         watchdog_service.registrar_ciclo_bem_sucedido(agora=inicio)
+
+        # Gatilho Auvo (§4 do complemento de chamados): erro aqui nunca
+        # derruba o ciclo — vira registro no histórico de chamados.
+        try:
+            auvo_service.processar_sem_comunicacao(
+                sem_comunicacao, config=config, agora=agora_local
+            )
+        except Exception:
+            logger.exception("Abertura de chamados Auvo (sem comunicação) falhou; ciclo segue.")
 
     except Exception as exc:
         logger.exception("Ciclo do coletor (source=%s) falhou.", source)

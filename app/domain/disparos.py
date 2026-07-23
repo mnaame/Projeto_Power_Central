@@ -42,6 +42,7 @@ class DisparoAvaliado:
 @dataclass(frozen=True)
 class ClienteComDisparos:
     conta_id: str
+    conta_numero: str  # cue_ncuenta (número da conta no portal) — usado no de-para Auvo
     cliente: str
     quantidade: int
     ocorrencia: str
@@ -229,6 +230,12 @@ def consolidar_clientes(
             if cliente:
                 break
 
+        conta_numero = ""
+        for evento in eventos_da_conta:
+            conta_numero = _texto(evento.get("cue_ncuenta"))
+            if conta_numero:
+                break
+
         zonas_distintas: list[str] = []
         for d in validos:
             if d.zona and d.zona not in zonas_distintas:
@@ -244,6 +251,7 @@ def consolidar_clientes(
         resultado.append(
             ClienteComDisparos(
                 conta_id=conta_id,
+                conta_numero=conta_numero,
                 cliente=cliente,
                 quantidade=quantidade,
                 ocorrencia=(

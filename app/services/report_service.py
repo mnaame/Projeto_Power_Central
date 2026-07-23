@@ -14,7 +14,7 @@ from app.domain.formatting import formatar_duracao_hms
 from app.extensions import db
 from app.integrations.softguard_client import SoftGuardClient
 from app.models.report import ReportRun
-from app.services import settings_service
+from app.services import auvo_service, settings_service
 from app.services.collector import credenciais_softguard
 from app.services.report_xlsx import gerar_xlsx_atendimentos, gerar_xlsx_disparos
 
@@ -277,6 +277,17 @@ def gerar_disparos(
             run.row_count = len(clientes)
             run.extra_counts = {"total_disparos": total_disparos, "clientes": len(clientes)}
             run.file_path = str(caminho)
+
+            # Gatilho Auvo (§4 do complemento de chamados): erro aqui não
+            # invalida o relatório — vira registro no histórico de chamados.
+            try:
+                auvo_service.processar_disparos(
+                    clientes, config=config, origem_user_id=user_id
+                )
+            except Exception:
+                logger.exception(
+                    "Abertura de chamados Auvo (disparos) falhou; relatório segue."
+                )
         except Exception as exc:
             logger.exception("Geração do relatório de disparos falhou.")
             run.status = "error"
