@@ -4,6 +4,7 @@ from app.models.cycle import CollectionCycle, CycleAccount, AlertSent
 from app.models.audit import AuditLog
 from app.models.watchdog import WatchdogState
 from app.models.report import ReportRun
+from app.models.auvo import AuvoChamado, AuvoDepara
 
 __all__ = [
     "User",
@@ -14,4 +15,6 @@ __all__ = [
     "AuditLog",
     "WatchdogState",
     "ReportRun",
+    "AuvoDepara",
+    "AuvoChamado",
 ]

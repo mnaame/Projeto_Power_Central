@@ -28,10 +28,35 @@ DEFAULTS: dict[str, str] = {
     "disp_horas_primeira_execucao": "24",
     "disp_limite_recorrente": "15",
     "disp_ignorar_zonas": "PANICO",
+    # Módulo Chamados Auvo (§4/§5 do complemento) — simulação LIGADA por
+    # padrão: só desligar depois de validar de-para e payload.
+    "auvo_api_key": "",
+    "auvo_api_token": "",
+    "auvo_simulacao": "true",
+    "auvo_criador_id": "",
+    "auvo_responsavel_id": "",
+    "auvo_atribuir_responsavel": "true",
+    "auvo_task_type": "",
+    "auvo_priority": "2",
+    "auvo_cooldown_horas": "12",
+    "auvo_sem_comunicacao_horas_minimas": "3",
+    "auvo_disparos_minimos_tarefa": "5",
+    "auvo_template_semcom_titulo": "Cliente sem comunicacao - {conta} {nome}",
+    "auvo_template_semcom_descricao": (
+        "Cliente sem comunicacao desde {desde}. "
+        "Ultimo evento recebido: {sinal}. Verificar em campo."
+    ),
+    "auvo_template_disparos_titulo": "Disparos aleatorios - {conta} {nome}",
+    "auvo_template_disparos_descricao": (
+        "{qtd} disparo(s) aleatorio(s) no periodo. "
+        "Zonas: {zonas}. Avaliar sensores/instalacao."
+    ),
 }
 
 _TELEGRAM_TOKEN_KEY = "telegram_bot_token"
 _TELEGRAM_CHAT_KEY = "telegram_chat_id"
+_AUVO_KEY_KEY = "auvo_api_key"
+_AUVO_TOKEN_KEY = "auvo_api_token"
 
 
 def get(key: str) -> str:
@@ -126,6 +151,55 @@ def get_disp_ignorar_zonas() -> tuple[str, ...]:
     return _lista("disp_ignorar_zonas")
 
 
+# --- Módulo Chamados Auvo ---
+
+
+def auvo_simulacao() -> bool:
+    return get("auvo_simulacao").strip().lower() == "true"
+
+
+def _int_ou_none(chave: str) -> int | None:
+    bruto = get(chave).strip()
+    return int(bruto) if bruto else None
+
+
+def get_auvo_criador_id() -> int | None:
+    return _int_ou_none("auvo_criador_id")
+
+
+def get_auvo_responsavel_id() -> int | None:
+    return _int_ou_none("auvo_responsavel_id")
+
+
+def auvo_atribuir_responsavel() -> bool:
+    return get("auvo_atribuir_responsavel").strip().lower() == "true"
+
+
+def get_auvo_task_type() -> int | None:
+    return _int_ou_none("auvo_task_type")
+
+
+def get_auvo_priority() -> int:
+    return int(get("auvo_priority"))
+
+
+def get_auvo_cooldown_horas() -> float:
+    return float(get("auvo_cooldown_horas"))
+
+
+def get_auvo_sem_comunicacao_horas_minimas() -> float:
+    return float(get("auvo_sem_comunicacao_horas_minimas"))
+
+
+def get_auvo_disparos_minimos_tarefa() -> int:
+    return int(get("auvo_disparos_minimos_tarefa"))
+
+
+def get_auvo_template(gatilho: str, parte: str) -> str:
+    """gatilho: 'semcom' | 'disparos'; parte: 'titulo' | 'descricao'."""
+    return get(f"auvo_template_{gatilho}_{parte}")
+
+
 def _fernet(encryption_key: str) -> Fernet:
     chave = encryption_key.encode() if isinstance(encryption_key, str) else encryption_key
     return Fernet(chave)
@@ -162,3 +236,30 @@ def get_telegram_credentials(*, encryption_key: str) -> tuple[str, str] | None:
     except InvalidToken:
         return None
     return token, chat_id
+
+
+def set_auvo_credentials(
+    api_key: str, api_token: str, *, encryption_key: str, updated_by_id: int | None = None
+) -> None:
+    """Grava apiKey/apiToken da Auvo cifrados (mesmo mecanismo do
+    Telegram) — segredos nunca em claro no banco nem no repositório."""
+    cifra = _fernet(encryption_key)
+    set(_AUVO_KEY_KEY, cifra.encrypt(api_key.encode()).decode(), updated_by_id=updated_by_id)
+    set(_AUVO_TOKEN_KEY, cifra.encrypt(api_token.encode()).decode(), updated_by_id=updated_by_id)
+
+
+def get_auvo_credentials(*, encryption_key: str) -> tuple[str, str] | None:
+    """Retorna (api_key, api_token) decifrados, ou None se ainda não
+    configurado ou se a chave de cifra não corresponder."""
+    key_cifrada = get(_AUVO_KEY_KEY)
+    token_cifrado = get(_AUVO_TOKEN_KEY)
+    if not key_cifrada or not token_cifrado:
+        return None
+
+    cifra = _fernet(encryption_key)
+    try:
+        api_key = cifra.decrypt(key_cifrada.encode()).decode()
+        api_token = cifra.decrypt(token_cifrado.encode()).decode()
+    except InvalidToken:
+        return None
+    return api_key, api_token
