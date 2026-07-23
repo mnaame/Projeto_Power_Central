@@ -140,14 +140,17 @@ Página protegida (operador vê; admin configura), link na sidebar após
 | Falha guarda corpo + resposta; nunca derruba coletor/relatório | integração (fake que devolve 400/500) |
 | Simulação/produção, edição do de-para, permissões admin/operador | integração web |
 
-## 4. Fases
+## 4. Fases (todas concluídas)
 
 | Fase | Entrega | Prova |
 |---|---|---|
-| **C1** | `auvo_client.py` + modelos + migration + settings novos | Unit do client (login/renovação/401/paginação/validação de tipos) com respostas fake |
-| **C2** | `auvo_service.py` completo + gatilhos plugados (coletor e disparos) | Integração: todos os resultados (`aberta`/`simulada`/`falha`/`repetida`/`sem_depara`), dedup, réguas, templates |
-| **C3** | Aba web completa (cards, toggle c/ confirmação, config, teste em níveis, de-para, histórico) | Integração web + screenshots claro/escuro (Playwright) |
-| **C4** | Docs (`OPERACAO.md` §5.2.2) + carga do CSV + validação visual final | Suíte completa verde |
+| **C1** ✓ | `auvo_client.py` + modelos + migration + settings novos | Unit do client (login/renovação/401/paginação/validação de tipos) com respostas fake |
+| **C2** ✓ | `auvo_service.py` completo + gatilhos plugados (coletor e disparos) | Integração: todos os resultados (`aberta`/`simulada`/`falha`/`repetida`/`sem_depara`), dedup, réguas, templates |
+| **C3** ✓ | Aba web completa (cards, toggle c/ confirmação, config, teste em níveis, de-para, histórico) | Integração web + screenshots claro/escuro (Playwright) |
+| **C4** ✓ | Retenção de `auvo_chamados` + docs (`OPERACAO.md` §5.2.2) | Suíte completa verde |
+
+O histórico de chamados entra na retenção diária junto com ciclos,
+auditoria e relatórios (mesma janela configurável, padrão 90 dias).
 
 O que NUNCA entra no repositório: `AUVO_API_KEY`, `AUVO_API_TOKEN`,
 ids reais de usuários — tudo via tela de configuração (cifrado no banco)

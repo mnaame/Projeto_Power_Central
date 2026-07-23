@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.extensions import db
 from app.models.audit import AuditLog
+from app.models.auvo import AuvoChamado
 from app.models.cycle import AlertSent, CollectionCycle, CycleAccount
 from app.services import retention_service
 
@@ -26,12 +27,36 @@ def test_remove_ciclos_e_auditoria_mais_antigos_que_a_retencao(app):
     db.session.add(AuditLog(action="login", result="success", timestamp=AGORA - timedelta(days=1)))
     db.session.commit()
 
+    db.session.add(
+        AuvoChamado(
+            criado_em=AGORA - timedelta(days=100),
+            gatilho="disparos",
+            conta_power="95",
+            resultado="aberta",
+        )
+    )
+    db.session.add(
+        AuvoChamado(
+            criado_em=AGORA - timedelta(days=2),
+            gatilho="disparos",
+            conta_power="96",
+            resultado="aberta",
+        )
+    )
+    db.session.commit()
+
     resultado = retention_service.limpar_dados_antigos(retention_days=90, agora=AGORA)
 
-    assert resultado == {"ciclos_removidos": 1, "auditoria_removida": 1, "relatorios_removidos": 0}
+    assert resultado == {
+        "ciclos_removidos": 1,
+        "auditoria_removida": 1,
+        "relatorios_removidos": 0,
+        "chamados_removidos": 1,
+    }
     assert db.session.get(CollectionCycle, antigo.id) is None
     assert db.session.get(CollectionCycle, recente.id) is not None
     assert AuditLog.query.count() == 1
+    assert AuvoChamado.query.count() == 1  # só o antigo saiu
 
 
 def test_cascade_remove_contas_e_alertas_do_ciclo_removido(app):
@@ -51,5 +76,10 @@ def test_nao_remove_nada_quando_tudo_esta_dentro_da_retencao(app):
 
     resultado = retention_service.limpar_dados_antigos(retention_days=90, agora=AGORA)
 
-    assert resultado == {"ciclos_removidos": 0, "auditoria_removida": 0, "relatorios_removidos": 0}
+    assert resultado == {
+        "ciclos_removidos": 0,
+        "auditoria_removida": 0,
+        "relatorios_removidos": 0,
+        "chamados_removidos": 0,
+    }
     assert CollectionCycle.query.count() == 1

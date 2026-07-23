@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.extensions import db
 from app.models.audit import AuditLog
+from app.models.auvo import AuvoChamado
 from app.models.cycle import CollectionCycle
 from app.models.report import ReportRun
 
@@ -14,9 +15,9 @@ logger = logging.getLogger("collector")
 
 def limpar_dados_antigos(*, retention_days: int, agora: datetime | None = None) -> dict[str, int]:
     """Remove ciclos (com as contas e alertas associados, via cascade),
-    eventos de auditoria e relatórios gerados (linha + arquivo .xlsx) mais
-    antigos que `retention_days` (RF9). Pensado para rodar uma vez por
-    dia, fora do horário de pico."""
+    eventos de auditoria, relatórios gerados (linha + arquivo .xlsx) e
+    histórico de chamados Auvo mais antigos que `retention_days` (RF9).
+    Pensado para rodar uma vez por dia, fora do horário de pico."""
     agora = agora or datetime.now(timezone.utc)
     limite = agora - timedelta(days=retention_days)
 
@@ -39,17 +40,23 @@ def limpar_dados_antigos(*, retention_days: int, agora: datetime | None = None) 
                 logger.warning("Retenção: não foi possível remover %s", run.file_path)
         db.session.delete(run)
 
+    total_chamados = AuvoChamado.query.filter(AuvoChamado.criado_em < limite).delete(
+        synchronize_session=False
+    )
+
     db.session.commit()
     logger.info(
-        "Retenção: removidos %s ciclos, %s eventos de auditoria e %s relatórios "
-        "(limite=%s dias).",
+        "Retenção: removidos %s ciclos, %s eventos de auditoria, %s relatórios e "
+        "%s chamados Auvo (limite=%s dias).",
         total_ciclos,
         total_auditoria,
         total_relatorios,
+        total_chamados,
         retention_days,
     )
     return {
         "ciclos_removidos": total_ciclos,
         "auditoria_removida": total_auditoria,
         "relatorios_removidos": total_relatorios,
+        "chamados_removidos": total_chamados,
     }

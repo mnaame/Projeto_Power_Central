@@ -310,6 +310,49 @@ Os arquivos seguem a mesma retenção configurável (padrão 90 dias). As
 regras dos dois módulos (códigos de evento, termos de arme, limite
 recorrente, zonas ignoradas etc.) são editáveis em Configurações (admin).
 
+### 5.2.2 Chamados (Auvo)
+
+A aba **Chamados** abre tarefas na Auvo automaticamente quando um cliente
+fica sem comunicação real ou acumula disparos aleatórios demais — fechando
+o ciclo do monitoramento até o despacho de um técnico.
+
+**Modo (importante).** Começa em **Simulação**: os gatilhos rodam e o
+histórico registra "o que seria aberto", mas nada é enviado à Auvo. Só
+depois de validar o de-para e o payload é que se liga o **modo Produção**
+(em Configuração → Modo de operação), com uma confirmação explícita — em
+produção, cada chamado despacha um técnico de verdade.
+
+**Antes de ligar a produção** (tudo em Chamados → Configuração, só admin):
+
+1. **Credenciais**: cole a apiKey e o apiToken da Auvo (ficam cifradas no
+   banco, nunca no `.env` nem no git).
+2. **IDs**: preencha o *criador* (idUserFrom — usuário com permissão de
+   abrir tarefa), opcionalmente o *responsável* (idUserTo — usuário de
+   campo que recebe) e o *tipo de tarefa*. Os botões "usuários", "tipos de
+   tarefa" e "clientes" listam os IDs direto da Auvo. Se não houver
+   responsável apto, deixe "Atribuir ao responsável" desligado — a tarefa
+   cai em "Tarefas sem agendamento" na Auvo, para distribuição manual.
+3. **Réguas**: cooldown (não reabre a mesma conta antes de X horas — padrão
+   12), horas mínimas de sem-comunicação (padrão 3) e mínimo de disparos
+   (padrão 5).
+4. **Testar criação**: cria tarefas de teste **reais** na Auvo em níveis
+   (mínimo → +cliente/tipo → +responsável), mostrando a resposta de cada —
+   é a ferramenta para descobrir rapidamente qualquer campo errado antes de
+   confiar no automático.
+
+**De-para** (Chamados → Gestão do de-para): liga a conta da PowerCentral ao
+cliente na Auvo. Só linhas **OK** com ID preenchido abrem chamado; **NAO**
+não abre; **REVISAR** aguarda conferência (destacado). Importe o
+`depara_power_auvo.csv` pelo botão, edite qualquer vínculo na própria
+tabela, e use "Regerar de-para" para recasar por nome só as linhas ainda
+não revisadas (as OK/NAO são preservadas). Duas contas podem apontar para o
+mesmo cliente Auvo (ex.: loja + tesouraria) — isso é normal.
+
+**Histórico** (painel): cada tentativa vira uma linha — `aberta` (criada de
+verdade), `simulada`, `repetida` (dentro do cooldown), `sem_depara` (conta
+sem vínculo OK) ou `falha` (com o corpo enviado e a resposta da Auvo
+expandíveis, para diagnóstico). Segue a mesma retenção dos relatórios.
+
 ### 5.3 Administração
 
 Em **Configurações** (só admin): janela de horas sem comunicação, lista de
