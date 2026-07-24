@@ -224,7 +224,12 @@ class AuvoClient:
                 corpo_enviado=corpo,
                 resposta=_texto(response),
             )
-        return response.json() if _tem_json(response) else {}
+        # 2xx = tarefa criada. Um corpo vazio ou não-JSON no sucesso não pode
+        # derrubar o fluxo — a tarefa já foi criada na Auvo; devolvemos {}.
+        try:
+            return response.json() if _tem_json(response) else {}
+        except ValueError:
+            return {}
 
 
 # ----------------------------------------------------------------------

@@ -103,14 +103,27 @@ def _ja_registrado_na_janela(conta: str, gatilho: str, resultado: str, horas: fl
     )
 
 
-def _em_cooldown(conta: str, horas: float) -> bool:
+def _contas_do_mesmo_cliente(id_auvo: int | None, conta_norm: str) -> list[str]:
+    """Todas as contas da PowerCentral que apontam para o mesmo cliente
+    Auvo. Duas contas (ex.: loja + tesouraria, ou obra + piso) que caem no
+    mesmo id_auvo são o mesmo local físico — uma ordem só para todas."""
+    if id_auvo is None:
+        return [conta_norm]
+    contas = [linha.conta_power for linha in AuvoDepara.query.filter_by(id_auvo=id_auvo).all()]
+    return contas or [conta_norm]
+
+
+def _em_cooldown(contas: list[str], horas: float) -> bool:
     """Só criação REAL ('aberta') conta para o dedup — por especificação,
-    simulação não persiste estado."""
+    simulação não persiste estado. Considera todas as contas do mesmo
+    cliente Auvo, para não abrir duas ordens para o mesmo local."""
     limite = _agora_utc() - timedelta(hours=horas)
     return (
-        AuvoChamado.query.filter_by(conta_power=conta, resultado="aberta")
-        .filter(AuvoChamado.criado_em >= limite)
-        .first()
+        AuvoChamado.query.filter(
+            AuvoChamado.conta_power.in_(contas),
+            AuvoChamado.resultado == "aberta",
+            AuvoChamado.criado_em >= limite,
+        ).first()
         is not None
     )
 
@@ -205,7 +218,7 @@ def abrir_chamado(
     if linha.esta_suprimido(_agora_utc()):
         return None
 
-    if _em_cooldown(conta_norm, cooldown):
+    if _em_cooldown(_contas_do_mesmo_cliente(linha.id_auvo, conta_norm), cooldown):
         return _skip_ou_registra("repetida")
 
     contexto_completo = dict(contexto)
@@ -324,6 +337,21 @@ def testar_criacao(
             )
             resultados.append(
                 {"nivel": rotulo, "ok": False, "detalhe": str(exc), "resposta": exc.resposta}
+            )
+            continue
+        except Exception as exc:  # o teste nunca pode derrubar a página
+            logger.exception("Teste de criação Auvo: erro inesperado no nível %s.", rotulo)
+            _registrar(
+                gatilho="teste",
+                conta=None,
+                cliente=rotulo,
+                resultado="falha",
+                origem_user_id=origem_user_id,
+                request_body=payload,
+                erro=f"Erro inesperado: {exc}",
+            )
+            resultados.append(
+                {"nivel": rotulo, "ok": False, "detalhe": f"Erro inesperado: {exc}"}
             )
             continue
         id_tarefa = _extrair_task_id(resposta)

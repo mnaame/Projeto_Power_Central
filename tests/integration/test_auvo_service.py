@@ -209,6 +209,22 @@ def test_cooldown_bloqueia_reabertura(app):
     assert _abrir(app, client=fake) is None  # anti-ruído da 'repetida'
 
 
+def test_duas_contas_mesmo_cliente_auvo_abrem_so_uma_ordem(app):
+    # loja + tesouraria (ou obra + piso): duas contas PowerCentral que
+    # apontam pro mesmo id_auvo = mesmo local físico → uma ordem só.
+    _depara(conta="118", id_auvo=15065246, nome_power="SHOPPING VETTORE 1 PISO")
+    _depara(conta="134", id_auvo=15065246, nome_power="OBRA SHOPPING VETTORE")
+    _producao()
+    fake = FakeAuvoClient()
+
+    primeiro = _abrir(app, client=fake, conta="118", nome="SHOPPING VETTORE 1 PISO")
+    segundo = _abrir(app, client=fake, conta="134", nome="OBRA SHOPPING VETTORE")
+
+    assert primeiro.resultado == "aberta"
+    assert segundo.resultado == "repetida"  # mesmo cliente Auvo, não duplica
+    assert len(fake.payloads) == 1  # só uma tarefa criada na Auvo
+
+
 def test_falha_guarda_corpo_e_resposta(app):
     _depara()
     _producao()

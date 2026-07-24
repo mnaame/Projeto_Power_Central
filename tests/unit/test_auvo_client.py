@@ -208,6 +208,22 @@ def test_criar_tarefa_campo_nao_numerico_falha_antes_do_http(requests_mock):
     assert mock.call_count == 0  # nem chegou a chamar a API
 
 
+def test_criar_tarefa_201_corpo_vazio_nao_quebra(requests_mock):
+    # a tarefa já foi criada (201); corpo vazio/não-JSON não pode virar
+    # exceção — devolve {} e o fluxo segue registrando "aberta"
+    _mock_login(requests_mock)
+    requests_mock.post(
+        f"{CREDS.base_url}/tasks/",
+        status_code=201,
+        text="",
+        headers={"Content-Type": "application/json"},
+    )
+
+    resposta = _client().criar_tarefa(_payload_valido())
+
+    assert resposta == {}
+
+
 def test_criar_tarefa_erro_carrega_corpo_e_resposta(requests_mock):
     # regra de ouro 8: em erro, corpo enviado + resposta ficam disponíveis
     # para o histórico (foi assim que cada campo foi descoberto)
