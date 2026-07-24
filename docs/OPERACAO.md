@@ -348,6 +348,22 @@ tabela, e use "Regerar de-para" para recasar por nome só as linhas ainda
 não revisadas (as OK/NAO são preservadas). Duas contas podem apontar para o
 mesmo cliente Auvo (ex.: loja + tesouraria) — isso é normal.
 
+**Pausar uma conta (supressão temporária).** Quando um problema já está
+sendo tratado em campo (aguardando o cliente, central que vai ser trocada
+etc.), use o botão **Pausar** na coluna Supressão: a conta continua OK, mas
+**não abre chamado** enquanto estiver pausada — nem por sem-comunicação nem
+por disparos. Você pode informar uma **data** ("até quando", opcional) e um
+**motivo**. Com data, a conta **volta a abrir sozinha** na virada do dia
+seguinte; sem data, fica pausada até você clicar **Liberar**. O card
+"Pausadas" e o link "ver só as pausadas" ajudam a acompanhar. Use isto
+(em vez de NAO) para problemas temporários — assim você não corre o risco
+de esquecer uma conta bloqueada para sempre. Para contas que saem de vez
+(central retirada), aí sim use **NAO**.
+
+> Dica ao ligar a produção pela primeira vez: pause as contas que já estão
+> com problema conhecido/em atendimento **antes** de virar a chave, senão o
+> sistema abrirá um chamado para cada uma delas no primeiro ciclo.
+
 **Histórico** (painel): cada tentativa vira uma linha — `aberta` (criada de
 verdade), `simulada`, `repetida` (dentro do cooldown), `sem_depara` (conta
 sem vínculo OK) ou `falha` (com o corpo enviado e a resposta da Auvo

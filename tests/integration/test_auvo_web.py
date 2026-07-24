@@ -239,3 +239,85 @@ def test_regerar_pela_tela(app, admin_client, monkeypatch):
 def test_regerar_sem_credenciais_avisa(admin_client):
     resposta = admin_client.post("/chamados/depara/regerar", follow_redirects=True)
     assert "Configure as credenciais".encode() in resposta.data
+
+
+# ---------- supressão (pausar / liberar) ----------
+
+
+def test_pausar_conta_com_data_e_motivo(app, admin_client):
+    from datetime import datetime, timezone
+
+    linha = _depara(conta="95")
+
+    resposta = admin_client.post(
+        f"/chamados/depara/{linha.id}/suprimir",
+        data={"suprimido_ate": "2026-08-01", "motivo": "aguardando cliente"},
+        follow_redirects=True,
+    )
+    assert resposta.status_code == 200
+    assert linha.suprimido is True
+    assert linha.suprimido_motivo == "aguardando cliente"
+    assert linha.esta_suprimido(datetime(2026, 7, 30, tzinfo=timezone.utc)) is True
+    assert linha.esta_suprimido(datetime(2026, 8, 5, tzinfo=timezone.utc)) is False
+    from app.models.audit import AuditLog
+
+    assert AuditLog.query.filter_by(action="auvo_depara_suprimida").count() == 1
+
+
+def test_pausar_sem_data_fica_indefinida(app, admin_client):
+    from datetime import datetime, timezone
+
+    linha = _depara(conta="95")
+
+    admin_client.post(
+        f"/chamados/depara/{linha.id}/suprimir", data={}, follow_redirects=True
+    )
+    assert linha.suprimido is True
+    assert linha.suprimido_ate is None
+    # sem prazo: continua pausada em qualquer data futura
+    assert linha.esta_suprimido(datetime(2027, 1, 1, tzinfo=timezone.utc)) is True
+
+
+def test_liberar_conta(app, admin_client):
+    from datetime import datetime, timezone
+
+    linha = _depara(conta="95")
+    linha.suprimido = True
+    db.session.commit()
+
+    admin_client.post(
+        f"/chamados/depara/{linha.id}/liberar", data={}, follow_redirects=True
+    )
+    assert linha.suprimido is False
+    assert linha.esta_suprimido(datetime.now(timezone.utc)) is False
+    from app.models.audit import AuditLog
+
+    assert AuditLog.query.filter_by(action="auvo_depara_liberada").count() == 1
+
+
+def test_data_de_supressao_invalida_avisa(app, admin_client):
+    linha = _depara(conta="95")
+
+    resposta = admin_client.post(
+        f"/chamados/depara/{linha.id}/suprimir",
+        data={"suprimido_ate": "31/08/2026"},  # formato errado
+        follow_redirects=True,
+    )
+    assert "inválida".encode() in resposta.data
+    assert linha.suprimido is False  # não pausou
+
+
+def test_operador_nao_pausa(operador_client, app):
+    linha = _depara(conta="95")
+    assert operador_client.post(f"/chamados/depara/{linha.id}/suprimir", data={}).status_code == 403
+
+
+def test_filtro_so_pausadas(app, admin_client):
+    ativa = _depara(conta="95", nome="ATIVA")
+    pausada = _depara(conta="96", nome="PAUSADA")
+    pausada.suprimido = True
+    db.session.commit()
+
+    resposta = admin_client.get("/chamados/depara?suprimidas=1")
+    assert b"PAUSADA" in resposta.data
+    assert b"ATIVA" not in resposta.data

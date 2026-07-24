@@ -200,6 +200,11 @@ def abrir_chamado(
     if linha is None or not linha.abre_chamado:
         return _skip_ou_registra("sem_depara")
 
+    # Conta pausada (problema já sendo tratado em campo): não abre chamado
+    # e não polui o histórico — o estado fica visível no de-para.
+    if linha.esta_suprimido(_agora_utc()):
+        return None
+
     if _em_cooldown(conta_norm, cooldown):
         return _skip_ou_registra("repetida")
 

@@ -334,6 +334,8 @@ def _chave(item: dict, chaves: tuple[str, ...]) -> str:
 def depara():
     filtro = (request.args.get("q") or "").strip()
     status = (request.args.get("status") or "").strip().upper()
+    so_suprimidas = request.args.get("suprimidas") == "1"
+    agora = datetime.now(timezone.utc)
 
     consulta = AuvoDepara.query
     if filtro:
@@ -349,6 +351,9 @@ def depara():
         consulta = consulta.filter(AuvoDepara.status == status)
     linhas = consulta.order_by(AuvoDepara.conta_power).all()
 
+    if so_suprimidas:
+        linhas = [linha for linha in linhas if linha.esta_suprimido(agora)]
+
     contagem_ids = Counter(
         linha.id_auvo for linha in AuvoDepara.query.all() if linha.id_auvo is not None
     )
@@ -356,14 +361,20 @@ def depara():
     contagens = dict(
         db.session.query(AuvoDepara.status, func.count()).group_by(AuvoDepara.status).all()
     )
+    total_suprimidas = sum(
+        1 for linha in AuvoDepara.query.all() if linha.esta_suprimido(agora)
+    )
 
     return render_template(
         "auvo/depara.html",
         linhas=linhas,
         filtro=filtro,
         status_filtro=status,
+        so_suprimidas=so_suprimidas,
         duplicados=duplicados,
         contagens=contagens,
+        total_suprimidas=total_suprimidas,
+        agora=agora,
     )
 
 
@@ -403,6 +414,81 @@ def editar_depara(linha_id: int):
     db.session.commit()
     flash(f"Vínculo da conta {linha.conta_power} atualizado.", "info")
     return redirect(url_for("auvo.depara", q=request.form.get("q", ""), status=request.form.get("status_filtro", "")))
+
+
+def _redirect_depara():
+    return redirect(
+        url_for(
+            "auvo.depara",
+            q=request.form.get("q", ""),
+            status=request.form.get("status_filtro", ""),
+            suprimidas=request.form.get("so_suprimidas", ""),
+        )
+    )
+
+
+@bp.route("/depara/<int:linha_id>/suprimir", methods=["POST"])
+@login_required
+@roles_required("admin")
+def suprimir_depara(linha_id: int):
+    """Pausa a abertura de chamados desta conta (problema já sendo tratado
+    em campo). Data opcional: sem data = pausa até liberar na mão; com
+    data = volta a abrir sozinha depois dela."""
+    linha = db.session.get(AuvoDepara, linha_id)
+    if linha is None:
+        abort(404)
+
+    ate_bruto = (request.form.get("suprimido_ate") or "").strip()
+    ate = None
+    if ate_bruto:
+        try:
+            # a data marca o último dia pausado — libera na virada do dia seguinte
+            dia = datetime.strptime(ate_bruto, "%Y-%m-%d")
+            ate = dia.replace(hour=23, minute=59, second=59, tzinfo=FUSO_HORARIO)
+        except ValueError:
+            flash("Data de supressão inválida.", "warning")
+            return _redirect_depara()
+
+    linha.suprimido = True
+    linha.suprimido_ate = ate
+    linha.suprimido_motivo = (request.form.get("motivo") or "").strip() or None
+    linha.updated_by_user_id = current_user.id
+    audit_service.registrar(
+        action="auvo_depara_suprimida",
+        result="success",
+        user=current_user,
+        details={
+            "conta": linha.conta_power,
+            "ate": ate.isoformat() if ate else None,
+            "motivo": linha.suprimido_motivo,
+        },
+    )
+    db.session.commit()
+    flash(f"Conta {linha.conta_power} pausada — não abrirá chamado.", "info")
+    return _redirect_depara()
+
+
+@bp.route("/depara/<int:linha_id>/liberar", methods=["POST"])
+@login_required
+@roles_required("admin")
+def liberar_depara(linha_id: int):
+    linha = db.session.get(AuvoDepara, linha_id)
+    if linha is None:
+        abort(404)
+
+    linha.suprimido = False
+    linha.suprimido_ate = None
+    linha.suprimido_motivo = None
+    linha.updated_by_user_id = current_user.id
+    audit_service.registrar(
+        action="auvo_depara_liberada",
+        result="success",
+        user=current_user,
+        details={"conta": linha.conta_power},
+    )
+    db.session.commit()
+    flash(f"Conta {linha.conta_power} liberada — volta a abrir chamado.", "info")
+    return _redirect_depara()
 
 
 @bp.route("/depara/importar", methods=["POST"])

@@ -11,7 +11,8 @@
   <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
     Só contas com status <strong>OK</strong> e ID Auvo preenchido abrem chamado.
     <strong>NAO</strong> = não abre; <strong>REVISAR</strong> = casamento ambíguo, precisa de revisão.
-    Duas contas podem apontar para o mesmo cliente Auvo (loja + tesouraria).
+    <strong>Pausar</strong> = a conta continua OK mas fica temporariamente sem abrir chamado
+    (problema já sendo tratado em campo) — volta sozinha na data escolhida.
   </p>
 
   <div class="stat-grid">
@@ -26,6 +27,15 @@
     <div class="stat-tile">
       <div class="stat-tile-label">Não abrem</div>
       <div class="stat-tile-value">{{ contagens.get('NAO', 0) }}</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Pausadas</div>
+      <div class="stat-tile-value {{ 'is-critical' if total_suprimidas else '' }}">{{ total_suprimidas }}</div>
+      {% if total_suprimidas %}
+      <div class="stat-tile-hint">
+        <a href="{{ url_for('auvo.depara', suprimidas='1') }}">ver só as pausadas</a>
+      </div>
+      {% endif %}
     </div>
   </div>
 
@@ -79,16 +89,22 @@
           <th>Cliente (Auvo)</th>
           <th class="is-numeric">Score</th>
           <th>Vínculo (ID Auvo / status)</th>
+          <th>Supressão</th>
         </tr>
       </thead>
       <tbody>
+        {% set campo_estilo = 'padding: var(--space-1) var(--space-2); border-radius: var(--radius-md); border: 1px solid var(--color-border-strong); background: var(--color-surface); color: var(--color-text-primary);' %}
         {% for linha in linhas %}
+        {% set pausada = linha.esta_suprimido(agora) %}
         <tr>
           <td class="is-numeric">{{ linha.conta_power }}</td>
           <td>
             {{ linha.nome_power }}
             {% if linha.status == 'REVISAR' %}
             <span class="chip chip-warning">revisar</span>
+            {% endif %}
+            {% if pausada %}
+            <span class="chip chip-warning">pausada</span>
             {% endif %}
             {% if linha.id_auvo in duplicados %}
             <span class="chip chip-neutral" title="Mais de uma conta aponta para este cliente Auvo">compartilhado</span>
@@ -103,20 +119,41 @@
               <input type="hidden" name="q" value="{{ filtro }}">
               <input type="hidden" name="status_filtro" value="{{ status_filtro }}">
               <input type="text" name="id_auvo" value="{{ linha.id_auvo or '' }}"
-                     inputmode="numeric" aria-label="ID Auvo"
-                     style="width: 110px; padding: var(--space-1) var(--space-2);
-                     border-radius: var(--radius-md); border: 1px solid var(--color-border-strong);
-                     background: var(--color-surface); color: var(--color-text-primary);">
-              <select name="status" aria-label="Status"
-                      style="padding: var(--space-1) var(--space-2);
-                      border-radius: var(--radius-md); border: 1px solid var(--color-border-strong);
-                      background: var(--color-surface); color: var(--color-text-primary);">
+                     inputmode="numeric" aria-label="ID Auvo" style="width: 110px; {{ campo_estilo }}">
+              <select name="status" aria-label="Status" style="{{ campo_estilo }}">
                 {% for opcao in ['OK', 'REVISAR', 'NAO'] %}
                 <option value="{{ opcao }}" {{ 'selected' if linha.status == opcao }}>{{ opcao }}</option>
                 {% endfor %}
               </select>
               <button type="submit" class="btn btn-ghost" style="padding: var(--space-1) var(--space-3);">Salvar</button>
             </form>
+          </td>
+          <td>
+            {% if pausada %}
+            <div style="margin-bottom: var(--space-1); font-size: var(--font-size-xs); color: var(--color-text-secondary);">
+              {% if linha.suprimido_ate %}Pausada até {{ linha.suprimido_ate|data_local }}{% else %}Pausada (sem prazo){% endif %}
+              {% if linha.suprimido_motivo %}<br>{{ linha.suprimido_motivo }}{% endif %}
+            </div>
+            <form method="post" action="{{ url_for('auvo.liberar_depara', linha_id=linha.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="q" value="{{ filtro }}">
+              <input type="hidden" name="status_filtro" value="{{ status_filtro }}">
+              <input type="hidden" name="so_suprimidas" value="{{ '1' if so_suprimidas else '' }}">
+              <button type="submit" class="btn btn-ghost" style="padding: var(--space-1) var(--space-3);">Liberar</button>
+            </form>
+            {% else %}
+            <form method="post" action="{{ url_for('auvo.suprimir_depara', linha_id=linha.id) }}"
+                  style="display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="q" value="{{ filtro }}">
+              <input type="hidden" name="status_filtro" value="{{ status_filtro }}">
+              <input type="hidden" name="so_suprimidas" value="{{ '1' if so_suprimidas else '' }}">
+              <input type="date" name="suprimido_ate" aria-label="Pausar até (opcional)" style="{{ campo_estilo }}">
+              <input type="text" name="motivo" placeholder="motivo (opcional)" aria-label="Motivo"
+                     style="width: 150px; {{ campo_estilo }}">
+              <button type="submit" class="btn btn-ghost" style="padding: var(--space-1) var(--space-3);">Pausar</button>
+            </form>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}

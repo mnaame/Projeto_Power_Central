@@ -83,6 +83,57 @@ def test_conta_com_zeros_a_esquerda_encontra_depara(app):
     assert chamado.resultado == "simulada"
 
 
+# ---------- supressão (conta pausada) ----------
+
+
+def test_conta_suprimida_indefinidamente_nao_abre(app):
+    linha = _depara()
+    linha.suprimido = True
+    linha.suprimido_ate = None
+    db.session.commit()
+
+    chamado = _abrir(app, client=FakeAuvoClient())
+
+    assert chamado is None  # skip silencioso — nada no histórico
+    assert AuvoChamado.query.count() == 0
+
+
+def test_conta_suprimida_com_data_futura_nao_abre(app):
+    linha = _depara()
+    linha.suprimido = True
+    linha.suprimido_ate = datetime.now(timezone.utc) + timedelta(days=2)
+    db.session.commit()
+
+    assert _abrir(app, client=FakeAuvoClient()) is None
+    assert AuvoChamado.query.count() == 0
+
+
+def test_supressao_com_data_passada_volta_a_abrir_sozinha(app):
+    linha = _depara()
+    linha.suprimido = True
+    linha.suprimido_ate = datetime.now(timezone.utc) - timedelta(minutes=1)  # já expirou
+    db.session.commit()
+
+    chamado = _abrir(app, client=FakeAuvoClient())
+
+    assert chamado is not None
+    assert chamado.resultado == "simulada"  # supressão expirada = conta ativa de novo
+
+
+def test_gatilho_sem_comunicacao_pula_conta_suprimida(app):
+    linha = _depara()
+    linha.suprimido = True
+    db.session.commit()
+    agora = datetime.now(FUSO)
+
+    abertos = auvo_service.processar_sem_comunicacao(
+        [_conta_classificada(4.0)], config=app.config, agora=agora
+    )
+
+    assert abertos == []
+    assert AuvoChamado.query.count() == 0
+
+
 # ---------- simulação ----------
 
 

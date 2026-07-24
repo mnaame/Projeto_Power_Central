@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from app.extensions import db
 from app.models.types import TZDateTime
 from app.utils.time import utcnow
@@ -23,6 +25,13 @@ class AuvoDepara(db.Model):
     nome_auvo = db.Column(db.String(200), nullable=True)
     score = db.Column(db.Float, nullable=True)
     status = db.Column(db.String(16), nullable=False, default="REVISAR")
+    # Supressão temporária: a conta continua OK (volta a abrir chamado
+    # sozinha), mas fica pausada enquanto o problema é resolvido em campo.
+    # suprimido_ate = None e suprimido = True → pausa por tempo indefinido
+    # (até liberar na mão); com data → volta a abrir sozinha quando passa.
+    suprimido = db.Column(db.Boolean, nullable=False, default=False)
+    suprimido_ate = db.Column(TZDateTime, nullable=True)
+    suprimido_motivo = db.Column(db.String(200), nullable=True)
     updated_at = db.Column(TZDateTime, nullable=False, default=utcnow, onupdate=utcnow)
     updated_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
 
@@ -31,6 +40,15 @@ class AuvoDepara(db.Model):
     __table_args__ = (
         db.CheckConstraint("status IN ('OK', 'REVISAR', 'NAO')", name="ck_auvo_depara_status"),
     )
+
+    def esta_suprimido(self, agora: datetime) -> bool:
+        """True enquanto a conta está pausada. Uma data de expiração no
+        passado libera a conta sozinha (não precisa desmarcar na mão)."""
+        if not self.suprimido:
+            return False
+        if self.suprimido_ate is not None and agora >= self.suprimido_ate:
+            return False
+        return True
 
     @property
     def abre_chamado(self) -> bool:
