@@ -105,6 +105,26 @@
         {% for mensagem in form.disp_ignorar_zonas.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
       </div>
 
+      <h3 style="margin-top: var(--space-5);">Relatório de Disparos Geral</h3>
+
+      <div class="field">
+        {{ form.dispg_limite_recorrente.label }}
+        {{ form.dispg_limite_recorrente() }}
+        {% for mensagem in form.dispg_limite_recorrente.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.dispg_grupo_villefort.label }}
+        {{ form.dispg_grupo_villefort() }}
+        {% for mensagem in form.dispg_grupo_villefort.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.dispg_grupo_super_nosso.label }}
+        {{ form.dispg_grupo_super_nosso() }}
+        {% for mensagem in form.dispg_grupo_super_nosso.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
       <button type="submit" class="btn btn-primary">Salvar configurações</button>
     </form>
   </div>

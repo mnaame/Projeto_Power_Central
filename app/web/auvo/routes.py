@@ -32,6 +32,7 @@ _CONFIG_KEYS = (
     "cooldown_horas",
     "sem_comunicacao_horas_minimas",
     "disparos_minimos_tarefa",
+    "disp_geral_minimos_tarefa",
 )
 _TEMPLATE_KEYS = (
     ("template_semcom_titulo", "auvo_template_semcom_titulo"),
@@ -129,6 +130,7 @@ def _form_configuracao_preenchido() -> ConfiguracaoAuvoForm:
         cooldown_horas=settings_service.get_auvo_cooldown_horas(),
         sem_comunicacao_horas_minimas=settings_service.get_auvo_sem_comunicacao_horas_minimas(),
         disparos_minimos_tarefa=settings_service.get_auvo_disparos_minimos_tarefa(),
+        disp_geral_minimos_tarefa=settings_service.get_auvo_disp_geral_minimos_tarefa(),
         template_semcom_titulo=settings_service.get_auvo_template("semcom", "titulo"),
         template_semcom_descricao=settings_service.get_auvo_template("semcom", "descricao"),
         template_disparos_titulo=settings_service.get_auvo_template("disparos", "titulo"),

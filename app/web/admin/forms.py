@@ -68,6 +68,18 @@ class ConfiguracoesForm(FlaskForm):
         "Ignorar zonas contendo (separados por vírgula)", validators=[DataRequired()]
     )
 
+    # Relatório de Disparos Geral (fim de semana)
+    dispg_limite_recorrente = IntegerField(
+        "Disparos para virar 'RECORRENTE'",
+        validators=[DataRequired(), NumberRange(min=2, max=1000)],
+    )
+    dispg_grupo_villefort = StringField(
+        "Grupo Villefort — nomes contendo (separados por vírgula)", validators=[DataRequired()]
+    )
+    dispg_grupo_super_nosso = StringField(
+        "Grupo Super Nosso — nomes contendo (separados por vírgula)", validators=[DataRequired()]
+    )
+
 
 class TelegramForm(FlaskForm):
     bot_token = StringField("Token do bot", validators=[Optional(), Length(max=200)])

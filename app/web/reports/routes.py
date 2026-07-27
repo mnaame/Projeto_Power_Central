@@ -36,7 +36,14 @@ MODULOS = {
         "titulo": "Relatório de Disparos",
         "descricao": "Clientes com disparos de zona no período — uma linha por cliente.",
     },
+    "disparos_geral": {
+        "titulo": "Disparos Geral (fim de semana)",
+        "descricao": "TODOS os disparos por cliente, classificados e agrupados em 3 abas (Villefort / Super Nosso / Base).",
+    },
 }
+
+# módulos que geram planilha de 3 abas (prévia por grupo)
+MODULOS_MULTIGRUPO = {"disparos_geral"}
 
 
 def _agora() -> datetime:
@@ -51,6 +58,16 @@ def _parse_data_hora(valor: str) -> datetime:
     return datetime.strptime(valor, "%Y-%m-%dT%H:%M").replace(tzinfo=FUSO_HORARIO)
 
 
+def _periodo_fim_de_semana(agora: datetime) -> tuple[datetime, datetime]:
+    """Sexta 18h → segunda 08h da semana (mesma lógica do script). No
+    próprio sábado/sexta, usa o fim de semana anterior (ainda em curso)."""
+    dias = (agora.weekday() - 5) % 7 or 7  # sábado mais recente
+    sabado = agora - timedelta(days=dias)
+    inicio = (sabado - timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
+    fim = (sabado + timedelta(days=2)).replace(hour=8, minute=0, second=0, microsecond=0)
+    return inicio, fim
+
+
 def _periodo_do_form(modulo: str) -> tuple[datetime, datetime] | None:
     """None = janela automática (só Disparos usa)."""
     preset = request.form.get("periodo", "ontem")
@@ -59,13 +76,15 @@ def _periodo_do_form(modulo: str) -> tuple[datetime, datetime] | None:
 
     if preset == "auto":
         return None
+    if preset == "fim_de_semana":
+        return _periodo_fim_de_semana(agora)
     if preset == "ontem":
         inicio = hoje - timedelta(days=1)
         return inicio, hoje - timedelta(seconds=1)
     if preset == "7dias":
         return hoje - timedelta(days=7), agora
-    # manual — Disparos permite escolher hora/minuto; Atendimentos usa dia inteiro
-    if modulo == "disparos":
+    # manual — Disparos e Disparos Geral usam hora/minuto; Atendimentos, dia inteiro
+    if modulo in ("disparos", "disparos_geral"):
         inicio = _parse_data_hora(request.form["inicio"])
         fim = _parse_data_hora(request.form["fim"])
     else:
@@ -76,18 +95,41 @@ def _periodo_do_form(modulo: str) -> tuple[datetime, datetime] | None:
     return inicio, fim
 
 
+def _linhas_da_aba(aba) -> tuple[list[str], list[tuple]]:
+    linhas = [
+        tuple(c if c is not None else "" for c in linha)
+        for linha in aba.iter_rows(values_only=True)
+    ]
+    if not linhas:
+        return [], []
+    return list(linhas[0]), linhas[1:]
+
+
 def _ler_previa(run: ReportRun) -> tuple[list[str], list[tuple]]:
     """Lê a aba principal do .xlsx arquivado — a prévia é, por construção,
     idêntica ao Excel baixado."""
     if not run.file_path or not Path(run.file_path).exists():
         return [], []
     wb = load_workbook(run.file_path, read_only=True)
-    aba = wb.worksheets[0]
-    linhas = [tuple(c if c is not None else "" for c in linha) for linha in aba.iter_rows(values_only=True)]
+    cabecalho, linhas = _linhas_da_aba(wb.worksheets[0])
     wb.close()
-    if not linhas:
+    return cabecalho, linhas
+
+
+def _ler_previa_grupos(run: ReportRun) -> tuple[list[str], list[dict]]:
+    """Lê todas as abas (um grupo por aba) do .xlsx de Disparos Geral."""
+    if not run.file_path or not Path(run.file_path).exists():
         return [], []
-    return list(linhas[0]), linhas[1:]
+    wb = load_workbook(run.file_path, read_only=True)
+    cabecalho: list[str] = []
+    grupos: list[dict] = []
+    for aba in wb.worksheets:
+        cab, linhas = _linhas_da_aba(aba)
+        if cab and not cabecalho:
+            cabecalho = cab
+        grupos.append({"nome": aba.title, "linhas": linhas})
+    wb.close()
+    return cabecalho, grupos
 
 
 @bp.route("/<modulo>")
@@ -104,10 +146,15 @@ def pagina(modulo: str):
     )
     ultimo_ok = next((r for r in historico if r.status == "success"), None)
 
+    multigrupo = modulo in MODULOS_MULTIGRUPO
     cabecalho: list[str] = []
     linhas: list[tuple] = []
+    grupos: list[dict] = []
     if ultimo_ok is not None:
-        cabecalho, linhas = _ler_previa(ultimo_ok)
+        if multigrupo:
+            cabecalho, grupos = _ler_previa_grupos(ultimo_ok)
+        else:
+            cabecalho, linhas = _ler_previa(ultimo_ok)
 
     pagina_atual = max(request.args.get("pagina", 1, type=int), 1)
     total_paginas = max((len(linhas) + LINHAS_POR_PAGINA - 1) // LINHAS_POR_PAGINA, 1)
@@ -117,19 +164,23 @@ def pagina(modulo: str):
     janela_auto = None
     if modulo == "disparos":
         janela_auto = report_service.janela_disparos(agora=_agora())
+    fim_de_semana = _periodo_fim_de_semana(_agora()) if modulo == "disparos_geral" else None
 
     return render_template(
         "reports/pagina.html",
         modulo=modulo,
         info=MODULOS[modulo],
+        multigrupo=multigrupo,
         historico=historico,
         ultimo_ok=ultimo_ok,
         cabecalho=cabecalho,
         linhas=linhas_pagina,
+        grupos=grupos,
         total_linhas=len(linhas),
         pagina_atual=pagina_atual,
         total_paginas=total_paginas,
         janela_auto=janela_auto,
+        fim_de_semana=fim_de_semana,
     )
 
 
@@ -151,6 +202,16 @@ def gerar(modulo: str):
                 flash("Escolha um período para o relatório de atendimentos.", "warning")
                 return redirect(url_for("reports.pagina", modulo=modulo))
             run = report_service.gerar_atendimentos(
+                config=current_app.config,
+                desde=periodo[0],
+                hasta=periodo[1],
+                user_id=current_user.id,
+            )
+        elif modulo == "disparos_geral":
+            if periodo is None:
+                flash("Escolha um período para o relatório de Disparos Geral.", "warning")
+                return redirect(url_for("reports.pagina", modulo=modulo))
+            run = report_service.gerar_disparos_geral(
                 config=current_app.config,
                 desde=periodo[0],
                 hasta=periodo[1],

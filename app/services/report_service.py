@@ -375,6 +375,22 @@ def gerar_disparos_geral(
                 "por_grupo": {grupo: len(por_grupo[grupo]) for grupo in dom_disp_geral.GRUPOS},
             }
             run.file_path = str(caminho)
+
+            # Gatilho Auvo: cliente com muitos disparos abre ordem (limite
+            # próprio do Geral). Mesmo gatilho 'disparos', então a regra de
+            # não reabrir enquanto a anterior está aberta vale entre os dois
+            # relatórios. Erro aqui não invalida o relatório.
+            try:
+                auvo_service.processar_disparos(
+                    clientes,
+                    config=config,
+                    origem_user_id=user_id,
+                    minimo=settings_service.get_auvo_disp_geral_minimos_tarefa(),
+                )
+            except Exception:
+                logger.exception(
+                    "Abertura de chamados Auvo (disparos geral) falhou; relatório segue."
+                )
         except Exception as exc:
             logger.exception("Geração do relatório de disparos geral falhou.")
             run.status = "error"

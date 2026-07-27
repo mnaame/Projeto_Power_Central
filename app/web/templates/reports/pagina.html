@@ -20,28 +20,28 @@
         <option value="auto" selected>Desde o último relatório
           {%- if janela_auto %} ({{ janela_auto[0]|data_local }} → agora){% endif -%}
         </option>
-        {% endif %}
-        <option value="ontem" {{ 'selected' if modulo != 'disparos' }}>Ontem</option>
+        <option value="ontem">Ontem</option>
         <option value="7dias">Últimos 7 dias</option>
+        {% elif modulo == 'disparos_geral' %}
+        <option value="fim_de_semana" selected>Fim de semana atual
+          {%- if fim_de_semana %} ({{ fim_de_semana[0]|data_local }} → {{ fim_de_semana[1]|data_local }}){% endif -%}
+        </option>
+        {% else %}
+        <option value="ontem" selected>Ontem</option>
+        <option value="7dias">Últimos 7 dias</option>
+        {% endif %}
         <option value="manual">Período manual</option>
       </select>
     </div>
 
+    {% set com_hora = modulo in ['disparos', 'disparos_geral'] %}
     <div class="field" style="margin-bottom: 0;">
       <label for="inicio">Início (manual)</label>
-      {% if modulo == 'disparos' %}
-      <input id="inicio" type="datetime-local" name="inicio">
-      {% else %}
-      <input id="inicio" type="date" name="inicio">
-      {% endif %}
+      <input id="inicio" type="{{ 'datetime-local' if com_hora else 'date' }}" name="inicio">
     </div>
     <div class="field" style="margin-bottom: 0;">
       <label for="fim">Fim (manual)</label>
-      {% if modulo == 'disparos' %}
-      <input id="fim" type="datetime-local" name="fim">
-      {% else %}
-      <input id="fim" type="date" name="fim">
-      {% endif %}
+      <input id="fim" type="{{ 'datetime-local' if com_hora else 'date' }}" name="fim">
     </div>
 
     <button type="submit" class="btn btn-primary">Gerar relatório</button>
@@ -55,11 +55,18 @@
     <a class="btn btn-ghost" href="{{ url_for('reports.download', run_id=ultimo_ok.id) }}">Baixar Excel</a>
   </div>
 
+  {% set contagem_grupos = (ultimo_ok.extra_counts or {}).get('por_grupo', {}) %}
   <div class="stat-grid">
     <div class="stat-tile">
       <div class="stat-tile-label">{{ 'Atendimentos no relatório' if modulo == 'atendimentos' else 'Clientes com disparo' }}</div>
       <div class="stat-tile-value">{{ ultimo_ok.row_count }}</div>
+      {% if multigrupo and contagem_grupos %}
+      <div class="stat-tile-hint">
+        {% for grupo, total in contagem_grupos.items() %}{{ grupo }} {{ total }}{{ ' · ' if not loop.last }}{% endfor %}
+      </div>
+      {% else %}
       <div class="stat-tile-hint">Período: {{ ultimo_ok.period_start|data_local }} → {{ ultimo_ok.period_end|data_local }}</div>
+      {% endif %}
     </div>
     {% if modulo == 'atendimentos' %}
     <div class="stat-tile">
@@ -81,7 +88,37 @@
     </div>
   </div>
 
-  {% if linhas %}
+  {% if multigrupo %}
+    {% set tem_linhas = grupos | selectattr('linhas') | list | length > 0 %}
+    {% if tem_linhas %}
+      {% for grupo in grupos %}
+      <div class="section-title" style="margin-top: var(--space-5);">
+        <h3>{{ grupo.nome }} <span class="chip chip-neutral">{{ grupo.linhas|length }}</span></h3>
+      </div>
+      {% if grupo.linhas %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>{% for titulo in cabecalho %}<th>{{ titulo }}</th>{% endfor %}</tr>
+          </thead>
+          <tbody>
+            {% for linha in grupo.linhas %}
+            <tr>{% for valor in linha %}<td style="white-space: pre-line;">{{ valor }}</td>{% endfor %}</tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="muted">Sem clientes neste grupo.</p>
+      {% endif %}
+      {% endfor %}
+    {% else %}
+    <div class="card empty-state">
+      <h3>Relatório vazio</h3>
+      <p class="muted">Nenhum disparo no período coberto — isso também é um resultado válido.</p>
+    </div>
+    {% endif %}
+  {% elif linhas %}
   <div class="table-wrap">
     <table>
       <thead>

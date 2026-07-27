@@ -87,6 +87,7 @@ def test_admin_salva_configuracao(app, admin_client):
             "cooldown_horas": "24",
             "sem_comunicacao_horas_minimas": "4",
             "disparos_minimos_tarefa": "8",
+            "disp_geral_minimos_tarefa": "40",
             "template_semcom_titulo": "Sem comunicacao - {conta}",
             "template_semcom_descricao": "Desde {desde}.",
             "template_disparos_titulo": "Disparos - {conta}",

@@ -477,10 +477,15 @@ def processar_disparos(
     config,
     origem_user_id: int | None = None,
     client: AuvoClient | None = None,
+    minimo: int | None = None,
 ) -> list[AuvoChamado]:
-    """Gatilho da geração de Disparos: abre chamado para clientes com
-    pelo menos `disparos_minimos_tarefa` disparos válidos no período."""
-    minimo = settings_service.get_auvo_disparos_minimos_tarefa()
+    """Gatilho da geração de Disparos: abre chamado para clientes com pelo
+    menos `minimo` disparos no período (Aleatórios usa o limite próprio;
+    Disparos Geral passa o seu, já que conta todos os disparos). Reusa o
+    mesmo gatilho 'disparos', então a regra de não reabrir enquanto a
+    ordem anterior está aberta vale entre os dois relatórios."""
+    if minimo is None:
+        minimo = settings_service.get_auvo_disparos_minimos_tarefa()
     if client is None and not settings_service.auvo_simulacao():
         client = criar_cliente(config)
     abertos: list[AuvoChamado] = []

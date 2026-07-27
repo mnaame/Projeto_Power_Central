@@ -119,6 +119,9 @@ def configuracoes():
         disp_horas_primeira_execucao=settings_service.get_disp_horas_primeira_execucao(),
         disp_limite_recorrente=settings_service.get_disp_limite_recorrente(),
         disp_ignorar_zonas=", ".join(settings_service.get_disp_ignorar_zonas()),
+        dispg_limite_recorrente=settings_service.get_dispg_limite_recorrente(),
+        dispg_grupo_villefort=", ".join(settings_service.get_dispg_grupo_villefort()),
+        dispg_grupo_super_nosso=", ".join(settings_service.get_dispg_grupo_super_nosso()),
     )
     telegram_configurado = (
         settings_service.get_telegram_credentials(
@@ -221,6 +224,21 @@ def salvar_configuracoes():
         settings_service.set(
             "disp_ignorar_zonas",
             _lista_normalizada(form.disp_ignorar_zonas.data, maiusculas=True),
+            updated_by_id=current_user.id,
+        )
+        settings_service.set(
+            "dispg_limite_recorrente",
+            str(form.dispg_limite_recorrente.data),
+            updated_by_id=current_user.id,
+        )
+        settings_service.set(
+            "dispg_grupo_villefort",
+            _lista_normalizada(form.dispg_grupo_villefort.data, maiusculas=True),
+            updated_by_id=current_user.id,
+        )
+        settings_service.set(
+            "dispg_grupo_super_nosso",
+            _lista_normalizada(form.dispg_grupo_super_nosso.data, maiusculas=True),
             updated_by_id=current_user.id,
         )
 

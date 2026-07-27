@@ -42,6 +42,10 @@ class ConfiguracaoAuvoForm(FlaskForm):
         "Disparos: mínimo de disparos válidos para abrir",
         validators=[DataRequired(), NumberRange(min=1, max=500)],
     )
+    disp_geral_minimos_tarefa = IntegerField(
+        "Disparos Geral: mínimo de disparos para abrir",
+        validators=[DataRequired(), NumberRange(min=1, max=5000)],
+    )
     template_semcom_titulo = StringField(
         "Sem comunicação — título", validators=[DataRequired(), Length(max=300)]
     )

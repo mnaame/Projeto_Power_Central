@@ -25,6 +25,9 @@ def _dados_config(**overrides):
         "disp_horas_primeira_execucao": "24",
         "disp_limite_recorrente": "15",
         "disp_ignorar_zonas": "PANICO",
+        "dispg_limite_recorrente": "50",
+        "dispg_grupo_villefort": "VILLEFORT",
+        "dispg_grupo_super_nosso": "SUPER NOSSO,APOIO",
     }
     dados.update(overrides)
     return dados

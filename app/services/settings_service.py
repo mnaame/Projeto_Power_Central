@@ -45,6 +45,8 @@ DEFAULTS: dict[str, str] = {
     "auvo_cooldown_horas": "12",
     "auvo_sem_comunicacao_horas_minimas": "3",
     "auvo_disparos_minimos_tarefa": "5",
+    # Disparos Geral conta TODOS os disparos (número bem maior) — limite próprio
+    "auvo_disp_geral_minimos_tarefa": "30",
     "auvo_template_semcom_titulo": "Cliente sem comunicacao - {conta} {nome}",
     "auvo_template_semcom_descricao": (
         "Cliente sem comunicacao desde {desde}. "
@@ -212,6 +214,10 @@ def get_auvo_sem_comunicacao_horas_minimas() -> float:
 
 def get_auvo_disparos_minimos_tarefa() -> int:
     return int(get("auvo_disparos_minimos_tarefa"))
+
+
+def get_auvo_disp_geral_minimos_tarefa() -> int:
+    return int(get("auvo_disp_geral_minimos_tarefa"))
 
 
 def get_auvo_template(gatilho: str, parte: str) -> str:

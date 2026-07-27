@@ -310,6 +310,20 @@ Os arquivos seguem a mesma retenção configurável (padrão 90 dias). As
 regras dos dois módulos (códigos de evento, termos de arme, limite
 recorrente, zonas ignoradas etc.) são editáveis em Configurações (admin).
 
+**Disparos Geral (fechamento de fim de semana).** Diferente do Disparos
+(Aleatórios), que conta só os disparos "puros", o **Disparos Geral** conta
+**TODOS** os disparos de cada cliente e classifica cada um em *após arme* /
+*seguido de desarme* / *aleatório*, montando o texto da OCORRENCIA (acima do
+limite configurável — padrão 50 — vira "RECORRENTE"). A saída é um Excel com
+**3 abas por grupo** (Villefort / Super Nosso+APOIO / Base, decididos pelo
+nome — ajustável em Configurações). O período tem preset "fim de semana
+atual" (sexta 18h → segunda 08h) e período manual com **data e hora**. A
+prévia mostra os 3 grupos na tela. Ele também **abre chamado na Auvo** para
+clientes acima de um limite próprio (Configuração da aba Chamados →
+"Disparos Geral: mínimo de disparos para abrir") — como usa o mesmo gatilho
+"disparos", a regra de não reabrir enquanto a ordem anterior está aberta
+vale entre os dois relatórios (não duplica ordem para o mesmo local).
+
 ### 5.2.2 Chamados (Auvo)
 
 A aba **Chamados** abre tarefas na Auvo automaticamente quando um cliente
