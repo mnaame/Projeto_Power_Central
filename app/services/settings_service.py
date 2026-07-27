@@ -28,6 +28,10 @@ DEFAULTS: dict[str, str] = {
     "disp_horas_primeira_execucao": "24",
     "disp_limite_recorrente": "15",
     "disp_ignorar_zonas": "PANICO",
+    # Módulo Disparos Geral (fim de semana)
+    "dispg_limite_recorrente": "50",
+    "dispg_grupo_villefort": "VILLEFORT",
+    "dispg_grupo_super_nosso": "SUPER NOSSO,APOIO",
     # Módulo Chamados Auvo (§4/§5 do complemento) — simulação LIGADA por
     # padrão: só desligar depois de validar de-para e payload.
     "auvo_api_key": "",
@@ -149,6 +153,21 @@ def get_disp_limite_recorrente() -> int:
 
 def get_disp_ignorar_zonas() -> tuple[str, ...]:
     return _lista("disp_ignorar_zonas")
+
+
+# --- Módulo Disparos Geral (fim de semana) ---
+
+
+def get_dispg_limite_recorrente() -> int:
+    return int(get("dispg_limite_recorrente"))
+
+
+def get_dispg_grupo_villefort() -> tuple[str, ...]:
+    return _lista("dispg_grupo_villefort")
+
+
+def get_dispg_grupo_super_nosso() -> tuple[str, ...]:
+    return _lista("dispg_grupo_super_nosso")
 
 
 # --- Módulo Chamados Auvo ---

@@ -217,7 +217,7 @@ def test_gerar_disparos_preenche_tempo_para_ligar_quando_ha_chamada(app):
         },
         {
             "etl_tFechaHora": "7/18/2026 9:48:00 PM",
-            "etl_cAccion": "Chamada",
+            "etl_cAccion": "LlamadoTelefonico",
             "etl_cObservacion": "(*84 -31987388855 Chamada Atendida - Bem Sucedida) [00:00:51]",
             "etl_iAccionCode": "",
             "ope_cnombre": "",

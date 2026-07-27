@@ -102,7 +102,7 @@ def test_chamada_atendida_define_momento_da_ligacao():
         _passo("7/21/2026 3:27:20 AM", "IngresoComentarios", "--- PROCEDIMENTO --- [DEALER: MIL]"),
         _passo(
             "7/21/2026 3:44:59 AM",
-            "Chamada",
+            "LlamadoTelefonico",
             "(*84 -31987388855 Chamada Atendida - Bem Sucedida) [00:00:51]",
         ),
         _passo("7/21/2026 3:45:31 AM", "IngresoComentarios", "Local com trabalho noturno."),
@@ -111,6 +111,23 @@ def test_chamada_atendida_define_momento_da_ligacao():
     analise = analisar_timeline(timeline)
     assert analise.chamada == datetime(2026, 7, 21, 3, 44, 59, tzinfo=FUSO)
     assert analise.fechamento == datetime(2026, 7, 21, 3, 45, 31, tzinfo=FUSO)
+
+
+def test_chamada_nao_atendida_nao_conta():
+    timeline = [
+        _passo("7/21/2026 3:26:58 AM", "Inicio", "Evento recebido na Central"),
+        _passo("7/21/2026 3:30:00 AM", "LlamadoTelefonico", "Chamada não atendida"),
+        _passo("7/21/2026 3:45:31 AM", "Procesar", "processado", codigo="122"),
+    ]
+    assert analisar_timeline(timeline).chamada is None
+
+
+def test_fechamento_por_codigo_133():
+    timeline = [
+        _passo("7/18/2026 9:30:00 PM", "Inicio", "Evento recebido na Central"),
+        _passo("7/18/2026 9:45:00 PM", "Procesar", "fechado", codigo="133"),
+    ]
+    assert analisar_timeline(timeline).fechamento is not None
 
 
 def test_sem_chamada_registrada_fica_none():

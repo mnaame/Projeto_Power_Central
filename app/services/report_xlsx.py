@@ -21,6 +21,14 @@ COLUNAS_ATENDIMENTOS = (
     "MONITOR",
 )
 COLUNAS_DESCARTADOS = ("DATA", "CONTA", "CLIENTE", "EVENTO", "MOTIVO")
+COLUNAS_DISPAROS_GERAL = (
+    "CLIENTE",
+    "QUANTIDADE DE DISPARO",
+    "OCORRENCIA",
+    "TEMP/CONCLUSÃO",
+    "TEMPO PARA LIGAR PARA O CLIENTE",
+    "ZONA",
+)
 COLUNAS_DISPAROS = (
     "CLIENTE",
     "QUANTIDADE DE DISPARO",
@@ -100,6 +108,24 @@ def gerar_xlsx_disparos(caminho: Path, *, linhas: Sequence[Sequence[object]]) ->
     ws = wb.active
     ws.title = "DISPAROS"
     _montar_aba(ws, COLUNAS_DISPAROS, linhas)
+
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(caminho)
+
+
+def gerar_xlsx_disparos_geral(
+    caminho: Path,
+    *,
+    por_grupo: dict[str, Sequence[Sequence[object]]],
+    grupos: Sequence[str],
+) -> None:
+    """Uma planilha com uma aba por grupo (Villefort / Super Nosso / Base),
+    na ordem dada. Mesmas colunas em todas."""
+    wb = Workbook()
+    wb.remove(wb.active)
+    for grupo in grupos:
+        ws = wb.create_sheet(grupo)
+        _montar_aba(ws, COLUNAS_DISPAROS_GERAL, por_grupo.get(grupo, []))
 
     caminho.parent.mkdir(parents=True, exist_ok=True)
     wb.save(caminho)

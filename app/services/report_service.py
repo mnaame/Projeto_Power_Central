@@ -9,6 +9,7 @@ from flask import current_app
 
 from app.domain import atendimentos as dom_atend
 from app.domain import disparos as dom_disp
+from app.domain import disparos_geral as dom_disp_geral
 from app.domain.dates import FUSO_HORARIO, parse_softguard_datetime
 from app.domain.formatting import formatar_duracao_hms
 from app.extensions import db
@@ -16,13 +17,18 @@ from app.integrations.softguard_client import SoftGuardClient
 from app.models.report import ReportRun
 from app.services import auvo_service, settings_service
 from app.services.collector import credenciais_softguard
-from app.services.report_xlsx import gerar_xlsx_atendimentos, gerar_xlsx_disparos
+from app.services.report_xlsx import (
+    gerar_xlsx_atendimentos,
+    gerar_xlsx_disparos,
+    gerar_xlsx_disparos_geral,
+)
 
 logger = logging.getLogger("collector")
 
 _locks: dict[str, threading.Lock] = {
     "atendimentos": threading.Lock(),
     "disparos": threading.Lock(),
+    "disparos_geral": threading.Lock(),
 }
 
 
@@ -297,3 +303,84 @@ def gerar_disparos(
         return run
 
     return _executar_com_lock("disparos", _gerar)
+
+
+def gerar_disparos_geral(
+    *,
+    config,
+    desde: datetime,
+    hasta: datetime,
+    user_id: int | None,
+    softguard_client=None,
+) -> ReportRun:
+    """Gera o relatório de Disparos Geral (fim de semana): conta TODOS os
+    disparos por cliente, classifica por categoria, agrupa em 3 abas."""
+
+    def _gerar() -> ReportRun:
+        run = ReportRun(
+            module="disparos_geral",
+            generated_by_user_id=user_id,
+            period_start=desde,
+            period_end=hasta,
+            status="running",
+        )
+        db.session.add(run)
+        db.session.flush()
+
+        try:
+            client = softguard_client or _criar_cliente(config)
+            folga = timedelta(minutes=6)
+            codigos = (dom_disp.CODIGO_DISPARO,) + dom_disp.CODIGOS_ARME + dom_disp.CODIGOS_DESARME
+            eventos = client.buscar_historico(
+                codigos_alarme=codigos,
+                desde=(desde - folga).astimezone(FUSO_HORARIO),
+                hasta=(hasta + folga).astimezone(FUSO_HORARIO),
+            )
+
+            na_janela = dom_disp.filtrar_para_janela(eventos, desde=desde, hasta=hasta)
+            clientes = dom_disp_geral.consolidar(
+                na_janela,
+                limite_recorrente=settings_service.get_dispg_limite_recorrente(),
+                padroes_villefort=settings_service.get_dispg_grupo_villefort(),
+                padroes_super_nosso=settings_service.get_dispg_grupo_super_nosso(),
+            )
+
+            por_grupo: dict[str, list] = {grupo: [] for grupo in dom_disp_geral.GRUPOS}
+            for cliente in clientes:
+                tempo, tempo_ligar = _tempos_via_timeline(client, cliente.ids_eventos_atendidos)
+                por_grupo[cliente.grupo].append(
+                    (
+                        cliente.cliente,
+                        f"{cliente.quantidade}X",
+                        cliente.ocorrencia,
+                        tempo,
+                        tempo_ligar or "X",
+                        "\n".join(cliente.zonas),
+                    )
+                )
+
+            caminho = _pasta_relatorios("disparos_geral") / (
+                f"disparos_geral_{datetime.now(timezone.utc):%Y%m%d_%H%M%S}.xlsx"
+            )
+            gerar_xlsx_disparos_geral(
+                caminho, por_grupo=por_grupo, grupos=dom_disp_geral.GRUPOS
+            )
+
+            total_disparos = sum(c.quantidade for c in clientes)
+            run.status = "success"
+            run.row_count = len(clientes)
+            run.extra_counts = {
+                "total_disparos": total_disparos,
+                "clientes": len(clientes),
+                "por_grupo": {grupo: len(por_grupo[grupo]) for grupo in dom_disp_geral.GRUPOS},
+            }
+            run.file_path = str(caminho)
+        except Exception as exc:
+            logger.exception("Geração do relatório de disparos geral falhou.")
+            run.status = "error"
+            run.error_message = str(exc)
+
+        db.session.commit()
+        return run
+
+    return _executar_com_lock("disparos_geral", _gerar)

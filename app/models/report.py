@@ -2,7 +2,7 @@ from app.extensions import db
 from app.models.types import TZDateTime
 from app.utils.time import utcnow
 
-REPORT_MODULES = ("atendimentos", "disparos")
+REPORT_MODULES = ("atendimentos", "disparos", "disparos_geral")
 REPORT_STATUSES = ("running", "success", "error")
 
 
@@ -29,7 +29,8 @@ class ReportRun(db.Model):
 
     __table_args__ = (
         db.CheckConstraint(
-            "module IN ('atendimentos', 'disparos')", name="ck_report_runs_module"
+            "module IN ('atendimentos', 'disparos', 'disparos_geral')",
+            name="ck_report_runs_module",
         ),
         db.CheckConstraint(
             "status IN ('running', 'success', 'error')", name="ck_report_runs_status"

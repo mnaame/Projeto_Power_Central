@@ -11,7 +11,7 @@ from app.domain.formatting import formatar_duracao_hms
 # Regras A.3 do complemento de relatórios (validadas em campo contra
 # planilhas manuais) — NÃO alterar sem flag de config.
 
-CODIGO_FECHAMENTO = "122"
+CODIGOS_FECHAMENTO = ("122", "133")  # códigos de fechamento validados (122 e 133)
 ACAO_INICIO = "Inicio"
 ACAO_AUTOPROCESO = "Autoproceso"
 ACAO_COMENTARIO = "IngresoComentarios"
@@ -82,7 +82,7 @@ def _passos_ordenados(passos: Sequence[Mapping[str, object]]) -> list[dict]:
 
 
 def _e_fechamento(passo: Mapping[str, object]) -> bool:
-    if _texto(passo.get("etl_iAccionCode")) == CODIGO_FECHAMENTO:
+    if _texto(passo.get("etl_iAccionCode")) in CODIGOS_FECHAMENTO:
         return True
     acao = _texto(passo.get("etl_cAccion"))
     if acao == ACAO_AUTOPROCESO:
@@ -94,14 +94,15 @@ def _e_fechamento(passo: Mapping[str, object]) -> bool:
 
 
 def _e_chamada(passo: Mapping[str, object]) -> bool:
-    # a linha do tempo do portal mistura a ligação junto com os demais
-    # passos (procedimento, espera, etc.); identificamos pelo texto —
-    # "Chamada Atendida - Bem Sucedida", sempre com o número discado
-    # (validado contra timeline real de disparo, evento MIL-0172).
-    texto_completo = _normalizar_para_busca(
-        f"{_texto(passo.get('etl_cAccion'))} {_texto(passo.get('etl_cObservacion'))}"
-    )
-    return "chamada" in texto_completo
+    # Chamada ATENDIDA: ação LlamadoTelefonico + observação com "Atendida"
+    # (regra do motor validado em produção). Só a ligação atendida conta —
+    # uma "Chamada não atendida" (contém "atendida" como substring) não vira
+    # tempo para ligar.
+    acao = _normalizar_para_busca(_texto(passo.get("etl_cAccion")))
+    obs = _normalizar_para_busca(_texto(passo.get("etl_cObservacion")))
+    if "llamadotelefonico" not in acao:
+        return False
+    return "atendida" in obs and "nao atendida" not in obs
 
 
 def analisar_timeline(passos: Sequence[Mapping[str, object]]) -> AnaliseTimeline:
