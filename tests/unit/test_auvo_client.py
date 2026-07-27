@@ -224,6 +224,26 @@ def test_criar_tarefa_201_corpo_vazio_nao_quebra(requests_mock):
     assert resposta == {}
 
 
+def test_buscar_tarefa_devolve_conteudo_de_result(requests_mock):
+    _mock_login(requests_mock)
+    requests_mock.get(
+        f"{CREDS.base_url}/tasks/77330829",
+        json={"result": {"taskID": 77330829, "finished": True, "taskStatus": 5}},
+    )
+
+    tarefa = _client().buscar_tarefa(77330829)
+
+    assert tarefa["finished"] is True
+    assert tarefa["taskStatus"] == 5
+
+
+def test_buscar_tarefa_inexistente_404_vira_none(requests_mock):
+    _mock_login(requests_mock)
+    requests_mock.get(f"{CREDS.base_url}/tasks/999", status_code=404, json={})
+
+    assert _client().buscar_tarefa(999) is None
+
+
 def test_criar_tarefa_erro_carrega_corpo_e_resposta(requests_mock):
     # regra de ouro 8: em erro, corpo enviado + resposta ficam disponíveis
     # para o histórico (foi assim que cada campo foi descoberto)

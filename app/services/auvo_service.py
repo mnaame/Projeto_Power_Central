@@ -128,6 +128,45 @@ def _em_cooldown(contas: list[str], horas: float) -> bool:
     )
 
 
+# taskStatus 5 = "Finalizada" (confirmado contra a tarefa real 77330829,
+# onde finished=true, checkOut=true e o questionário fechou como concluído).
+# O sinal principal é o booleano `finished`; taskStatus é reforço.
+TASK_STATUS_FECHADOS = {5}
+
+
+def _ultima_ordem_do_local(contas: list[str]) -> AuvoChamado | None:
+    """A ordem real mais recente (com id de tarefa) aberta para qualquer
+    conta do mesmo cliente Auvo."""
+    return (
+        AuvoChamado.query.filter(
+            AuvoChamado.conta_power.in_(contas),
+            AuvoChamado.resultado == "aberta",
+            AuvoChamado.id_tarefa_auvo.isnot(None),
+        )
+        .order_by(AuvoChamado.criado_em.desc())
+        .first()
+    )
+
+
+def _ordem_esta_fechada(task_id: str, *, client: AuvoClient | None, config) -> bool | None:
+    """True = ordem concluída na Auvo (pode reabrir); False = ainda
+    aberta/em andamento (não reabre); None = não deu para checar."""
+    auvo = client or criar_cliente(config)
+    if auvo is None:
+        return None
+    try:
+        tarefa = auvo.buscar_tarefa(task_id)
+    except AuvoError:
+        return None
+    if tarefa is None:
+        return True  # tarefa não existe mais na Auvo — trata como fechada
+    if tarefa.get("finished") is True:
+        return True
+    if tarefa.get("taskStatus") in TASK_STATUS_FECHADOS:
+        return True
+    return False
+
+
 def _registrar(
     *,
     gatilho: str,
@@ -218,7 +257,21 @@ def abrir_chamado(
     if linha.esta_suprimido(_agora_utc()):
         return None
 
-    if _em_cooldown(_contas_do_mesmo_cliente(linha.id_auvo, conta_norm), cooldown):
+    # Regra de reabertura: não abre outra ordem para o mesmo local enquanto
+    # a ordem anterior não foi CONCLUÍDA na Auvo. Só quando ela fecha (ou
+    # não existe mais) é que uma nova pode abrir — mesmo que o cliente siga
+    # com problema. Se não der para checar o status, cai no cooldown de
+    # tempo como rede de segurança.
+    contas = _contas_do_mesmo_cliente(linha.id_auvo, conta_norm)
+    ultima = _ultima_ordem_do_local(contas)
+    if ultima is not None:
+        fechada = _ordem_esta_fechada(ultima.id_tarefa_auvo, client=client, config=config)
+        if fechada is False:
+            return _skip_ou_registra("repetida")  # anterior ainda aberta
+        if fechada is None and _em_cooldown(contas, cooldown):
+            return _skip_ou_registra("repetida")  # sem checar -> respeita cooldown
+        # fechada is True -> ordem anterior concluída, pode reabrir
+    elif _em_cooldown(contas, cooldown):
         return _skip_ou_registra("repetida")
 
     contexto_completo = dict(contexto)
@@ -393,6 +446,10 @@ def processar_sem_comunicacao(
     há pelo menos `sem_comunicacao_horas_minimas` (evita chamado por
     queda passageira)."""
     minimo = timedelta(hours=settings_service.get_auvo_sem_comunicacao_horas_minimas())
+    # um client por ciclo (um login só), reaproveitado nas checagens de
+    # status e nas criações; em simulação nem cria (não há chamada à API)
+    if client is None and not settings_service.auvo_simulacao():
+        client = criar_cliente(config)
     abertos: list[AuvoChamado] = []
     for conta in contas:
         desde = conta.tst_failure_since
@@ -424,6 +481,8 @@ def processar_disparos(
     """Gatilho da geração de Disparos: abre chamado para clientes com
     pelo menos `disparos_minimos_tarefa` disparos válidos no período."""
     minimo = settings_service.get_auvo_disparos_minimos_tarefa()
+    if client is None and not settings_service.auvo_simulacao():
+        client = criar_cliente(config)
     abertos: list[AuvoChamado] = []
     for cliente in clientes:
         if cliente.quantidade < minimo:

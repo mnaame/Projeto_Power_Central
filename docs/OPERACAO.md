@@ -364,10 +364,21 @@ de esquecer uma conta bloqueada para sempre. Para contas que saem de vez
 > com problema conhecido/em atendimento **antes** de virar a chave, senão o
 > sistema abrirá um chamado para cada uma delas no primeiro ciclo.
 
+**Não repete ordem enquanto a anterior está aberta.** O sistema só abre uma
+ordem nova para um local depois que a ordem anterior for **concluída na
+Auvo** (`finished`/status Finalizada). Enquanto a ordem estiver aberta ou em
+andamento, mesmo que o cliente continue com problema, nada de novo é aberto
+— aparece como `repetida` no histórico. Assim que o técnico finaliza, se o
+problema persistir, uma nova ordem é aberta. Isso vale por **local** (todas
+as contas que apontam pro mesmo cliente Auvo contam como um só). Quando não
+dá para checar o status na hora, um cooldown de tempo (padrão 12h) serve de
+rede de segurança para não duplicar.
+
 **Histórico** (painel): cada tentativa vira uma linha — `aberta` (criada de
-verdade), `simulada`, `repetida` (dentro do cooldown), `sem_depara` (conta
-sem vínculo OK) ou `falha` (com o corpo enviado e a resposta da Auvo
-expandíveis, para diagnóstico). Segue a mesma retenção dos relatórios.
+verdade), `simulada`, `repetida` (já existe ordem aberta / dentro do
+cooldown), `sem_depara` (conta sem vínculo OK) ou `falha` (com o corpo
+enviado e a resposta da Auvo expandíveis, para diagnóstico). Segue a mesma
+retenção dos relatórios.
 
 ### 5.3 Administração
 

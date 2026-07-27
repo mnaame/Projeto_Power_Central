@@ -12,11 +12,18 @@ from app.services import auvo_service, settings_service
 FUSO = ZoneInfo("America/Sao_Paulo")
 
 
+_SEM_TAREFA = object()  # sentinela: distingue "não informado" de None (404)
+
+
 class FakeAuvoClient:
-    def __init__(self, resposta=None, erro: AuvoError | None = None, clientes=None):
+    def __init__(self, resposta=None, erro: AuvoError | None = None, clientes=None, tarefa=_SEM_TAREFA):
         self.resposta = resposta if resposta is not None else {"result": {"taskID": 4242}}
         self.erro = erro
         self.clientes = clientes or []
+        # por padrão a "ordem anterior" está EM ABERTO (não concluída), então
+        # o dedup por reabertura segura uma segunda ordem pro mesmo local;
+        # tarefa=None explícito simula tarefa apagada (404 na Auvo)
+        self.tarefa = {"finished": False, "taskStatus": 3} if tarefa is _SEM_TAREFA else tarefa
         self.payloads: list[dict] = []
 
     def criar_tarefa(self, payload):
@@ -27,6 +34,9 @@ class FakeAuvoClient:
 
     def listar_clientes(self):
         return self.clientes
+
+    def buscar_tarefa(self, task_id):
+        return self.tarefa
 
 
 def _depara(conta="95", id_auvo=13804973, status="OK", nome_power="CLIENTE 95"):
@@ -223,6 +233,43 @@ def test_duas_contas_mesmo_cliente_auvo_abrem_so_uma_ordem(app):
     assert primeiro.resultado == "aberta"
     assert segundo.resultado == "repetida"  # mesmo cliente Auvo, não duplica
     assert len(fake.payloads) == 1  # só uma tarefa criada na Auvo
+
+
+def test_nao_reabre_enquanto_ordem_anterior_esta_aberta(app):
+    _depara()
+    _producao()
+    fake = FakeAuvoClient(tarefa={"finished": False, "taskStatus": 3})
+
+    primeiro = _abrir(app, client=fake)
+    segundo = _abrir(app, client=fake)
+
+    assert primeiro.resultado == "aberta"
+    assert segundo.resultado == "repetida"  # ordem anterior ainda aberta na Auvo
+    assert len(fake.payloads) == 1
+
+
+def test_reabre_quando_ordem_anterior_foi_concluida(app):
+    _depara()
+    _producao()
+    fake = FakeAuvoClient(tarefa={"finished": True, "taskStatus": 5})
+
+    primeiro = _abrir(app, client=fake)
+    segundo = _abrir(app, client=fake)
+
+    assert primeiro.resultado == "aberta"
+    assert segundo.resultado == "aberta"  # anterior concluída -> pode reabrir
+    assert len(fake.payloads) == 2
+
+
+def test_ordem_apagada_na_auvo_libera_reabertura(app):
+    _depara()
+    _producao()
+    fake = FakeAuvoClient(tarefa=None)  # buscar_tarefa devolve None (404)
+
+    _abrir(app, client=fake)
+    segundo = _abrir(app, client=fake)
+
+    assert segundo.resultado == "aberta"  # tarefa não existe mais -> reabre
 
 
 def test_falha_guarda_corpo_e_resposta(app):

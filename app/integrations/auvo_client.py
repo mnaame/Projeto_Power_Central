@@ -200,6 +200,28 @@ class AuvoClient:
     # Tarefas
     # ------------------------------------------------------------------
 
+    def buscar_tarefa(self, task_id: object) -> dict | None:
+        """GET /tasks/{id} — devolve a tarefa (dict, de dentro de `result`)
+        ou None se ela não existe mais (404). Usado para saber se uma
+        ordem já foi concluída antes de reabrir outra pro mesmo local."""
+        response = self._request("GET", f"/tasks/{task_id}", timeout=TIMEOUT_LISTAS)
+        if response.status_code == 404:
+            return None
+        if response.status_code >= 300:
+            raise AuvoError(
+                f"Auvo /tasks/{task_id} devolveu HTTP {response.status_code}.",
+                status=response.status_code,
+                resposta=_texto(response),
+            )
+        try:
+            dados = response.json()
+        except ValueError:
+            return None
+        if isinstance(dados, dict):
+            res = dados.get("result", dados)
+            return res if isinstance(res, dict) else None
+        return None
+
     def criar_tarefa(self, payload: dict[str, Any]) -> dict:
         """POST /tasks/ — sucesso é HTTP 201. O payload vem pronto do
         serviço (templates/regras são de lá); aqui só garantimos os tipos
