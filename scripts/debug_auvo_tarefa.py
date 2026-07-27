@@ -11,7 +11,12 @@ que a aba Chamados usa) — não precisa preencher nada.
 """
 
 import json
+import os
 import sys
+
+# o script fica em scripts/, mas o pacote "app" está na raiz do projeto —
+# garante que a raiz esteja no path, rode de onde rodar
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
 from app.services import auvo_service
