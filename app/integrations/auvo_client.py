@@ -16,6 +16,7 @@ histórico de chamados (diagnóstico foi o que destravou a integração).
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from dataclasses import dataclass
@@ -162,14 +163,21 @@ class AuvoClient:
     # Listas (paramFilter obrigatório, páginas de 50)
     # ------------------------------------------------------------------
 
-    def _listar_paginado(self, path: str, *, page_size: int = PAGE_SIZE_PADRAO) -> list[dict]:
+    def _listar_paginado(
+        self,
+        path: str,
+        *,
+        param_filter: dict | None = None,
+        page_size: int = PAGE_SIZE_PADRAO,
+    ) -> list[dict]:
         itens: list[dict] = []
         pagina = 1
+        filtro = json.dumps(param_filter or {})
         while True:
             response = self._request(
                 "GET",
                 path,
-                params={"paramFilter": "{}", "page": pagina, "pageSize": page_size},
+                params={"paramFilter": filtro, "page": pagina, "pageSize": page_size},
                 timeout=TIMEOUT_LISTAS,
             )
             if response.status_code >= 300:
@@ -195,6 +203,13 @@ class AuvoClient:
 
     def listar_tipos_tarefa(self) -> list[dict]:
         return self._listar_paginado("/taskTypes/")
+
+    def listar_tarefas(self, data_inicio: str, data_fim: str) -> list[dict]:
+        """Agenda de tarefas no intervalo (formato "YYYY-MM-DD" para os
+        dois). Usada pelo Relatório do Técnico para cruzar com o de-para."""
+        return self._listar_paginado(
+            "/tasks/", param_filter={"startDate": data_inicio, "endDate": data_fim}
+        )
 
     # ------------------------------------------------------------------
     # Tarefas

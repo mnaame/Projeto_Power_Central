@@ -57,6 +57,11 @@ DEFAULTS: dict[str, str] = {
         "{qtd} disparo(s) aleatorio(s) no periodo. "
         "Zonas: {zonas}. Avaliar sensores/instalacao."
     ),
+    # Módulo Relatório do Técnico do Dia
+    "tecnico_nome_padrao": "",
+    "tecnico_codigos_padrao": "CLO,OPN,BUR,BYP,ROP,RCL",
+    "tecnico_periodo_dias_padrao": "30",
+    "tecnico_saida_xlsx_convertido": "false",
 }
 
 _TELEGRAM_TOKEN_KEY = "telegram_bot_token"
@@ -288,3 +293,22 @@ def get_auvo_credentials(*, encryption_key: str) -> tuple[str, str] | None:
     except InvalidToken:
         return None
     return api_key, api_token
+
+
+# --- Módulo Relatório do Técnico do Dia ---
+
+
+def get_tecnico_nome_padrao() -> str:
+    return get("tecnico_nome_padrao")
+
+
+def get_tecnico_codigos_padrao() -> tuple[str, ...]:
+    return _lista("tecnico_codigos_padrao")
+
+
+def get_tecnico_periodo_dias_padrao() -> int:
+    return int(get("tecnico_periodo_dias_padrao"))
+
+
+def tecnico_saida_xlsx_convertido() -> bool:
+    return get("tecnico_saida_xlsx_convertido").strip().lower() == "true"

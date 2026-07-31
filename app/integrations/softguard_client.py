@@ -18,9 +18,21 @@ TOKEN_VALID_PATH = "/rest/token/IsValid"
 SEARCH_PATH = "/Rest/Search/CuentaByDealer"
 HISTORICO_PATH = "/Rest/Search/ReporteHistorico"
 TIMELINE_PATH = "/Rest/search/EventoTimeLineFull"
+EXPORT_HISTORICO_PATH = "/handler/ExportReporteHistoricoExcel"
 
 # Formato de data exigido por FechaDesde/FechaHasta do ReporteHistorico.
 FORMATO_DATA_HISTORICO = "%m-%d-%Y %H:%M:%S"
+# O export HTML (ExportReporteHistoricoExcel) usa um formato diferente —
+# validado contra o motor de produção (relatorio_tecnico.py).
+FORMATO_DATA_EXPORT = "%Y-%m-%d %H:%M:%S"
+
+# Filtro de "todas as contas" (sem recorte de falha TST) — usado para
+# montar o mapa número -> (id interno, nome) do relatório do técnico.
+FILTRO_TODAS_CONTAS = [{"property": "cue_nparticion", "value": "0"}]
+
+# Firma do dealer fixa nesta implantação (Novo Millenium) — usada no
+# export do histórico (dealerFirma e prefixo de cuentanombre).
+DEALER_FIRMA = "MIL"
 
 DEFAULT_TIMEOUT_SECONDS = 15
 DEFAULT_PAGE_SIZE = 100
@@ -179,6 +191,74 @@ class SoftGuardClient:
             page_size=page_size,
         )
 
+    def listar_todas_contas(
+        self, *, page_size: int = DEFAULT_PAGE_SIZE
+    ) -> list[dict[str, Any]]:
+        """Todas as contas do dealer (sem filtro de falha) — usado para
+        montar o mapa número -> id interno (cue_iid) do relatório do
+        técnico. O portal não busca por número; a lista inteira é
+        carregada e filtrada em memória (mesmo padrão do motor validado
+        em produção)."""
+        return self._buscar_paginado(
+            SEARCH_PATH,
+            {"filter": json.dumps(FILTRO_TODAS_CONTAS)},
+            page_size=page_size,
+        )
+
+    def exportar_historico_html(
+        self,
+        *,
+        cue_iid: str | int,
+        numero_conta: str,
+        nome_cliente: str,
+        desde: datetime,
+        hasta: datetime,
+        codigos_alarme: Sequence[str],
+        timeout: float = 120,
+    ) -> bytes:
+        """Baixa o histórico da conta no formato NATIVO da plataforma —
+        o mesmo arquivo do export manual: HTML que o Excel abre
+        renderizando título, cores por tipo de evento e texto (extensão
+        .xls). `token` vai na query como o valor do cookie OAuth_Token,
+        diferente de todas as outras chamadas do client (que usam a
+        sessão autenticada por cookie sozinha)."""
+        if not self._logged_in:
+            self.login()
+        token = self._session.cookies.get("OAuth_Token", "")
+
+        response = self._request(
+            "GET",
+            urljoin(self._credentials.base_url, EXPORT_HISTORICO_PATH),
+            params={
+                "token": token,
+                "fechaProceso": "true",
+                "fechahoraeventocheck": "true",
+                "FechaDesde": desde.strftime(FORMATO_DATA_EXPORT),
+                "FechaHasta": hasta.strftime(FORMATO_DATA_EXPORT),
+                "TipoEvento": "",
+                "Origen": "true",
+                "Estado": "",
+                "Codigoalarma": ",".join(codigos_alarme),
+                "dealerFirma": DEALER_FIRMA,
+                "TrackGuard": "true",
+                "CuentaReporte": cue_iid,
+                "CuentaNumero": numero_conta,
+                "mostrar": 5000,
+                "exportToExcel": "yes",
+                "cuentanombre": f"{DEALER_FIRMA} - {nome_cliente}",
+            },
+            timeout=timeout,
+        )
+
+        texto = response.content.decode("utf-8", "replace").lower()
+        if "no se encontr" in texto or "regularizar la situaci" in texto:
+            raise SoftGuardError(
+                "A PowerCentral recusou o export do histórico (página não "
+                "encontrada) — verifique as permissões do usuário de "
+                "integração no perfil da PowerCentral."
+            )
+        return response.content
+
     def buscar_timeline(self, id_evento: str | int, *, limit: int = 500) -> list[dict[str, Any]]:
         """Linha do tempo completa de um evento (EventoTimeLineFull)."""
         if not self._logged_in:
@@ -193,10 +273,11 @@ class SoftGuardClient:
         return payload.get("rows", payload.get("data", []))
 
     def _request(self, method: str, url: str, **kwargs) -> requests.Response:
+        timeout = kwargs.pop("timeout", self._timeout)
         ultima_excecao: Exception | None = None
         for tentativa in range(1, self._max_retries + 1):
             try:
-                response = self._session.request(method, url, timeout=self._timeout, **kwargs)
+                response = self._session.request(method, url, timeout=timeout, **kwargs)
                 response.raise_for_status()
                 # Reforça a captura de cookies da resposta na sessão (cobre a
                 # troca de OAuth_Token no passo de login — ver seção 5).

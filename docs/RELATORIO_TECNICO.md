@@ -60,24 +60,39 @@ para cada loja marcada (falha isolada, não derruba o lote):
   paginado, devolve as tarefas cruas (customerId, customerDescription,
   idUserTo, userToName, taskDate...).
 
-### 3.2 `integrations/softguard_client.py` (estender)
+### 3.2 `integrations/softguard_client.py` (estendido — RT1 concluída)
 
-- `buscar_conta_por_numero(numero)` → localizar o `cue_iid` (id interno) a
-  partir do número da conta — via `CuentaByDealer` com filtro por
-  `cue_ncuenta` (mesmo endpoint de `buscar_contas_em_falha_tst`, filtro
-  diferente). **A confirmar o filtro exato contra o script** (a busca por
-  TST usa `sta_ncuentaenfallo`; aqui precisa ser por número, sem esse
-  filtro).
-- `exportar_historico_html(*, cue_iid, numero, nome, desde, hasta,
-  codigos_alarme)` → `GET /handler/ExportReporteHistoricoExcel` com o
+Depois de receber o script `relatorio_tecnico.py` (motor validado em
+produção), o plano original desta seção mudou em dois pontos — registrado
+aqui para não ficar defasado:
+
+- **Sem `buscar_conta_por_numero`**: o script não busca por número — ele
+  carrega **todas as contas do dealer** de uma vez (`CuentaByDealer` com
+  filtro `[{"property": "cue_nparticion", "value": "0"}]`, sem o recorte
+  de falha TST) e monta um mapa em memória número → (`cue_iid`, nome).
+  Implementado como `listar_todas_contas()`; o mapa em si é lógica de
+  serviço (RT2), não do client.
+- **Sem `listar_codigos_alarme`**: o catálogo real da plataforma (tela
+  "Seleção de eventos") tem dezenas/centenas de códigos, muitos
+  irrelevantes (rastreamento veicular etc.) — grande demais para um
+  dual-listbox buscável. Os códigos de evento viraram um campo de texto
+  separado por vírgula (mesma convenção já usada em `atend_codigos_evento`
+  / `disp_ignorar_zonas`), com um padrão pré-preenchido e ajustável por
+  loja na tela.
+
+O que entrou de fato:
+
+- `exportar_historico_html(*, cue_iid, numero_conta, nome_cliente, desde,
+  hasta, codigos_alarme)` → `GET /handler/ExportReporteHistoricoExcel` com
   `token` = valor do cookie `OAuth_Token` da sessão logada (vai na query,
   não no header — diferente de todo o resto do client) + os demais
-  parâmetros fixos do §1.4 do complemento. Devolve o corpo cru (str/bytes).
-  Detecta erro de permissão pelo texto ("no se encontró la página" /
-  "regularizar la situación") e levanta `SoftGuardError` com mensagem
-  clara (é erro de perfil do usuário de integração, não bug).
-- `listar_codigos_alarme()` → endpoint `codigosalarmas`, para popular o
-  catálogo do multi-seletor (código → descrição) na tela.
+  parâmetros fixos validados contra o script (`dealerFirma=MIL`,
+  `mostrar=5000`, `exportToExcel=yes`, `cuentanombre="MIL - <nome>"` etc.).
+  Formato de data próprio (`FORMATO_DATA_EXPORT = "%Y-%m-%d %H:%M:%S"`,
+  diferente do `ReporteHistorico`). Devolve o corpo cru (bytes). Detecta
+  erro de permissão pelo texto ("no se encontró la página" / "regularizar
+  la situación") e levanta `SoftGuardError` com mensagem clara (é erro de
+  perfil do usuário de integração, não bug).
 
 ### 3.3 `models/tecnico.py` (novo) + migration
 
@@ -146,19 +161,15 @@ principal — o arquivo `.xls` (HTML nativo da plataforma) já é o formato
 validado e idêntico ao export manual. Adiciono o toggle depois, se fizer
 falta.
 
-## 6. Preciso antes de começar
+## 6. Recebido — script + tela de seleção de eventos
 
-1. **O script `relatorio_tecnico.py`** (citado no §7 do complemento) —
-   preciso dele para acertar com precisão: o filtro exato de
-   `CuentaByDealer` por número de conta, o critério de match do técnico
-   (por `idUserTo` ou por nome — o exemplo do complemento usa "Alfredo",
-   um nome), a lista completa de parâmetros fixos do export, e como o
-   script detecta o erro de permissão. Mesma disciplina dos módulos
-   anteriores (`auvo.py`, `relatorio_disparos_geral.py`) — envelopar o
-   motor validado, não adivinhar.
-2. Se possível, **um exemplo de resposta do endpoint `codigosalarmas`**
-   (ou uma tela do multi-seletor da própria plataforma), para eu montar
-   o catálogo com os nomes certos.
+O script `relatorio_tecnico.py` e um print da tela "Seleção de eventos" da
+plataforma (confirmando que o catálogo é grande demais para enumerar)
+foram recebidos e usados como base do RT1 (ver §3.2 para o que mudou no
+plano original em função disso). O critério de match do técnico na
+tarefa é por nome (substring, sem acento, case-insensitive — primeiro
+campo não-vazio entre `userToName`/`idUserToName`/`userTo`/`responsavel`/
+`idUserTo`), mesmo padrão do script.
 
 ## 7. Fases
 

@@ -14,6 +14,15 @@ def test_get_retorna_padrao_quando_nao_configurado(app):
     assert settings_service.get_retention_days() == 90
 
 
+def test_get_tecnico_retorna_padrao_quando_nao_configurado(app):
+    assert settings_service.get_tecnico_nome_padrao() == ""
+    assert settings_service.get_tecnico_codigos_padrao() == (
+        "CLO", "OPN", "BUR", "BYP", "ROP", "RCL",
+    )
+    assert settings_service.get_tecnico_periodo_dias_padrao() == 30
+    assert settings_service.tecnico_saida_xlsx_convertido() is False
+
+
 def test_set_e_get_roundtrip(app):
     settings_service.set("window_hours", "5")
     db.session.commit()

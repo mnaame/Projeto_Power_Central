@@ -169,6 +169,81 @@ def test_buscar_historico_monta_parametros_e_pagina(requests_mock):
     assert query["Mostrar"] == ["5000"]
 
 
+def test_listar_todas_contas_pagina_e_usa_filtro_de_particao(requests_mock):
+    from urllib.parse import parse_qs, urlparse
+
+    _mock_login_ok(requests_mock)
+    requests_mock.get(
+        f"{CREDS.base_url}/Rest/Search/CuentaByDealer",
+        [
+            {"json": {"total": 3, "rows": [{"cue_ncuenta": "0095"}, {"cue_ncuenta": "0096"}]}},
+            {"json": {"total": 3, "rows": [{"cue_ncuenta": "0097"}]}},
+        ],
+    )
+
+    client = _client()
+    contas = client.listar_todas_contas(page_size=2)
+
+    assert [c["cue_ncuenta"] for c in contas] == ["0095", "0096", "0097"]
+    query = parse_qs(urlparse(requests_mock.request_history[-1].url).query)
+    assert '"cue_nparticion"' in query["filter"][0]
+    assert '"sta_ncuentaenfallo"' not in query["filter"][0]  # não é o filtro de falha TST
+
+
+def test_exportar_historico_html_monta_parametros_e_usa_token_do_cookie(requests_mock):
+    from datetime import datetime
+    from urllib.parse import parse_qs, urlparse
+
+    _mock_login_ok(requests_mock)
+    requests_mock.get(
+        f"{CREDS.base_url}/handler/ExportReporteHistoricoExcel",
+        content=b"<html><table><tr><td>Historico real</td></tr></table></html>",
+    )
+
+    client = _client()
+    conteudo = client.exportar_historico_html(
+        cue_iid="9385",
+        numero_conta="0095",
+        nome_cliente="CLINICA KENNEDY",
+        desde=datetime(2026, 7, 1, 0, 0, 0),
+        hasta=datetime(2026, 7, 31, 23, 59, 59),
+        codigos_alarme=("CLO", "OPN", "BUR"),
+    )
+
+    assert b"Historico real" in conteudo
+    query = parse_qs(urlparse(requests_mock.request_history[-1].url).query)
+    assert query["token"] == ["abc123"]  # do cookie OAuth_Token do login
+    assert query["FechaDesde"] == ["2026-07-01 00:00:00"]  # formato próprio do export
+    assert query["FechaHasta"] == ["2026-07-31 23:59:59"]
+    assert query["Codigoalarma"] == ["CLO,OPN,BUR"]
+    assert query["dealerFirma"] == ["MIL"]
+    assert query["CuentaReporte"] == ["9385"]
+    assert query["CuentaNumero"] == ["0095"]
+    assert query["cuentanombre"] == ["MIL - CLINICA KENNEDY"]
+    assert query["exportToExcel"] == ["yes"]
+
+
+def test_exportar_historico_html_recusado_por_permissao_levanta_erro(requests_mock):
+    from datetime import datetime
+
+    _mock_login_ok(requests_mock)
+    requests_mock.get(
+        f"{CREDS.base_url}/handler/ExportReporteHistoricoExcel",
+        content="<html>no se encontró la página solicitada</html>".encode("utf-8"),
+    )
+
+    client = _client()
+    with pytest.raises(SoftGuardError):
+        client.exportar_historico_html(
+            cue_iid="9385",
+            numero_conta="0095",
+            nome_cliente="CLINICA KENNEDY",
+            desde=datetime(2026, 7, 1),
+            hasta=datetime(2026, 7, 31),
+            codigos_alarme=("CLO",),
+        )
+
+
 def test_buscar_timeline_retorna_passos(requests_mock):
     from urllib.parse import parse_qs, urlparse
 
