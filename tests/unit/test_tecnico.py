@@ -1,7 +1,11 @@
 from app.domain.tecnico import (
     exportacao_recusada,
+    horario_da_tarefa,
+    id_cliente_da_tarefa,
+    mapa_contas,
     montar_workbook_colorido,
     nome_arquivo_loja,
+    nome_cliente_da_tarefa,
     nome_tecnico_da_tarefa,
     sanitizar_nome_arquivo,
     tecnico_corresponde,
@@ -29,6 +33,43 @@ def test_tecnico_corresponde_substring_sem_acento_case_insensitive():
 def test_tecnico_vazio_significa_todos():
     assert tecnico_corresponde({"userToName": "Qualquer"}, "") is True
     assert tecnico_corresponde({}, "") is True
+
+
+# ---------- id/nome do cliente e horário da tarefa ----------
+
+
+def test_id_cliente_da_tarefa_primeiro_campo_valido():
+    assert id_cliente_da_tarefa({"customerId": 13804973}) == 13804973
+    assert id_cliente_da_tarefa({"idCustomer": "13804973"}) == 13804973
+    assert id_cliente_da_tarefa({"customerId": "não é número"}) is None
+    assert id_cliente_da_tarefa({}) is None
+
+
+def test_nome_cliente_da_tarefa_cai_para_id_quando_sem_nome():
+    assert nome_cliente_da_tarefa({"customerDescription": "CLINICA KENNEDY"}) == "CLINICA KENNEDY"
+    assert nome_cliente_da_tarefa({"customerId": 123}) == "123"
+    assert nome_cliente_da_tarefa({}) == ""
+
+
+def test_horario_da_tarefa_vazio_quando_nenhum_campo_conhecido():
+    assert horario_da_tarefa({"taskDate": "2026-07-31T08:00:00"}) == "2026-07-31T08:00:00"
+    assert horario_da_tarefa({}) == ""
+
+
+# ---------- mapa_contas ----------
+
+
+def test_mapa_contas_normaliza_numero_e_ignora_sem_id_interno():
+    contas = [
+        {"cue_ncuenta": "0095", "cue_iid": "9385", "cue_cnombre": "CLINICA KENNEDY"},
+        {"cue_ncuenta": "0004", "cue_iid": 4021, "cue_cnombre": "VILLEFORT TROPICAL"},
+        {"cue_ncuenta": "0099", "cue_cnombre": "SEM ID INTERNO"},
+    ]
+    mapa = mapa_contas(contas)
+    assert mapa == {
+        "95": ("9385", "CLINICA KENNEDY"),
+        "4": ("4021", "VILLEFORT TROPICAL"),
+    }
 
 
 # ---------- nomes de arquivo ----------

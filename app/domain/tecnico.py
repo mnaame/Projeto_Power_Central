@@ -24,6 +24,15 @@ from openpyxl.utils import get_column_letter
 # tarefa (nomes variam conforme a versão da API da Auvo).
 _CAMPOS_TECNICO = ("userToName", "idUserToName", "userTo", "responsavel", "idUserTo")
 
+# Mesma ideia para o cliente Auvo da tarefa (id para o de-para reverso,
+# nome só para mostrar quando não há vínculo) e para o horário — nenhum
+# desses três foi validado contra uma tarefa real de agenda (só os campos
+# de status o foram, contra a tarefa 77330829); por isso são vários
+# candidatos e nunca um erro — pior caso é a coluna ficar vazia na tela.
+_CAMPOS_ID_CLIENTE = ("customerId", "idCustomer")
+_CAMPOS_NOME_CLIENTE = ("customerDescription", "customerName")
+_CAMPOS_HORARIO = ("taskDate", "startDatetime", "startDate", "scheduledDate", "date")
+
 _MARCADOR_ERRO_1 = "no se encontr"
 _MARCADOR_ERRO_2 = "regularizar la situaci"
 
@@ -60,6 +69,53 @@ def tecnico_corresponde(tarefa: Mapping[str, object], alvo: str) -> bool:
         return True
     nome = _sem_acentos(nome_tecnico_da_tarefa(tarefa)).lower()
     return _sem_acentos(alvo).lower() in nome
+
+
+def id_cliente_da_tarefa(tarefa: Mapping[str, object]) -> int | None:
+    """Id do cliente Auvo da tarefa — chave do de-para reverso."""
+    for campo in _CAMPOS_ID_CLIENTE:
+        valor = tarefa.get(campo)
+        if valor is not None:
+            try:
+                return int(valor)
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def nome_cliente_da_tarefa(tarefa: Mapping[str, object]) -> str:
+    """Nome do cliente Auvo, só para exibir quando a loja não tem
+    vínculo no de-para (com vínculo, o nome que conta é o da PowerCentral)."""
+    for campo in _CAMPOS_NOME_CLIENTE:
+        valor = _texto(tarefa.get(campo))
+        if valor:
+            return valor
+    id_cliente = id_cliente_da_tarefa(tarefa)
+    return str(id_cliente) if id_cliente is not None else ""
+
+
+def horario_da_tarefa(tarefa: Mapping[str, object]) -> str:
+    """Só para exibir na tela — nunca usado em regra de negócio, então um
+    campo não encontrado não é erro, fica em branco."""
+    for campo in _CAMPOS_HORARIO:
+        valor = _texto(tarefa.get(campo))
+        if valor:
+            return valor
+    return ""
+
+
+def mapa_contas(contas_brutas: Sequence[Mapping[str, object]]) -> dict[str, tuple[str, str]]:
+    """Número normalizado (sem zeros à esquerda) -> (cue_iid, nome), a
+    partir da lista crua de `listar_todas_contas`. Mesma normalização de
+    conta usada no resto do sistema (`auvo_service.normalizar_conta`)."""
+    mapa: dict[str, tuple[str, str]] = {}
+    for conta in contas_brutas:
+        numero = _texto(conta.get("cue_ncuenta")).lstrip("0") or "0"
+        cue_iid = conta.get("cue_iid") or conta.get("Id")
+        if cue_iid is None:
+            continue
+        mapa[numero] = (str(cue_iid), _texto(conta.get("cue_cnombre")))
+    return mapa
 
 
 def sanitizar_nome_arquivo(nome: str, *, tamanho_maximo: int = TAM_MAX_NOME_ARQUIVO) -> str:
