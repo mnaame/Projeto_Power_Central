@@ -20,7 +20,7 @@ from app.domain.dates import FUSO_HORARIO
 from app.extensions import db
 from app.integrations.auvo_client import AuvoError
 from app.models.auvo import AuvoChamado, AuvoDepara
-from app.services import audit_service, auvo_service, settings_service
+from app.services import audit_service, auvo_service, report_service, settings_service, trigger_service
 from app.web.auth.decorators import roles_required
 from app.web.auvo.forms import ConfiguracaoAuvoForm, CredenciaisAuvoForm, TestarCriacaoForm
 
@@ -113,6 +113,62 @@ def painel():
         total_paginas=total_paginas,
         total=total,
     )
+
+
+@bp.route("/verificar-agora", methods=["POST"])
+@login_required
+def verificar_agora():
+    """Botão "Verificar tudo agora": roda, na hora, os dois gatilhos que
+    alimentam a Auvo — o ciclo do coletor (sem comunicação, mesmo efeito do
+    botão "Atualizar agora" do Painel) e o relatório de Disparos com a
+    janela automática (desde o último até agora) — sem precisar visitar o
+    Painel nem a aba de Disparos. Cada um tem seu próprio lock/cooldown;
+    um bloqueado não impede o outro de rodar."""
+    try:
+        cycle = trigger_service.disparar_manual(config=current_app.config, user_id=current_user.id)
+        audit_service.registrar(
+            action="manual_update",
+            result="success" if cycle.status == "success" else "failure",
+            user=current_user,
+            details={
+                "cycle_id": cycle.id,
+                "status": cycle.status,
+                "error": cycle.error_message,
+                "origem": "chamados",
+            },
+        )
+        if cycle.status == "success":
+            flash("Sem comunicação: verificado agora.", "info")
+        else:
+            flash(f"Sem comunicação terminou com erro: {cycle.error_message}", "warning")
+    except trigger_service.CicloEmAndamentoError:
+        flash("Sem comunicação: já havia uma verificação em andamento.", "warning")
+    except trigger_service.CooldownAtivoError as exc:
+        flash(f"Sem comunicação: aguarde mais {exc.segundos_restantes}s antes de verificar de novo.", "warning")
+
+    try:
+        run = report_service.gerar_disparos(config=current_app.config, user_id=current_user.id)
+        audit_service.registrar(
+            action="report_generated",
+            result="success" if run.status == "success" else "failure",
+            user=current_user,
+            details={
+                "module": "disparos",
+                "run_id": run.id,
+                "row_count": run.row_count,
+                "error": run.error_message,
+                "origem": "chamados",
+            },
+        )
+        if run.status == "success":
+            flash(f"Disparos: verificado agora ({run.row_count} cliente(s) no período).", "info")
+        else:
+            flash(f"Disparos terminou com erro: {run.error_message}", "warning")
+    except report_service.RelatorioEmAndamentoError:
+        flash("Disparos: já havia uma geração em andamento.", "warning")
+
+    db.session.commit()
+    return redirect(url_for("auvo.painel"))
 
 
 # ----------------------------------------------------------------------

@@ -330,6 +330,15 @@ A aba **Chamados** abre tarefas na Auvo automaticamente quando um cliente
 fica sem comunicação real ou acumula disparos aleatórios demais — fechando
 o ciclo do monitoramento até o despacho de um técnico.
 
+**Botão "Verificar tudo agora"** (topo do painel, operador ou admin): roda
+os dois gatilhos na hora, sem esperar o ciclo automático — o mesmo ciclo do
+coletor que já verifica sem comunicação a cada 5 min, mais o relatório de
+Disparos com a janela automática (desde o último até agora). Os dois têm
+cooldown/lock independentes: se um estiver bloqueado (ex.: sem comunicação
+em cooldown), o outro roda normalmente. Útil para lançar chamados novos de
+disparo durante o dia, sem precisar ir até a aba de Disparos gerar o
+relatório manualmente.
+
 **Modo (importante).** Começa em **Simulação**: os gatilhos rodam e o
 histórico registra "o que seria aberto", mas nada é enviado à Auvo. Só
 depois de validar o de-para e o payload é que se liga o **modo Produção**

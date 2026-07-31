@@ -6,16 +6,21 @@
 <div class="section">
   <div class="section-title">
     <h2>Abertura de Chamados (Auvo)</h2>
-    {% if current_user.is_admin %}
     <div style="display: flex; gap: var(--space-2);">
+      <form method="post" action="{{ url_for('auvo.verificar_agora') }}" data-loading-submit>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary">Verificar tudo agora</button>
+      </form>
+      {% if current_user.is_admin %}
       <a class="btn btn-ghost" href="{{ url_for('auvo.depara') }}">Gestão do de-para</a>
       <a class="btn btn-ghost" href="{{ url_for('auvo.configuracao') }}">Configuração</a>
+      {% endif %}
     </div>
-    {% endif %}
   </div>
   <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
     Tarefas abertas automaticamente na Auvo quando um cliente fica sem comunicação
-    ou acumula disparos aleatórios.
+    ou acumula disparos aleatórios. "Verificar tudo agora" roda os dois gatilhos na
+    hora, sem esperar o ciclo automático.
   </p>
 
   <div class="stat-grid">
