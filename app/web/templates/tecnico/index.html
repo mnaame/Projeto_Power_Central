@@ -6,6 +6,9 @@
 <div class="section">
   <div class="section-title">
     <h2>Relatório do Técnico do Dia</h2>
+    {% if current_user.is_admin %}
+    <a class="btn btn-ghost" href="{{ url_for('tecnico.configuracao') }}">Configuração</a>
+    {% endif %}
   </div>
   <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
     Antes do técnico visitar as lojas do dia, gera o histórico da PowerCentral

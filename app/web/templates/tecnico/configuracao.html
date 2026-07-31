@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Configuração — Relatório do Técnico{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>Configuração — Relatório do Técnico</h2>
+    <a class="btn btn-ghost" href="{{ url_for('tecnico.index') }}">Voltar</a>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Padrões da tela</h2></div>
+  <div class="card" style="max-width: 560px;">
+    <p class="muted" style="margin-bottom: var(--space-4);">
+      Pré-preenchem os filtros ao abrir a tela — cada geração ainda pode
+      ajustar por conta própria antes de puxar a agenda.
+    </p>
+    <form method="post" action="{{ url_for('tecnico.salvar_configuracao') }}" novalidate>
+      {{ form.csrf_token }}
+
+      <div class="field">
+        {{ form.nome_padrao.label }}
+        {{ form.nome_padrao(placeholder="vazio = todos") }}
+        {% for mensagem in form.nome_padrao.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.codigos_padrao.label }}
+        {{ form.codigos_padrao() }}
+        {% for mensagem in form.codigos_padrao.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      <p class="muted" style="margin-top: calc(-1 * var(--space-3)); font-size: var(--font-size-xs);">
+        Lista separada por vírgula — mesmos códigos usados no histórico da
+        PowerCentral (ex.: CLO, OPN = arme/desarme pelo painel; ROP, RCL =
+        arme/desarme remoto; BUR = disparo; BYP = zona isolada).
+      </p>
+
+      <div class="field">
+        {{ form.periodo_dias_padrao.label }}
+        {{ form.periodo_dias_padrao() }}
+        {% for mensagem in form.periodo_dias_padrao.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <button type="submit" class="btn btn-primary">Salvar configuração</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

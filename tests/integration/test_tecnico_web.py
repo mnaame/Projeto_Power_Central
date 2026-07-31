@@ -1,7 +1,7 @@
 from app.extensions import db
 from app.models.auvo import AuvoDepara
 from app.models.tecnico import TecnicoLote
-from app.services import auvo_service, tecnico_service
+from app.services import auvo_service, settings_service, tecnico_service
 
 
 class FakeAuvoClient:
@@ -151,3 +151,28 @@ def test_gerar_lote_falha_isolada_aparece_no_detalhe(app, operador_client, monke
     lote = TecnicoLote.query.order_by(TecnicoLote.id.desc()).first()
     assert lote.status == "error"
     assert lote.itens[0].status == "erro"
+
+
+# ---------- configuração (admin) ----------
+
+
+def test_operador_nao_acessa_configuracao(operador_client):
+    assert operador_client.get("/tecnico/configuracao").status_code == 403
+
+
+def test_admin_ve_e_salva_configuracao(app, admin_client):
+    assert admin_client.get("/tecnico/configuracao").status_code == 200
+
+    resposta = admin_client.post(
+        "/tecnico/configuracao/salvar",
+        data={
+            "nome_padrao": "Henrique",
+            "codigos_padrao": "CLO,OPN,BUR",
+            "periodo_dias_padrao": "45",
+        },
+        follow_redirects=True,
+    )
+    assert resposta.status_code == 200
+    assert settings_service.get_tecnico_nome_padrao() == "Henrique"
+    assert settings_service.get_tecnico_codigos_padrao() == ("CLO", "OPN", "BUR")
+    assert settings_service.get_tecnico_periodo_dias_padrao() == 45

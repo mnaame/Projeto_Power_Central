@@ -403,6 +403,43 @@ cooldown), `sem_depara` (conta sem vínculo OK) ou `falha` (com o corpo
 enviado e a resposta da Auvo expandíveis, para diagnóstico). Segue a mesma
 retenção dos relatórios.
 
+### 5.2.3 Relatório do Técnico
+
+A aba **Relatório do Técnico** prepara o técnico antes de ele sair para
+visitar as lojas do dia: para cada loja na agenda dele na Auvo, baixa o
+histórico da PowerCentral (arme, desarme, disparo, zona isolada, arme/
+desarme remoto) — **um arquivo por loja**, no formato nativo da plataforma
+(o mesmo que o export manual gera, com as cores por tipo de evento).
+
+**Fluxo:**
+
+1. Escolha a **data da agenda** (padrão hoje), o **técnico** (nome ou id —
+   vazio pega todos), o **período do histórico** (padrão configurável de N
+   dias antes da agenda, ou manual com hora) e os **códigos de evento**
+   (lista separada por vírgula — o padrão cobre arme/desarme pelo painel e
+   remoto, disparo e zona isolada).
+2. **"Puxar agenda do dia"**: busca as tarefas da Auvo no dia e cruza com o
+   de-para (a mesma tabela usada em Chamados). Cada linha mostra loja,
+   conta, horário, técnico e o vínculo — lojas **sem vínculo OK no de-para**
+   aparecem desmarcadas e desabilitadas, com um link direto para a Gestão
+   do de-para (Chamados) resolver antes de gerar. Cada linha tem seu campo
+   de códigos, pré-preenchido com o padrão — dá para ajustar só daquela
+   loja antes de confirmar.
+3. **"Gerar selecionados"**: baixa o histórico de cada loja marcada. Uma
+   falha numa loja (ex.: conta sem `cue_iid`, ou a PowerCentral recusando o
+   export por permissão) não derruba as demais — cada uma tem seu próprio
+   status na tela seguinte (`gerado`/`erro`).
+4. Na tela do lote: download por loja pronta, **"Baixar todos (.zip)"** com
+   só as que geraram com sucesso, e o motivo do erro (quando houver) de cada
+   loja que falhou.
+5. A página inicial guarda o **histórico de lotes** (quem gerou, técnico,
+   data da agenda, período, quantas lojas geraram) com link para reabrir
+   qualquer lote e baixar de novo.
+
+**Configuração** (Relatório do Técnico → Configuração, só admin): técnico
+padrão, códigos de evento padrão e período padrão do histórico (em dias) —
+só pré-preenchem os filtros da tela; cada geração pode ajustar à vontade.
+
 ### 5.3 Administração
 
 Em **Configurações** (só admin): janela de horas sem comunicação, lista de

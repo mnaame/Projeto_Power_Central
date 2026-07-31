@@ -21,6 +21,8 @@ from app.extensions import db
 from app.integrations.auvo_client import AuvoError
 from app.models.tecnico import TecnicoLote, TecnicoLoteItem
 from app.services import audit_service, settings_service, tecnico_service
+from app.web.auth.decorators import roles_required
+from app.web.tecnico.forms import ConfiguracaoTecnicoForm
 
 bp = Blueprint("tecnico", __name__, url_prefix="/tecnico")
 
@@ -266,3 +268,60 @@ def download_zip(lote_id: int):
         abort(404)
     caminho_zip = tecnico_service.montar_zip(lote)
     return send_file(caminho_zip, as_attachment=True, download_name=caminho_zip.name)
+
+
+# ----------------------------------------------------------------------
+# Configuração (admin)
+# ----------------------------------------------------------------------
+
+
+def _form_configuracao_preenchido() -> ConfiguracaoTecnicoForm:
+    return ConfiguracaoTecnicoForm(
+        nome_padrao=settings_service.get_tecnico_nome_padrao(),
+        codigos_padrao=",".join(settings_service.get_tecnico_codigos_padrao()),
+        periodo_dias_padrao=settings_service.get_tecnico_periodo_dias_padrao(),
+    )
+
+
+@bp.route("/configuracao")
+@login_required
+@roles_required("admin")
+def configuracao():
+    return render_template(
+        "tecnico/configuracao.html", form=_form_configuracao_preenchido()
+    )
+
+
+@bp.route("/configuracao/salvar", methods=["POST"])
+@login_required
+@roles_required("admin")
+def salvar_configuracao():
+    form = ConfiguracaoTecnicoForm()
+    if not form.validate_on_submit():
+        flash("Configuração inválida — confira os campos destacados.", "warning")
+        return render_template("tecnico/configuracao.html", form=form)
+
+    settings_service.set(
+        "tecnico_nome_padrao", (form.nome_padrao.data or "").strip(), updated_by_id=current_user.id
+    )
+    codigos = ",".join(_parse_codigos(form.codigos_padrao.data))
+    settings_service.set("tecnico_codigos_padrao", codigos, updated_by_id=current_user.id)
+    settings_service.set(
+        "tecnico_periodo_dias_padrao",
+        str(form.periodo_dias_padrao.data),
+        updated_by_id=current_user.id,
+    )
+
+    audit_service.registrar(
+        action="tecnico_config_saved",
+        result="success",
+        user=current_user,
+        details={
+            "nome_padrao": form.nome_padrao.data,
+            "codigos_padrao": codigos,
+            "periodo_dias_padrao": form.periodo_dias_padrao.data,
+        },
+    )
+    db.session.commit()
+    flash("Configuração do Relatório do Técnico salva.", "info")
+    return redirect(url_for("tecnico.configuracao"))

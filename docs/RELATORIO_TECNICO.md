@@ -175,10 +175,20 @@ campo não-vazio entre `userToName`/`idUserToName`/`userTo`/`responsavel`/
 
 | Fase | Entrega | Prova |
 |---|---|---|
-| **RT1** | Client SoftGuard/Auvo (novos métodos) + modelos + migration + settings | Unit dos clients com respostas fake (paginação da agenda, export HTML, erro de permissão) |
-| **RT2** | `tecnico_service.py` completo (agenda + de-para reverso + geração por loja + zip) | Integração: agenda com/sem vínculo, geração com falha isolada por loja, zip só dos selecionados |
-| **RT3** | Aba web completa (filtros, tabela com checkbox, override por loja, progresso, download, zip, histórico) | Integração web + screenshots claro/escuro |
-| **RT4** | Config admin + docs (`OPERACAO.md`) + validação final | Suíte completa verde |
+| **RT1** ✅ | Client SoftGuard/Auvo (novos métodos) + modelos + migration + settings | Unit dos clients com respostas fake (paginação da agenda, export HTML, erro de permissão) |
+| **RT2** ✅ | `tecnico_service.py` completo (agenda + de-para reverso + geração por loja + zip) | Integração: agenda com/sem vínculo, geração com falha isolada por loja, zip só dos selecionados |
+| **RT3** ✅ | Aba web completa (filtros, tabela com checkbox, override por loja, download, zip, histórico) | Integração web + screenshots claro/escuro (Playwright) |
+| **RT4** ✅ | Config admin + docs (`OPERACAO.md`) + validação final | Suíte completa verde |
+
+Módulo concluído. Sem fila em background: "Gerar selecionados" roda a
+criação e a geração do lote de forma síncrona dentro do próprio request —
+mesmo padrão de todos os outros botões de "gerar relatório" do site (não
+existe job assíncrono em lugar nenhum aqui), então o §3.5 original
+("progresso por loja via polling") virou a tela de detalhe do lote logo
+após a geração, sem barra de progresso ao vivo. O override de códigos por
+loja também não usa um diálogo separado ("ajustar eventos") como o plano
+original cogitava — é um campo de texto por linha, já visível, pré-
+preenchido com o padrão.
 
 O que NUNCA entra no repositório: credenciais (já cobertas pelos módulos
 anteriores), nomes reais de técnicos além do que já está nas configs.
