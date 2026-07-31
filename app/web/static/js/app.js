@@ -48,6 +48,19 @@
         botaoEnvio.disabled = true;
       }
     });
+
+    document.addEventListener("click", function (evento) {
+      var botao = evento.target.closest("[data-marcar-todas]");
+      if (!botao) {
+        return;
+      }
+      var marcar = botao.getAttribute("data-marcar-todas") === "1";
+      document.querySelectorAll("[data-linha-checkbox]").forEach(function (caixa) {
+        if (!caixa.disabled) {
+          caixa.checked = marcar;
+        }
+      });
+    });
   });
 
   function iniciarPolling(alvo, url, intervaloMs) {

@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Relatório do Técnico{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>Relatório do Técnico do Dia</h2>
+  </div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Antes do técnico visitar as lojas do dia, gera o histórico da PowerCentral
+    (arme, desarme, disparo, zona isolada, arme/desarme remoto) de cada loja da
+    agenda dele — um arquivo por loja, no formato nativo da plataforma.
+  </p>
+
+  <form method="post" action="{{ url_for('tecnico.puxar_agenda') }}" data-loading-submit
+        class="card" style="display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: flex-end;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="field" style="margin-bottom: 0;">
+      <label for="data_agenda">Data da agenda</label>
+      <input id="data_agenda" type="date" name="data_agenda" value="{{ filtros.data_agenda }}">
+    </div>
+    <div class="field" style="margin-bottom: 0;">
+      <label for="tecnico">Técnico (nome ou id)</label>
+      <input id="tecnico" type="text" name="tecnico" value="{{ filtros.tecnico }}" placeholder="todos">
+    </div>
+    <div class="field" style="margin-bottom: 0;">
+      <label for="dias_historico">Histórico: últimos N dias</label>
+      <input id="dias_historico" type="number" min="1" max="365" name="dias_historico" value="{{ filtros.dias_historico }}">
+    </div>
+    <div class="field" style="margin-bottom: 0;">
+      <label for="periodo_inicio">Início manual (opcional)</label>
+      <input id="periodo_inicio" type="datetime-local" name="periodo_inicio" value="{{ filtros.periodo_inicio }}">
+    </div>
+    <div class="field" style="margin-bottom: 0;">
+      <label for="periodo_fim">Fim manual (opcional)</label>
+      <input id="periodo_fim" type="datetime-local" name="periodo_fim" value="{{ filtros.periodo_fim }}">
+    </div>
+    <div class="field" style="margin-bottom: 0; min-width: 260px;">
+      <label for="codigos">Códigos de evento</label>
+      <input id="codigos" type="text" name="codigos" value="{{ filtros.codigos }}">
+    </div>
+
+    <button type="submit" class="btn btn-primary">Puxar agenda do dia</button>
+  </form>
+</div>
+
+{% if agenda is not none %}
+<div class="section">
+  <div class="section-title">
+    <h2>Agenda de {{ filtros.data_agenda }}{% if filtros.tecnico %} — {{ filtros.tecnico }}{% endif %}</h2>
+  </div>
+  {% if periodo %}
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Período do histórico: {{ periodo[0]|data_local }} → {{ periodo[1]|data_local }}
+  </p>
+  {% endif %}
+
+  {% if agenda %}
+  <form method="post" action="{{ url_for('tecnico.gerar') }}" data-loading-submit>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="data_agenda" value="{{ filtros.data_agenda }}">
+    <input type="hidden" name="tecnico" value="{{ filtros.tecnico }}">
+    <input type="hidden" name="dias_historico" value="{{ filtros.dias_historico }}">
+    <input type="hidden" name="periodo_inicio" value="{{ filtros.periodo_inicio }}">
+    <input type="hidden" name="periodo_fim" value="{{ filtros.periodo_fim }}">
+    <input type="hidden" name="codigos" value="{{ filtros.codigos }}">
+    <input type="hidden" name="total_linhas" value="{{ agenda|length }}">
+
+    <div style="display: flex; gap: var(--space-2); margin-bottom: var(--space-3);">
+      <button type="button" class="btn btn-ghost" data-marcar-todas="1">Marcar todas</button>
+      <button type="button" class="btn btn-ghost" data-marcar-todas="0">Desmarcar todas</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>Loja</th>
+            <th>Conta</th>
+            <th>Horário</th>
+            <th>Técnico</th>
+            <th>Vínculo</th>
+            <th>Códigos (loja)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in agenda %}
+          <tr>
+            <td>
+              <input type="checkbox" name="selecionar" value="{{ loop.index0 }}"
+                     data-linha-checkbox
+                     {{ 'checked' if item.tem_depara }}
+                     {{ 'disabled' if not item.tem_depara }}>
+              <input type="hidden" name="conta_power_{{ loop.index0 }}" value="{{ item.conta_power or '' }}">
+              <input type="hidden" name="nome_loja_{{ loop.index0 }}" value="{{ item.nome_conta or item.nome_auvo }}">
+              <input type="hidden" name="id_auvo_cliente_{{ loop.index0 }}" value="{{ item.id_auvo_cliente or '' }}">
+              <input type="hidden" name="horario_{{ loop.index0 }}" value="{{ item.horario }}">
+            </td>
+            <td>{{ item.nome_conta or item.nome_auvo }}</td>
+            <td class="is-numeric">{{ item.conta_power or '—' }}</td>
+            <td>{{ item.horario or '—' }}</td>
+            <td>{{ item.tecnico or '—' }}</td>
+            <td>
+              {% if item.tem_depara %}
+              <span class="chip chip-ok">vinculada</span>
+              {% else %}
+              <span class="chip chip-warning">sem vínculo</span>
+              {% if current_user.is_admin %}
+              <a href="{{ url_for('auvo.depara') }}">gerenciar</a>
+              {% endif %}
+              {% endif %}
+            </td>
+            <td><input type="text" name="codigos_{{ loop.index0 }}" value="{{ filtros.codigos }}" style="width: 160px;"></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top: var(--space-4);">
+      <button type="submit" class="btn btn-primary">Gerar selecionados</button>
+    </div>
+  </form>
+  {% else %}
+  <div class="card empty-state">
+    <h3>Nenhuma tarefa encontrada</h3>
+    <p class="muted">Não há tarefas na agenda da Auvo para esse dia/técnico.</p>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="section">
+  <div class="section-title"><h2>Histórico de lotes</h2></div>
+  {% if lotes %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Criado em</th>
+          <th>Por</th>
+          <th>Técnico</th>
+          <th>Agenda</th>
+          <th>Período</th>
+          <th class="is-numeric">Lojas</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set estilos = {'success': 'chip-ok', 'parcial': 'chip-warning', 'error': 'chip-critical', 'running': 'chip-neutral'} %}
+        {% for lote in lotes %}
+        <tr>
+          <td class="is-numeric">{{ lote.criado_em|data_local }}</td>
+          <td>{{ lote.criado_por.username if lote.criado_por else '—' }}</td>
+          <td>{{ lote.tecnico_nome or '—' }}</td>
+          <td class="is-numeric">{{ lote.data_agenda }}</td>
+          <td class="is-numeric">{{ lote.periodo_desde|data_local }} → {{ lote.periodo_hasta|data_local }}</td>
+          <td class="is-numeric">{{ lote.itens|selectattr('status', 'equalto', 'gerado')|list|length }}/{{ lote.itens|length }}</td>
+          <td><span class="chip {{ estilos.get(lote.status, 'chip-neutral') }}">{{ lote.status }}</span></td>
+          <td><a href="{{ url_for('tecnico.lote_detalhe', lote_id=lote.id) }}">Ver</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Nenhum lote gerado ainda.</p>
+  {% endif %}
+</div>
+{% endblock %}

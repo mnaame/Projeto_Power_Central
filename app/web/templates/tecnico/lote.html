@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Lote #{{ lote.id }} — Relatório do Técnico{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>Lote #{{ lote.id }} — {{ lote.data_agenda }}{% if lote.tecnico_nome %} · {{ lote.tecnico_nome }}{% endif %}</h2>
+    {% if gerados > 0 %}
+    <a class="btn btn-primary" href="{{ url_for('tecnico.download_zip', lote_id=lote.id) }}">Baixar todos (.zip)</a>
+    {% endif %}
+  </div>
+
+  {% set estilos_lote = {'success': 'chip-ok', 'parcial': 'chip-warning', 'error': 'chip-critical', 'running': 'chip-neutral'} %}
+  <div class="stat-grid">
+    <div class="stat-tile">
+      <div class="stat-tile-label">Status</div>
+      <div class="stat-tile-value" style="font-size: var(--font-size-xl);">
+        <span class="chip {{ estilos_lote.get(lote.status, 'chip-neutral') }}">{{ lote.status }}</span>
+      </div>
+      {% if lote.erro_mensagem %}
+      <div class="stat-tile-hint">{{ lote.erro_mensagem }}</div>
+      {% endif %}
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Lojas geradas</div>
+      <div class="stat-tile-value">{{ gerados }}/{{ lote.itens|length }}</div>
+      <div class="stat-tile-hint">{{ erros }} com erro</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Período do histórico</div>
+      <div class="stat-tile-value" style="font-size: var(--font-size-lg);">
+        {{ lote.periodo_desde|data_local }} → {{ lote.periodo_hasta|data_local }}
+      </div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Criado em</div>
+      <div class="stat-tile-value" style="font-size: var(--font-size-lg);">{{ lote.criado_em|data_local }}</div>
+      <div class="stat-tile-hint">{{ lote.criado_por.username if lote.criado_por else '—' }}</div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Loja</th>
+          <th>Conta</th>
+          <th>Status</th>
+          <th>Detalhe</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set estilos_item = {'gerado': 'chip-ok', 'erro': 'chip-critical', 'sem_depara': 'chip-warning', 'pendente': 'chip-neutral', 'nao_selecionado': 'chip-neutral'} %}
+        {% for item in lote.itens %}
+        <tr>
+          <td>{{ item.nome_loja or '—' }}</td>
+          <td class="is-numeric">{{ item.conta_power or '—' }}</td>
+          <td><span class="chip {{ estilos_item.get(item.status, 'chip-neutral') }}">{{ item.status }}</span></td>
+          <td>{{ item.erro_mensagem or '—' }}</td>
+          <td>
+            {% if item.status == 'gerado' %}
+            <a href="{{ url_for('tecnico.download_item', lote_id=lote.id, item_id=item.id) }}">Baixar</a>
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <a class="btn btn-ghost" href="{{ url_for('tecnico.index') }}" style="margin-top: var(--space-4); display: inline-block;">Voltar</a>
+</div>
+{% endblock %}

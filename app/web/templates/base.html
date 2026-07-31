@@ -59,6 +59,13 @@
           </svg>
           Chamados
         </a>
+        <a class="sidebar-link {{ 'is-active' if request.path.startswith('/tecnico') }}" href="{{ url_for('tecnico.index') }}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="4" y="3" width="16" height="18" rx="2"></rect>
+            <path d="M8 3v3h8V3M8 11l2.5 2.5L16 8"></path>
+          </svg>
+          Relatório do Técnico
+        </a>
         {% if current_user.is_admin %}
         <a class="sidebar-link {{ 'is-active' if request.endpoint == 'admin.usuarios' }}" href="{{ url_for('admin.usuarios') }}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
