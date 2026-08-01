@@ -26,6 +26,12 @@ from app.services.collector import credenciais_softguard
 
 logger = logging.getLogger("bi")
 
+# O histórico do BI cobre todas as contas por até ~90 dias de uma vez
+# (padrão bem mais pesado que os outros relatórios — Atendimentos/Disparos
+# usam janelas de dias, não meses) — o timeout padrão do client (15s) não
+# é suficiente para essa consulta na maioria das instalações.
+TIMEOUT_HISTORICO_SEGUNDOS = 120
+
 _lock_recalculo = threading.Lock()
 
 
@@ -43,7 +49,7 @@ def _executar_com_lock(funcao):
 
 
 def _criar_cliente_softguard(config) -> SoftGuardClient:
-    return SoftGuardClient(credenciais_softguard(config))
+    return SoftGuardClient(credenciais_softguard(config), timeout=TIMEOUT_HISTORICO_SEGUNDOS)
 
 
 def _tipo_tarefa(tarefa: Mapping[str, object]) -> int | None:
