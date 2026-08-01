@@ -21,6 +21,8 @@ from app.extensions import db
 from app.models.bi import BiRun
 from app.services import audit_service, bi_service, settings_service
 from app.services.report_xlsx import gerar_xlsx_bi_cronicos, gerar_xlsx_bi_intervencoes
+from app.web.auth.decorators import roles_required
+from app.web.bi.forms import ConfiguracaoBiForm
 
 bp = Blueprint("bi", __name__, url_prefix="/bi")
 
@@ -298,3 +300,79 @@ def exportar(run_id: int, tabela: str):
     db.session.commit()
 
     return send_file(caminho, as_attachment=True, download_name=caminho.name)
+
+
+# ----------------------------------------------------------------------
+# Configuração (admin)
+# ----------------------------------------------------------------------
+
+
+def _form_configuracao_preenchido() -> ConfiguracaoBiForm:
+    return ConfiguracaoBiForm(
+        janela_dias=settings_service.get_bi_janela_dias(),
+        limiar_melhora=int(settings_service.get_bi_limiar_melhora()),
+        limiar_piora=int(settings_service.get_bi_limiar_piora()),
+        tipos_intervencao=",".join(str(t) for t in settings_service.get_bi_tipos_intervencao()),
+        visitas_para_cronico=settings_service.get_bi_visitas_para_cronico(),
+        periodo_padrao_dias=settings_service.get_bi_periodo_padrao_dias(),
+        amostra_minima_tecnico=settings_service.get_bi_amostra_minima_tecnico(),
+    )
+
+
+@bp.route("/configuracao")
+@login_required
+@roles_required("admin")
+def configuracao():
+    return render_template("bi/configuracao.html", form=_form_configuracao_preenchido())
+
+
+@bp.route("/configuracao/salvar", methods=["POST"])
+@login_required
+@roles_required("admin")
+def salvar_configuracao():
+    form = ConfiguracaoBiForm()
+    if not form.validate_on_submit():
+        flash("Configuração inválida — confira os campos destacados.", "warning")
+        return render_template("bi/configuracao.html", form=form)
+
+    settings_service.set("bi_janela_dias", str(form.janela_dias.data), updated_by_id=current_user.id)
+    settings_service.set(
+        "bi_limiar_melhora", str(form.limiar_melhora.data), updated_by_id=current_user.id
+    )
+    settings_service.set(
+        "bi_limiar_piora", str(form.limiar_piora.data), updated_by_id=current_user.id
+    )
+    settings_service.set(
+        "bi_tipos_intervencao", (form.tipos_intervencao.data or "").strip(), updated_by_id=current_user.id
+    )
+    settings_service.set(
+        "bi_visitas_para_cronico",
+        str(form.visitas_para_cronico.data),
+        updated_by_id=current_user.id,
+    )
+    settings_service.set(
+        "bi_periodo_padrao_dias", str(form.periodo_padrao_dias.data), updated_by_id=current_user.id
+    )
+    settings_service.set(
+        "bi_amostra_minima_tecnico",
+        str(form.amostra_minima_tecnico.data),
+        updated_by_id=current_user.id,
+    )
+
+    audit_service.registrar(
+        action="bi_config_saved",
+        result="success",
+        user=current_user,
+        details={
+            "janela_dias": form.janela_dias.data,
+            "limiar_melhora": form.limiar_melhora.data,
+            "limiar_piora": form.limiar_piora.data,
+            "tipos_intervencao": form.tipos_intervencao.data,
+            "visitas_para_cronico": form.visitas_para_cronico.data,
+            "periodo_padrao_dias": form.periodo_padrao_dias.data,
+            "amostra_minima_tecnico": form.amostra_minima_tecnico.data,
+        },
+    )
+    db.session.commit()
+    flash("Configuração do BI salva.", "info")
+    return redirect(url_for("bi.configuracao"))

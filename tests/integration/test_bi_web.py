@@ -4,7 +4,7 @@ from app.domain.dates import FUSO_HORARIO
 from app.extensions import db
 from app.models.auvo import AuvoDepara
 from app.models.bi import BiRun
-from app.services import auvo_service, bi_service
+from app.services import auvo_service, bi_service, settings_service
 
 AGORA = datetime.now(FUSO_HORARIO)
 MARCO_FECHADO = AGORA - timedelta(days=20)
@@ -179,3 +179,36 @@ def test_exportar_tabela_invalida_404(operador_client):
 
 def test_run_detalhe_inexistente_404(operador_client):
     assert operador_client.get("/bi/run/999999").status_code == 404
+
+
+# ---------- configuração (admin) ----------
+
+
+def test_operador_nao_acessa_configuracao(operador_client):
+    assert operador_client.get("/bi/configuracao").status_code == 403
+
+
+def test_admin_ve_e_salva_configuracao(app, admin_client):
+    assert admin_client.get("/bi/configuracao").status_code == 200
+
+    resposta = admin_client.post(
+        "/bi/configuracao/salvar",
+        data={
+            "janela_dias": "10",
+            "limiar_melhora": "15",
+            "limiar_piora": "25",
+            "tipos_intervencao": "145696,145697",
+            "visitas_para_cronico": "4",
+            "periodo_padrao_dias": "60",
+            "amostra_minima_tecnico": "8",
+        },
+        follow_redirects=True,
+    )
+    assert resposta.status_code == 200
+    assert settings_service.get_bi_janela_dias() == 10
+    assert settings_service.get_bi_limiar_melhora() == 15
+    assert settings_service.get_bi_limiar_piora() == 25
+    assert settings_service.get_bi_tipos_intervencao() == (145696, 145697)
+    assert settings_service.get_bi_visitas_para_cronico() == 4
+    assert settings_service.get_bi_periodo_padrao_dias() == 60
+    assert settings_service.get_bi_amostra_minima_tecnico() == 8

@@ -440,6 +440,55 @@ desarme remoto) — **um arquivo por loja**, no formato nativo da plataforma
 padrão, códigos de evento padrão e período padrão do histórico (em dias) —
 só pré-preenchem os filtros da tela; cada geração pode ajustar à vontade.
 
+### 5.2.4 Eficácia do Técnico (BI)
+
+A aba **Eficácia do Técnico** responde a pergunta "o atendimento em campo
+realmente reduziu os disparos do cliente?" Para cada ordem **concluída**
+na Auvo numa loja com de-para OK, compara os disparos válidos por dia
+(mesma régua da aba Disparos — exclui pânico, rotina de arme/desarme e
+ciclo curto) numa janela **antes** e **depois** da conclusão (padrão 15
+dias, normalizado por dia), e classifica: melhorou, piorou, estável, ou
+sem base de comparação (cliente que já não disparava).
+
+**"Recalcular"** é o passo pesado: busca a agenda concluída na Auvo e o
+histórico de disparos na PowerCentral — pode levar alguns segundos. O
+resultado fica salvo (não busca de novo a cada clique na tela); o
+histórico de recálculos guarda os anteriores, com link para reabrir
+qualquer um.
+
+**O que a tela mostra:**
+- KPIs: intervenções no período, % que melhorou, disparos evitados
+  (estimativa) e clientes crônicos.
+- Gráfico antes×depois por técnico e uma linha de tendência (disparos/dia
+  depois de cada visita, em ordem cronológica).
+- Ranking de técnicos — com aviso de **amostra pequena** quando o técnico
+  teve poucas intervenções no período (não use isso isolado para decisão).
+- Clientes crônicos: visitas repetidas (padrão 3+) e que ainda disparam.
+- Tabela de intervenções, com avisos de **janela parcial** (a janela de
+  "depois" ainda não fechou os dias todos — o número pode mudar) e
+  **atribuição compartilhada** (duas visitas da mesma conta caindo na
+  mesma janela — não creditar 100% a uma só). Ambas as tabelas (e a de
+  clientes crônicos) têm botão de exportar para Excel.
+- Cada linha tem um link "ver no Técnico", que leva pro Relatório do
+  Técnico já com o técnico e a data da visita preenchidos, pronto pra
+  puxar a agenda daquele dia e baixar o histórico colorido da loja.
+
+**Configuração** (Eficácia do Técnico → Configuração, só admin): janela
+antes/depois, limiares de melhora/piora, tipos de tarefa que contam como
+intervenção (vazio = todos), visitas mínimas para virar crônico, período
+padrão de análise e amostra mínima por técnico. A tela também deixa
+ajustar janela e limiares por recálculo, em "avançado" — a configuração
+aqui é só o padrão.
+
+> **Importante antes de confiar no ranking para decisão**: o campo que
+> identifica a **data de conclusão** da tarefa na Auvo ainda não foi
+> confirmado contra produção (só o critério de "concluída ou não" foi).
+> Rode `python scripts\debug_bi_data_conclusao.py <ID_DA_TAREFA>` numa
+> tarefa que você sabe a data real da visita e confira se a data que o
+> BI escolheu bate. Se não bater, ajuste os candidatos em
+> `app/domain/bi.py` (`_CAMPOS_DATA_CONCLUSAO`) antes de usar os números
+> para avaliar técnicos.
+
 ### 5.3 Administração
 
 Em **Configurações** (só admin): janela de horas sem comunicação, lista de

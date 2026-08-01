@@ -6,6 +6,9 @@
 <div class="section">
   <div class="section-title">
     <h2>BI: Eficácia do Técnico</h2>
+    {% if current_user.is_admin %}
+    <a class="btn btn-ghost" href="{{ url_for('bi.configuracao') }}">Configuração</a>
+    {% endif %}
   </div>
   <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
     Compara os disparos de cada loja antes × depois de cada ordem concluída

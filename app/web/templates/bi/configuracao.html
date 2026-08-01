@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Configuração — Eficácia do Técnico{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>Configuração — BI: Eficácia do Técnico</h2>
+    <a class="btn btn-ghost" href="{{ url_for('bi.index') }}">Voltar</a>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Régua de classificação e padrões da tela</h2></div>
+  <div class="card" style="max-width: 560px;">
+    <p class="muted" style="margin-bottom: var(--space-4);">
+      Muda a régua para os PRÓXIMOS recálculos — runs já salvos mantêm os
+      valores usados na hora (cada `BiRun` guarda a janela e os limiares
+      que gerou). A tela também deixa ajustar janela/limiares por
+      recálculo, em "avançado" — o valor daqui é só o padrão.
+    </p>
+    <form method="post" action="{{ url_for('bi.salvar_configuracao') }}" novalidate>
+      {{ form.csrf_token }}
+
+      {% for campo in [form.janela_dias, form.limiar_melhora, form.limiar_piora] %}
+      <div class="field">
+        {{ campo.label }}
+        {{ campo() }}
+        {% for mensagem in campo.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      {% endfor %}
+
+      <div class="field">
+        {{ form.tipos_intervencao.label }}
+        {{ form.tipos_intervencao(placeholder="vazio = todos os tipos contam") }}
+        {% for mensagem in form.tipos_intervencao.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      <p class="muted" style="margin-top: calc(-1 * var(--space-3)); font-size: var(--font-size-xs);">
+        IDs de `taskType` da Auvo — só ordens desses tipos contam como
+        intervenção (ex.: manutenção em campo). Vazio conta qualquer
+        tarefa concluída.
+      </p>
+
+      {% for campo in [form.visitas_para_cronico, form.periodo_padrao_dias, form.amostra_minima_tecnico] %}
+      <div class="field">
+        {{ campo.label }}
+        {{ campo() }}
+        {% for mensagem in campo.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      {% endfor %}
+
+      <button type="submit" class="btn btn-primary">Salvar configuração</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

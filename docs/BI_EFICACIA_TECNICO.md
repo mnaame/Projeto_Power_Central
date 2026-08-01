@@ -169,10 +169,14 @@ uma data. `data_conclusao` tenta, em ordem, candidatos plausíveis
 `updatedDate`) e cai para `taskDate` (data agendada, não a de conclusão —
 aproximação de último caso) se nada bater; nunca quebra, só devolve vazio.
 **Antes de usar o ranking para decisão**, validar com o método de sempre:
-rodar `scripts/debug_auvo_tarefa.py <id>` numa tarefa concluída de verdade,
-conferir o campo de data contra o que se sabe daquela visita, e ajustar os
-candidatos se precisar (mesmo processo que validou `finished`/`taskStatus`
-e os campos de `domain/tecnico.py`).
+rodar `python scripts\debug_bi_data_conclusao.py <id>` (novo, RT4) numa
+tarefa concluída de verdade — mostra o JSON completo, quais candidatos
+existem e qual data `data_conclusao()` escolheria — conferir contra o que
+se sabe daquela visita, e ajustar `_CAMPOS_DATA_CONCLUSAO` em
+`app/domain/bi.py` se precisar (mesmo processo que validou
+`finished`/`taskStatus` e os campos de `domain/tecnico.py`). Isso ainda
+**não foi feito** — fica documentado em `docs/OPERACAO.md` §5.2.4 como
+passo obrigatório antes de usar o BI para avaliar técnicos.
 
 ## 7. Fases
 
@@ -181,7 +185,11 @@ e os campos de `domain/tecnico.py`).
 | **BI1** ✅ | `domain/bi.py` + modelos + migration + settings | Unit: janela/classificação (melhorou/piorou/estável/sem-base/parcial), atribuição compartilhada, `tarefa_concluida`/`data_conclusao` defensivos |
 | **BI2** ✅ | `bi_service.py` completo | Integração: recálculo fim-a-fim com fakes, falha isolada por conta, agregações |
 | **BI3** ✅ | Aba web (filtros, KPIs, gráficos SVG, tabelas exportáveis, drilldown) | Integração web + screenshots claro/escuro (Playwright) |
-| **BI4** | Config admin + docs + validação do campo de data | Suíte completa verde |
+| **BI4** ✅ | Config admin + docs + script de validação do campo de data | Suíte completa verde |
+
+Módulo concluído do lado do código. O único item que depende do usuário
+(não dá para validar sem acesso à Auvo de produção) é a validação do
+campo de data de conclusão — ver §6 e `docs/OPERACAO.md` §5.2.4.
 
 O que NUNCA entra no repositório: credenciais (já cobertas), nomes reais
 de técnicos/clientes além do que já está nas configs.
