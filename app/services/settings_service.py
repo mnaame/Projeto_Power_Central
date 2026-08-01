@@ -62,6 +62,14 @@ DEFAULTS: dict[str, str] = {
     "tecnico_codigos_padrao": "CLO,OPN,BUR,BYP,ROP,RCL",
     "tecnico_periodo_dias_padrao": "30",
     "tecnico_saida_xlsx_convertido": "false",
+    # Módulo BI: Eficácia do Técnico
+    "bi_janela_dias": "15",
+    "bi_limiar_melhora": "20",
+    "bi_limiar_piora": "20",
+    "bi_tipos_intervencao": "",  # vazio = todos os tipos de tarefa contam
+    "bi_visitas_para_cronico": "3",
+    "bi_periodo_padrao_dias": "90",
+    "bi_amostra_minima_tecnico": "5",
 }
 
 _TELEGRAM_TOKEN_KEY = "telegram_bot_token"
@@ -312,3 +320,44 @@ def get_tecnico_periodo_dias_padrao() -> int:
 
 def tecnico_saida_xlsx_convertido() -> bool:
     return get("tecnico_saida_xlsx_convertido").strip().lower() == "true"
+
+
+# --- Módulo BI: Eficácia do Técnico ---
+
+
+def get_bi_janela_dias() -> int:
+    return int(get("bi_janela_dias"))
+
+
+def get_bi_limiar_melhora() -> float:
+    return float(get("bi_limiar_melhora"))
+
+
+def get_bi_limiar_piora() -> float:
+    return float(get("bi_limiar_piora"))
+
+
+def get_bi_tipos_intervencao() -> tuple[int, ...]:
+    bruto = get("bi_tipos_intervencao")
+    valores: list[int] = []
+    for item in bruto.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            valores.append(int(item))
+        except ValueError:
+            continue
+    return tuple(valores)
+
+
+def get_bi_visitas_para_cronico() -> int:
+    return int(get("bi_visitas_para_cronico"))
+
+
+def get_bi_periodo_padrao_dias() -> int:
+    return int(get("bi_periodo_padrao_dias"))
+
+
+def get_bi_amostra_minima_tecnico() -> int:
+    return int(get("bi_amostra_minima_tecnico"))

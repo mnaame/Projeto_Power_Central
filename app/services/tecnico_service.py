@@ -66,7 +66,7 @@ class AgendaItem:
 # ----------------------------------------------------------------------
 
 
-def _conta_por_id_auvo(id_auvo: int) -> AuvoDepara | None:
+def conta_por_id_auvo(id_auvo: int) -> AuvoDepara | None:
     """De-para reverso — só status OK (REVISAR é casamento não confirmado,
     NAO é cliente que não abre chamado; nenhum dos dois é seguro aqui).
     Duas contas podem apontar pro mesmo id_auvo (loja + tesouraria); a
@@ -95,7 +95,7 @@ def buscar_agenda(
         if not dom_tecnico.tecnico_corresponde(tarefa, tecnico):
             continue
         id_cliente = dom_tecnico.id_cliente_da_tarefa(tarefa)
-        linha = _conta_por_id_auvo(id_cliente) if id_cliente is not None else None
+        linha = conta_por_id_auvo(id_cliente) if id_cliente is not None else None
         itens.append(
             AgendaItem(
                 id_auvo_cliente=id_cliente,

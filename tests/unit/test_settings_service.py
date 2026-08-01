@@ -23,6 +23,22 @@ def test_get_tecnico_retorna_padrao_quando_nao_configurado(app):
     assert settings_service.tecnico_saida_xlsx_convertido() is False
 
 
+def test_get_bi_retorna_padrao_quando_nao_configurado(app):
+    assert settings_service.get_bi_janela_dias() == 15
+    assert settings_service.get_bi_limiar_melhora() == 20.0
+    assert settings_service.get_bi_limiar_piora() == 20.0
+    assert settings_service.get_bi_tipos_intervencao() == ()
+    assert settings_service.get_bi_visitas_para_cronico() == 3
+    assert settings_service.get_bi_periodo_padrao_dias() == 90
+    assert settings_service.get_bi_amostra_minima_tecnico() == 5
+
+
+def test_get_bi_tipos_intervencao_ignora_valores_nao_numericos(app):
+    settings_service.set("bi_tipos_intervencao", "145696, abc ,145697")
+    db.session.commit()
+    assert settings_service.get_bi_tipos_intervencao() == (145696, 145697)
+
+
 def test_set_e_get_roundtrip(app):
     settings_service.set("window_hours", "5")
     db.session.commit()

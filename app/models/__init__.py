@@ -6,6 +6,7 @@ from app.models.watchdog import WatchdogState
 from app.models.report import ReportRun
 from app.models.auvo import AuvoChamado, AuvoDepara
 from app.models.tecnico import TecnicoLote, TecnicoLoteItem
+from app.models.bi import BiRun, BiIntervencao
 
 __all__ = [
     "User",
@@ -20,4 +21,6 @@ __all__ = [
     "AuvoChamado",
     "TecnicoLote",
     "TecnicoLoteItem",
+    "BiRun",
+    "BiIntervencao",
 ]
