@@ -25,6 +25,7 @@ def register_blueprints(app) -> None:
     from app.web.admin.routes import bp as admin_bp
     from app.web.auth.routes import bp as auth_bp
     from app.web.auvo.routes import bp as auvo_bp
+    from app.web.bi.routes import bp as bi_bp
     from app.web.dashboard.routes import bp as dashboard_bp
     from app.web.reports.routes import bp as reports_bp
     from app.web.tecnico.routes import bp as tecnico_bp
@@ -35,3 +36,4 @@ def register_blueprints(app) -> None:
     app.register_blueprint(reports_bp)
     app.register_blueprint(auvo_bp)
     app.register_blueprint(tecnico_bp)
+    app.register_blueprint(bi_bp)

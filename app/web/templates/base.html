@@ -66,6 +66,15 @@
           </svg>
           Relatório do Técnico
         </a>
+        <a class="sidebar-link {{ 'is-active' if request.path.startswith('/bi') }}" href="{{ url_for('bi.index') }}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M3 3v18h18"></path>
+            <rect x="7" y="12" width="3" height="6"></rect>
+            <rect x="13" y="8" width="3" height="10"></rect>
+            <rect x="19" y="5" width="3" height="13"></rect>
+          </svg>
+          Eficácia do Técnico
+        </a>
         {% if current_user.is_admin %}
         <a class="sidebar-link {{ 'is-active' if request.endpoint == 'admin.usuarios' }}" href="{{ url_for('admin.usuarios') }}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">

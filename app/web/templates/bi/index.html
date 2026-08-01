@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+
+{% block title %}Eficácia do Técnico{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>BI: Eficácia do Técnico</h2>
+  </div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Compara os disparos de cada loja antes × depois de cada ordem concluída
+    na Auvo (janela de {{ janela_dias_padrao }} dias, normalizada por dia) —
+    a evidência de que o atendimento em campo reduziu os disparos, não a
+    prova. Amostra pequena e correlação não são causa: use os avisos abaixo
+    junto com os números.
+  </p>
+
+  <form method="post" action="{{ url_for('bi.recalcular') }}" data-loading-submit
+        class="card" style="display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: flex-end;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="field" style="margin-bottom: 0;">
+      <label for="periodo">Período de análise</label>
+      <select id="periodo" name="periodo">
+        <option value="padrao" selected>Últimos {{ periodo_dias_padrao }} dias</option>
+        <option value="manual">Período manual</option>
+      </select>
+    </div>
+    <div class="field" style="margin-bottom: 0;">
+      <label for="inicio">Início (manual)</label>
+      <input id="inicio" type="date" name="inicio">
+    </div>
+    <div class="field" style="margin-bottom: 0;">
+      <label for="fim">Fim (manual)</label>
+      <input id="fim" type="date" name="fim">
+    </div>
+    <div class="field" style="margin-bottom: 0;">
+      <label for="tecnico">Técnico (nome ou id)</label>
+      <input id="tecnico" type="text" name="tecnico" value="{{ tecnico_padrao }}" placeholder="todos">
+    </div>
+
+    <details style="flex-basis: 100%;">
+      <summary class="muted" style="cursor: pointer;">Avançado (janela e limiares)</summary>
+      <div style="display: flex; gap: var(--space-4); flex-wrap: wrap; margin-top: var(--space-3);">
+        <div class="field" style="margin-bottom: 0;">
+          <label for="janela_dias">Janela antes/depois (dias)</label>
+          <input id="janela_dias" type="number" min="1" max="90" name="janela_dias" placeholder="{{ janela_dias_padrao }}">
+        </div>
+        <div class="field" style="margin-bottom: 0;">
+          <label for="limiar_melhora">Limiar de melhora (%)</label>
+          <input id="limiar_melhora" type="number" min="1" max="100" name="limiar_melhora" placeholder="{{ limiar_melhora_padrao }}">
+        </div>
+        <div class="field" style="margin-bottom: 0;">
+          <label for="limiar_piora">Limiar de piora (%)</label>
+          <input id="limiar_piora" type="number" min="1" max="100" name="limiar_piora" placeholder="{{ limiar_piora_padrao }}">
+        </div>
+      </div>
+    </details>
+
+    <button type="submit" class="btn btn-primary">Recalcular</button>
+  </form>
+</div>
+
+{% if run is none %}
+<div class="section">
+  <div class="card empty-state">
+    <h3>Nenhum recálculo ainda</h3>
+    <p class="muted">Escolha o período acima e clique em "Recalcular" — a primeira vez busca a agenda concluída na Auvo e o histórico de disparos na PowerCentral, então pode levar alguns segundos.</p>
+  </div>
+</div>
+{% elif run.status == 'error' %}
+<div class="section">
+  <div class="banner banner-critical" role="status">Último recálculo terminou com erro: {{ run.erro_mensagem }}</div>
+</div>
+{% elif kpis %}
+<div class="section">
+  <div class="section-title">
+    <h2>Visão geral — {{ run.periodo_desde|data_local }} → {{ run.periodo_hasta|data_local }}</h2>
+    <span class="muted" style="font-size: var(--font-size-xs);">recalculado {{ run.criado_em|data_local }} por {{ run.criado_por.username if run.criado_por else '—' }}</span>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-tile">
+      <div class="stat-tile-label">Intervenções no período</div>
+      <div class="stat-tile-value">{{ kpis.total_intervencoes }}</div>
+      <div class="stat-tile-hint">{{ kpis.sem_vinculo }} sem vínculo · {{ kpis.sem_data }} sem data de conclusão</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">% que melhorou</div>
+      <div class="stat-tile-value">{{ '%.0f'|format(kpis.pct_melhorou) ~ '%' if kpis.pct_melhorou is not none else '—' }}</div>
+      <div class="stat-tile-hint">sobre as intervenções com base de comparação</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Disparos evitados (estimativa)</div>
+      <div class="stat-tile-value">{{ '%.1f'|format(kpis.disparos_evitados) }}</div>
+      <div class="stat-tile-hint">soma de (antes/dia − depois/dia) × dias — negativo = piora</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Clientes crônicos</div>
+      <div class="stat-tile-value">{{ kpis.clientes_cronicos }}</div>
+      <div class="stat-tile-hint">visitas repetidas, ainda disparando</div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4);">
+  <div class="card chart-card">
+    <div class="section-title" style="margin-bottom: var(--space-2);"><h3>Antes × depois, por técnico</h3></div>
+    {% if barras %}
+    <svg viewBox="0 0 {{ grafico_largura }} {{ grafico_altura }}" role="img" aria-label="Disparos por dia antes e depois da visita, por técnico">
+      <g class="chart-grid">
+        <line x1="0" y1="{{ (grafico_altura * 0.75)|round(1) }}" x2="{{ grafico_largura }}" y2="{{ (grafico_altura * 0.75)|round(1) }}"></line>
+        <line x1="0" y1="{{ (grafico_altura * 0.5)|round(1) }}" x2="{{ grafico_largura }}" y2="{{ (grafico_altura * 0.5)|round(1) }}"></line>
+        <line x1="0" y1="{{ (grafico_altura * 0.25)|round(1) }}" x2="{{ grafico_largura }}" y2="{{ (grafico_altura * 0.25)|round(1) }}"></line>
+      </g>
+      {% for barra in barras %}
+      <rect class="chart-bar-antes" x="{{ barra.x_antes }}" y="{{ barra.y_antes }}" width="{{ barra.largura }}" height="{{ barra.h_antes }}">
+        <title>{{ barra.tecnico }} — antes: {{ '%.2f'|format(barra.antes_valor) }}/dia</title>
+      </rect>
+      <rect class="chart-bar-depois" x="{{ barra.x_depois }}" y="{{ barra.y_depois }}" width="{{ barra.largura }}" height="{{ barra.h_depois }}">
+        <title>{{ barra.tecnico }} — depois: {{ '%.2f'|format(barra.depois_valor) }}/dia</title>
+      </rect>
+      <text class="chart-bar-label" x="{{ barra.label_x }}" y="{{ barra.label_y }}">{{ barra.tecnico[:14] }}</text>
+      {% endfor %}
+    </svg>
+    <div class="chart-legend">
+      <span><span class="chart-legend-swatch" style="background: var(--color-text-muted); opacity: 0.55;"></span>Antes</span>
+      <span><span class="chart-legend-swatch" style="background: var(--color-accent);"></span>Depois</span>
+    </div>
+    {% else %}
+    <p class="muted">Sem dados suficientes para o gráfico.</p>
+    {% endif %}
+  </div>
+
+  <div class="card chart-card">
+    <div class="section-title" style="margin-bottom: var(--space-2);"><h3>Tendência — disparos/dia após cada visita</h3></div>
+    {% if tendencia %}
+    <svg viewBox="0 0 {{ grafico_largura }} {{ grafico_altura }}" role="img" aria-label="Disparos por dia depois de cada visita, em ordem cronológica">
+      <g class="chart-grid">
+        <line x1="0" y1="{{ (grafico_altura * 0.25)|round(1) }}" x2="{{ grafico_largura }}" y2="{{ (grafico_altura * 0.25)|round(1) }}"></line>
+        <line x1="0" y1="{{ (grafico_altura * 0.5)|round(1) }}" x2="{{ grafico_largura }}" y2="{{ (grafico_altura * 0.5)|round(1) }}"></line>
+        <line x1="0" y1="{{ (grafico_altura * 0.75)|round(1) }}" x2="{{ grafico_largura }}" y2="{{ (grafico_altura * 0.75)|round(1) }}"></line>
+      </g>
+      <polyline class="chart-line" points="{{ pontos_tendencia }}"></polyline>
+      {% for ponto in tendencia %}
+      <circle class="chart-point" cx="{{ ponto.x }}" cy="{{ ponto.y }}" r="2.5">
+        <title>{{ ponto.loja }} ({{ ponto.tecnico }}) — {{ ponto.valor }}/dia depois de {{ ponto.quando|data_local }}</title>
+      </circle>
+      {% endfor %}
+    </svg>
+    {% else %}
+    <p class="muted">Sem dados suficientes para o gráfico.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Ranking de técnicos</h2></div>
+  {% if resumo_tecnicos %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Técnico</th>
+          <th class="is-numeric">Intervenções</th>
+          <th class="is-numeric">Melhorou</th>
+          <th class="is-numeric">Piorou</th>
+          <th class="is-numeric">Estável</th>
+          <th class="is-numeric">Variação média</th>
+          <th class="is-numeric">Disparos evitados</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in resumo_tecnicos %}
+        <tr>
+          <td>
+            {{ r.tecnico }}
+            {% if r.amostra_pequena %}<span class="chip chip-warning" title="Menos que o mínimo configurado — não use isoladamente para decisão">amostra pequena</span>{% endif %}
+          </td>
+          <td class="is-numeric">{{ r.total_intervencoes }}</td>
+          <td class="is-numeric">{{ r.total_melhorou }}</td>
+          <td class="is-numeric">{{ r.total_piorou }}</td>
+          <td class="is-numeric">{{ r.total_estavel }}</td>
+          <td class="is-numeric">{{ '%.0f'|format(r.variacao_media_pct) ~ '%' if r.variacao_media_pct is not none else '—' }}</td>
+          <td class="is-numeric">{{ '%.1f'|format(r.disparos_evitados) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Nenhuma intervenção com técnico identificado no período.</p>
+  {% endif %}
+</div>
+
+<div class="section">
+  <div class="section-title">
+    <h2>Clientes crônicos</h2>
+    {% if cronicos %}<a class="btn btn-ghost" href="{{ url_for('bi.exportar', run_id=run.id, tabela='cronicos') }}">Baixar Excel</a>{% endif %}
+  </div>
+  {% if cronicos %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Loja</th>
+          <th class="is-numeric">Conta</th>
+          <th class="is-numeric">Nº de visitas</th>
+          <th>Última classificação</th>
+          <th class="is-numeric">Disparos/dia atual</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set estilos = {'MELHOROU': 'chip-ok', 'PIOROU': 'chip-critical', 'ESTAVEL': 'chip-warning', 'SEM_BASE': 'chip-neutral'} %}
+        {% for c in cronicos %}
+        <tr>
+          <td>{{ c.nome_loja }}</td>
+          <td class="is-numeric">{{ c.conta_power }}</td>
+          <td class="is-numeric">{{ c.total_visitas }}</td>
+          <td><span class="chip {{ estilos.get(c.ultima_classificacao, 'chip-neutral') }}">{{ c.ultima_classificacao }}</span></td>
+          <td class="is-numeric">{{ '%.2f'|format(c.disparos_por_dia_atual) }}</td>
+          <td><a href="{{ url_for('tecnico.index', tecnico=run.tecnico_filtro or '', data_agenda=run.periodo_hasta.strftime('%Y-%m-%d')) }}">ver no Técnico</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Nenhum cliente crônico no período (com {{ 'o mínimo de visitas configurado' }}).</p>
+  {% endif %}
+</div>
+
+<div class="section">
+  <div class="section-title">
+    <h2>Intervenções ({{ intervencoes|length }})</h2>
+    {% if intervencoes %}<a class="btn btn-ghost" href="{{ url_for('bi.exportar', run_id=run.id, tabela='intervencoes') }}">Baixar Excel</a>{% endif %}
+  </div>
+  {% if intervencoes %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Data da visita</th>
+          <th>Loja</th>
+          <th class="is-numeric">Conta</th>
+          <th>Técnico</th>
+          <th class="is-numeric">Antes/dia</th>
+          <th class="is-numeric">Depois/dia</th>
+          <th class="is-numeric">Variação</th>
+          <th>Classificação</th>
+          <th>Avisos</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set estilos = {'MELHOROU': 'chip-ok', 'PIOROU': 'chip-critical', 'ESTAVEL': 'chip-warning', 'SEM_BASE': 'chip-neutral'} %}
+        {% for i in intervencoes %}
+        <tr>
+          <td class="is-numeric">{{ i.marco|data_local }}</td>
+          <td>{{ i.nome_loja }}</td>
+          <td class="is-numeric">{{ i.conta_power }}</td>
+          <td>{{ i.tecnico_nome or '—' }}</td>
+          <td class="is-numeric">{{ '%.2f'|format(i.antes_por_dia) }}</td>
+          <td class="is-numeric">{{ '%.2f'|format(i.depois_por_dia) }}</td>
+          <td class="is-numeric">{{ '%.0f'|format(i.variacao_pct) ~ '%' if i.variacao_pct is not none else '—' }}</td>
+          <td><span class="chip {{ estilos.get(i.classificacao, 'chip-neutral') }}">{{ i.classificacao }}</span></td>
+          <td>
+            {% if i.parcial %}<span class="chip chip-warning" title="A janela de depois ainda não fechou — o número pode mudar">parcial</span>{% endif %}
+            {% if i.atribuicao_compartilhada %}<span class="chip chip-neutral" title="Outra visita da mesma conta caiu na mesma janela — não creditar 100% a esta">visita dupla</span>{% endif %}
+          </td>
+          <td><a href="{{ url_for('tecnico.index', tecnico=i.tecnico_nome, data_agenda=i.marco.strftime('%Y-%m-%d')) }}">ver no Técnico</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card empty-state">
+    <h3>Nenhuma intervenção no período</h3>
+    <p class="muted">Sem ordens concluídas com de-para OK no período escolhido — isso também é um resultado válido.</p>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if historico %}
+<div class="section">
+  <div class="section-title"><h2>Histórico de recálculos</h2></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Recalculado em</th>
+          <th>Por</th>
+          <th>Técnico</th>
+          <th>Período</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set estilos_run = {'success': 'chip-ok', 'error': 'chip-critical', 'running': 'chip-neutral'} %}
+        {% for r in historico %}
+        <tr>
+          <td class="is-numeric">{{ r.criado_em|data_local }}</td>
+          <td>{{ r.criado_por.username if r.criado_por else '—' }}</td>
+          <td>{{ r.tecnico_filtro or 'todos' }}</td>
+          <td class="is-numeric">{{ r.periodo_desde|data_local }} → {{ r.periodo_hasta|data_local }}</td>
+          <td><span class="chip {{ estilos_run.get(r.status, 'chip-neutral') }}">{{ r.status }}</span></td>
+          <td><a href="{{ url_for('bi.run_detalhe', run_id=r.id) }}">Ver</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

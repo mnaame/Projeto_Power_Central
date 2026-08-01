@@ -90,6 +90,8 @@ class ResumoTecnico:
     variacao_media_pct: float | None
     disparos_evitados: float
     amostra_pequena: bool
+    antes_medio_por_dia: float
+    depois_medio_por_dia: float
 
 
 @dataclass(frozen=True)
@@ -247,6 +249,8 @@ def resumo_por_tecnico(
                 variacao_media_pct=(sum(variacoes) / len(variacoes)) if variacoes else None,
                 disparos_evitados=round(disparos_evitados, 2),
                 amostra_pequena=len(itens) < amostra_minima,
+                antes_medio_por_dia=round(sum(i.antes_por_dia for i in itens) / len(itens), 3),
+                depois_medio_por_dia=round(sum(i.depois_por_dia for i in itens) / len(itens), 3),
             )
         )
     resumo.sort(key=lambda r: r.total_intervencoes, reverse=True)

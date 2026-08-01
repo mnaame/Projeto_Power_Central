@@ -101,25 +101,38 @@ def recalcular(
     periodo_desde: datetime,
     periodo_hasta: datetime,
     tecnico: str = "",
+    janela_dias: int | None = None,
+    limiar_melhora_pct: float | None = None,
+    limiar_piora_pct: float | None = None,
     user_id: int | None = None,
     auvo_client=None,
     softguard_client: SoftGuardClient | None = None,
 ) -> BiRun:
     """Passo pesado (RF do módulo): uma chamada de agenda + uma de
     histórico, depois tudo em memória. Falha vira `BiRun.status='error'`
-    (nunca propaga — o botão "Recalcular" sempre volta para a tela)."""
+    (nunca propaga — o botão "Recalcular" sempre volta para a tela).
+    `janela_dias`/`limiar_*` são o ajuste "avançado" da tela — sem
+    informar, cai nos padrões configurados em `settings_service`."""
 
     def _gerar() -> BiRun:
-        janela_dias = settings_service.get_bi_janela_dias()
-        limiar_melhora = settings_service.get_bi_limiar_melhora()
-        limiar_piora = settings_service.get_bi_limiar_piora()
+        janela = janela_dias if janela_dias is not None else settings_service.get_bi_janela_dias()
+        limiar_melhora = (
+            limiar_melhora_pct
+            if limiar_melhora_pct is not None
+            else settings_service.get_bi_limiar_melhora()
+        )
+        limiar_piora = (
+            limiar_piora_pct
+            if limiar_piora_pct is not None
+            else settings_service.get_bi_limiar_piora()
+        )
         tipos_intervencao = settings_service.get_bi_tipos_intervencao()
 
         run = BiRun(
             criado_por_user_id=user_id,
             periodo_desde=periodo_desde,
             periodo_hasta=periodo_hasta,
-            janela_dias=janela_dias,
+            janela_dias=janela,
             limiar_melhora_pct=limiar_melhora,
             limiar_piora_pct=limiar_piora,
             tecnico_filtro=tecnico or None,
@@ -171,8 +184,8 @@ def recalcular(
             agora = datetime.now(timezone.utc)
             marcos_globais = [marco for _, marco, _ in candidatas]
             folga = timedelta(minutes=6)
-            desde_busca = min(marcos_globais) - timedelta(days=janela_dias) - folga
-            hasta_busca = min(max(marcos_globais) + timedelta(days=janela_dias), agora) + folga
+            desde_busca = min(marcos_globais) - timedelta(days=janela) - folga
+            hasta_busca = min(max(marcos_globais) + timedelta(days=janela), agora) + folga
 
             client = softguard_client or _criar_cliente_softguard(config)
             codigos = (dom_disp.CODIGO_DISPARO,) + dom_disp.CODIGOS_ARME + dom_disp.CODIGOS_DESARME
@@ -201,12 +214,12 @@ def recalcular(
                     avaliados,
                     marco=marco,
                     agora=agora,
-                    janela_dias=janela_dias,
+                    janela_dias=janela,
                     limiar_melhora_pct=limiar_melhora,
                     limiar_piora_pct=limiar_piora,
                 )
                 compartilhada = dom_bi.tem_atribuicao_compartilhada(
-                    marcos_por_conta[conta], marco=marco, janela_dias=janela_dias
+                    marcos_por_conta[conta], marco=marco, janela_dias=janela
                 )
 
                 intervencao = BiIntervencao(

@@ -113,6 +113,36 @@ def test_recalcular_gera_intervencao_com_vinculo(app):
     assert intervencao.parcial is False
 
 
+def test_recalcular_aceita_override_de_janela_e_limiar(app):
+    """Sem override o cenário classifica MELHOROU (queda de 80%, >= 20%
+    padrão); com janela menor (3 dias) o disparo do "depois" (dia +1) fica
+    fora da janela — vira SEM_BASE por antes/dia zerar do outro lado? Não:
+    aqui só confirma que o override É USADO (troca janela_dias do run) e
+    reflete na intervenção persistida."""
+    _depara(conta="95", id_auvo=13804973)
+    auvo = FakeAuvoClient(tarefas=[_tarefa(13804973, MARCO_FECHADO)])
+    softguard = FakeSoftGuardClient(eventos=_eventos_melhorou())
+
+    run = bi_service.recalcular(
+        config=app.config,
+        periodo_desde=AGORA - timedelta(days=90),
+        periodo_hasta=AGORA,
+        janela_dias=3,
+        limiar_melhora_pct=5,
+        limiar_piora_pct=5,
+        auvo_client=auvo,
+        softguard_client=softguard,
+    )
+
+    assert run.janela_dias == 3
+    assert run.limiar_melhora_pct == 5
+    assert run.limiar_piora_pct == 5
+    intervencao = run.intervencoes[0]
+    # janela de 3 dias só enxerga 3 dos 5 disparos do "antes" (a -1,-2,-3)
+    assert intervencao.antes_por_dia == 3 / 3
+    assert intervencao.dias_depois == 3
+
+
 def test_recalcular_conta_sem_vinculo_fica_fora_do_calculo(app):
     auvo = FakeAuvoClient(tarefas=[_tarefa(999999, MARCO_FECHADO)])
     softguard = FakeSoftGuardClient(eventos=[])

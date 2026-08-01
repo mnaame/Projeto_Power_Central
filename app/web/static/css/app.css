@@ -553,6 +553,38 @@ summary.btn::-webkit-details-marker {
   fill: var(--color-accent);
 }
 
+.chart-bar-antes {
+  fill: var(--color-text-muted);
+  opacity: 0.55;
+}
+
+.chart-bar-depois {
+  fill: var(--color-accent);
+}
+
+.chart-bar-label {
+  fill: var(--color-text-muted);
+  font-size: 10px;
+  text-anchor: middle;
+}
+
+.chart-legend {
+  display: flex;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.chart-legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: var(--space-1);
+  vertical-align: middle;
+}
+
 /* ---------- Utilidades ---------- */
 
 .section {

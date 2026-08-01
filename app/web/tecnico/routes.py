@@ -95,8 +95,18 @@ def _lotes_recentes() -> list[TecnicoLote]:
 @bp.route("")
 @login_required
 def index():
+    """Aceita `?tecnico=` e `?data_agenda=` para pré-preencher os filtros —
+    usado pelo drilldown do BI (Eficácia do Técnico): ver o histórico bruto
+    de uma loja específica é só puxar a agenda daquele técnico naquele dia."""
+    filtros = _filtros_padrao()
+    tecnico_query = (request.args.get("tecnico") or "").strip()
+    if tecnico_query:
+        filtros["tecnico"] = tecnico_query
+    data_query = (request.args.get("data_agenda") or "").strip()
+    if data_query:
+        filtros["data_agenda"] = data_query
     return render_template(
-        "tecnico/index.html", filtros=_filtros_padrao(), agenda=None, lotes=_lotes_recentes()
+        "tecnico/index.html", filtros=filtros, agenda=None, lotes=_lotes_recentes()
     )
 
 

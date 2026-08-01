@@ -63,6 +63,25 @@ Resultado grava em `BiRun`/`BiIntervencao`; o dashboard só lê daí.
   novas colunas/funções para intervenções e clientes crônicos, mesmo
   estilo (cabeçalho verde, `freeze_panes`, `auto_filter`) das outras
   planilhas.
+- **"Tendência" não é uma série semanal contínua.** O plano original
+  pedia "disparos/semana com marcos das visitas"; como só
+  `BiIntervencao` fica persistido (os eventos crus do `buscar_historico`
+  são descartados ao fim do recálculo — persistir tudo derrotaria o
+  propósito do cache), uma série semanal de verdade exigiria re-buscar
+  ou guardar dado bem mais granular. A linha mostra, em ordem
+  cronológica, o `depois_por_dia` de CADA intervenção — cada ponto já É
+  um marco de visita, então "marcos das visitas" está coberto sem
+  precisar de uma série separada.
+- **Janela e limiares viraram override opcional por recálculo**
+  (`bi_service.recalcular(janela_dias=..., limiar_melhora_pct=...,
+  limiar_piora_pct=...)`, todos `None` por padrão = usa o que está em
+  `settings_service`) — o complemento pede isso na seção "avançado" dos
+  filtros da tela.
+- **Drilldown**: `tecnico.index` ganhou `?tecnico=` e `?data_agenda=`
+  opcionais para pré-preencher os filtros (mudança de duas linhas em
+  `app/web/tecnico/routes.py`) — clicar numa intervenção do BI leva pro
+  Técnico já com o nome do técnico e a data da visita prontos pra
+  "Puxar agenda do dia".
 
 ## 4. Camadas
 
@@ -159,9 +178,9 @@ e os campos de `domain/tecnico.py`).
 
 | Fase | Entrega | Prova |
 |---|---|---|
-| **BI1** | `domain/bi.py` + modelos + migration + settings | Unit: janela/classificação (melhorou/piorou/estável/sem-base/parcial), atribuição compartilhada, `tarefa_concluida`/`data_conclusao` defensivos |
-| **BI2** | `bi_service.py` completo | Integração: recálculo fim-a-fim com fakes, falha isolada por conta, agregações |
-| **BI3** | Aba web (filtros, KPIs, gráficos SVG, tabelas exportáveis, drilldown) | Integração web + screenshots claro/escuro |
+| **BI1** ✅ | `domain/bi.py` + modelos + migration + settings | Unit: janela/classificação (melhorou/piorou/estável/sem-base/parcial), atribuição compartilhada, `tarefa_concluida`/`data_conclusao` defensivos |
+| **BI2** ✅ | `bi_service.py` completo | Integração: recálculo fim-a-fim com fakes, falha isolada por conta, agregações |
+| **BI3** ✅ | Aba web (filtros, KPIs, gráficos SVG, tabelas exportáveis, drilldown) | Integração web + screenshots claro/escuro (Playwright) |
 | **BI4** | Config admin + docs + validação do campo de data | Suíte completa verde |
 
 O que NUNCA entra no repositório: credenciais (já cobertas), nomes reais

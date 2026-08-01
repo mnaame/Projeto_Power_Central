@@ -193,6 +193,16 @@ def test_resumo_por_tecnico_disparos_evitados():
     assert resumo[0].amostra_pequena is False
 
 
+def test_resumo_por_tecnico_medias_antes_depois():
+    intervencoes = [
+        _intervencao(conta="95", antes=2.0, depois=0.5),
+        _intervencao(conta="4", antes=1.0, depois=1.5, classificacao=CLASSIFICACAO_PIOROU),
+    ]
+    resumo = resumo_por_tecnico(intervencoes, amostra_minima=1)
+    assert resumo[0].antes_medio_por_dia == 1.5
+    assert resumo[0].depois_medio_por_dia == 1.0
+
+
 def test_clientes_cronicos_exige_minimo_de_visitas_e_ainda_disparando():
     intervencoes = [
         _intervencao(conta="95", marco=MARCO, depois=0.5),

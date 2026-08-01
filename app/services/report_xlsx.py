@@ -38,6 +38,25 @@ COLUNAS_DISPAROS = (
     "ZONA",
     "CONCLUSÃO MONITORAMENTO DISPARO.",
 )
+COLUNAS_BI_INTERVENCOES = (
+    "DATA DA VISITA",
+    "CONTA",
+    "LOJA",
+    "TÉCNICO",
+    "DISPAROS/DIA ANTES",
+    "DISPAROS/DIA DEPOIS",
+    "VARIAÇÃO %",
+    "CLASSIFICAÇÃO",
+    "JANELA PARCIAL",
+    "OUTRA VISITA NA JANELA",
+)
+COLUNAS_BI_CRONICOS = (
+    "CONTA",
+    "LOJA",
+    "Nº DE VISITAS",
+    "ÚLTIMA CLASSIFICAÇÃO",
+    "DISPAROS/DIA ATUAL",
+)
 
 _LARGURAS = {
     "DATA EVENTO": 18,
@@ -55,6 +74,18 @@ _LARGURAS = {
     "TEMPO PARA LIGAR PARA O CLIENTE": 30,
     "ZONA": 40,
     "CONCLUSÃO MONITORAMENTO DISPARO.": 40,
+    "DATA DA VISITA": 18,
+    "LOJA": 40,
+    "TÉCNICO": 22,
+    "DISPAROS/DIA ANTES": 20,
+    "DISPAROS/DIA DEPOIS": 20,
+    "VARIAÇÃO %": 14,
+    "CLASSIFICAÇÃO": 16,
+    "JANELA PARCIAL": 16,
+    "OUTRA VISITA NA JANELA": 20,
+    "Nº DE VISITAS": 16,
+    "ÚLTIMA CLASSIFICAÇÃO": 20,
+    "DISPAROS/DIA ATUAL": 20,
 }
 _COLUNAS_COM_QUEBRA = {"SITUAÇÃO", "ZONA", "MOTIVO", "CONCLUSÃO MONITORAMENTO DISPARO."}
 
@@ -108,6 +139,28 @@ def gerar_xlsx_disparos(caminho: Path, *, linhas: Sequence[Sequence[object]]) ->
     ws = wb.active
     ws.title = "DISPAROS"
     _montar_aba(ws, COLUNAS_DISPAROS, linhas)
+
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(caminho)
+
+
+def gerar_xlsx_bi_intervencoes(caminho: Path, *, linhas: Sequence[Sequence[object]]) -> None:
+    """Uma linha por intervenção (ordem concluída × janela antes/depois)."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "INTERVENCOES"
+    _montar_aba(ws, COLUNAS_BI_INTERVENCOES, linhas)
+
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(caminho)
+
+
+def gerar_xlsx_bi_cronicos(caminho: Path, *, linhas: Sequence[Sequence[object]]) -> None:
+    """Uma linha por cliente crônico (visitas repetidas sem melhora real)."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "CRONICOS"
+    _montar_aba(ws, COLUNAS_BI_CRONICOS, linhas)
 
     caminho.parent.mkdir(parents=True, exist_ok=True)
     wb.save(caminho)
