@@ -75,6 +75,14 @@
 <div class="section">
   <div class="banner banner-critical" role="status">Último recálculo terminou com erro: {{ run.erro_mensagem }}</div>
 </div>
+{% elif run.status == 'running' %}
+<div class="section">
+  <div class="banner banner-info" role="status">
+    Um recálculo está em andamento (iniciado {{ run.criado_em|data_local }}
+    {% if run.criado_por %}por {{ run.criado_por.username }}{% endif %}) — pode
+    levar alguns minutos em períodos grandes. Atualize a página para ver o resultado.
+  </div>
+</div>
 {% elif kpis %}
 <div class="section">
   <div class="section-title">

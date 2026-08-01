@@ -153,7 +153,13 @@ def recalcular(
             status="running",
         )
         db.session.add(run)
-        db.session.flush()
+        # Commit já aqui (não só flush) — solta o lock de escrita do SQLite
+        # antes de começar a parte lenta (rede). Sem isso, uma transação
+        # aberta por vários minutos (busca de agenda + histórico grande)
+        # trava o banco inteiro para escrita e derruba o ciclo automático
+        # do coletor (a cada 5 min) com "database is locked" enquanto o
+        # recálculo do BI está rodando — bug real, visto em produção.
+        db.session.commit()
 
         try:
             auvo = auvo_client or auvo_service.criar_cliente(config)

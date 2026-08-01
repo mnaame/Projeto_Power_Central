@@ -159,6 +159,28 @@ não duplica export de histórico.
 `bi_tipos_intervencao` (vazio = todos), `bi_visitas_para_cronico` (3),
 `bi_periodo_padrao_dias` (90), `bi_amostra_minima_tecnico` (5).
 
+## 5.1 Correções pós-entrega (visto em produção)
+
+- **`page_size` do `buscar_historico`** subiu de 100 (padrão do client)
+  para 2000 (`PAGE_SIZE_HISTORICO`) — com a base de contas real da
+  operação, 90 dias de TODAS as contas em blocos de 100 virava milhares
+  de idas e voltas HTTP sequenciais (um recálculo passou de 30 min sem
+  terminar). `"Mostrar": 5000` já é enviado em toda chamada de
+  `buscar_historico` (herdado do motor validado), então o portal já é
+  dimensionado para páginas desse tamanho.
+- **Commit cedo do `BiRun`**: antes, o registro "running" só ia para o
+  banco (commit de verdade, não só flush) no fim do recálculo inteiro —
+  com a parte de rede levando minutos, isso segurava o lock de escrita
+  do SQLite pelo tempo todo e derrubava o ciclo automático do coletor
+  (a cada 5 min) com `sqlite3.OperationalError: database is locked`
+  (visto em produção, no log do coletor). Agora o `BiRun` é commitado
+  assim que criado (status `running`), soltando o lock antes de começar
+  a parte lenta; só a atualização final (rápida, sem rede) segura o
+  lock de novo. A tela ganhou um aviso para quando alguém abre `/bi`
+  enquanto um recálculo de outra pessoa ainda está `running`.
+- **Timeout do client subiu para 120s** (`TIMEOUT_HISTORICO_SEGUNDOS`) —
+  o padrão de 15s não é suficiente para uma busca desse tamanho.
+
 ## 6. Precisa de validação antes de confiar no número
 
 `tarefa_concluida` reusa o critério **já confirmado** contra a tarefa real
