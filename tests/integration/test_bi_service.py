@@ -32,7 +32,9 @@ class FakeSoftGuardClient:
         self.chamadas = []
 
     def buscar_historico(self, *, codigos_alarme, desde, hasta, **kwargs):
-        self.chamadas.append({"codigos": tuple(codigos_alarme), "desde": desde, "hasta": hasta})
+        self.chamadas.append(
+            {"codigos": tuple(codigos_alarme), "desde": desde, "hasta": hasta, **kwargs}
+        )
         return self.eventos
 
 
@@ -102,6 +104,7 @@ def test_recalcular_gera_intervencao_com_vinculo(app):
     assert run.status == "success"
     assert len(auvo.chamadas) == 1
     assert len(softguard.chamadas) == 1  # uma única chamada de histórico
+    assert softguard.chamadas[0]["page_size"] == bi_service.PAGE_SIZE_HISTORICO
     assert run.resumo["total_intervencoes"] == 1
     assert run.resumo["melhorou"] == 1
     assert run.resumo["sem_vinculo"] == 0

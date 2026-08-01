@@ -32,6 +32,14 @@ logger = logging.getLogger("bi")
 # é suficiente para essa consulta na maioria das instalações.
 TIMEOUT_HISTORICO_SEGUNDOS = 120
 
+# Página grande (padrão do client é 100) — com todas as contas de uma
+# operação real por 90 dias, 100 por página vira milhares de idas e
+# voltas HTTP (cada uma com o overhead da própria chamada). "Mostrar":
+# 5000 já é enviado pelo client em toda chamada de buscar_historico
+# (herdado do motor validado); alinhar o tamanho da página a isso corta
+# a maior parte do tempo de um recálculo grande.
+PAGE_SIZE_HISTORICO = 2000
+
 _lock_recalculo = threading.Lock()
 
 
@@ -199,6 +207,7 @@ def recalcular(
                 codigos_alarme=codigos,
                 desde=desde_busca.astimezone(FUSO_HORARIO),
                 hasta=hasta_busca.astimezone(FUSO_HORARIO),
+                page_size=PAGE_SIZE_HISTORICO,
             )
             eventos_por_conta = _agrupar_por_conta_power(eventos)
 
