@@ -132,6 +132,41 @@ def test_operador_nao_pode_criar_restrito(operador_client):
     assert "Só administradores".encode("utf-8") in resposta.data
 
 
+def test_criar_sem_chave_configurada_mostra_erro_amigavel(app, operador_client, monkeypatch):
+    monkeypatch.setitem(app.config, "VAULT_ENCRYPTION_KEY", None)
+    resposta = operador_client.post(
+        "/cofre/novo",
+        data={
+            "titulo": "Sem chave",
+            "categoria": "outro",
+            "login": "",
+            "senha": "uma-senha-bem-forte-123!",
+            "url": "",
+            "notas": "",
+            "nivel": "equipe",
+            "expira_em": "",
+        },
+        follow_redirects=True,
+    )
+    assert resposta.status_code == 200
+    assert b"VAULT_ENCRYPTION_KEY" in resposta.data
+    assert Segredo.query.filter_by(titulo="Sem chave").first() is None
+
+
+def test_revelar_sem_chave_configurada_mostra_erro_amigavel(app, operador_client, operador_user, monkeypatch):
+    segredo_id = _criar_segredo(app, senha="senha-secreta-999")
+    monkeypatch.setitem(app.config, "VAULT_ENCRYPTION_KEY", None)
+
+    resposta = operador_client.post(
+        f"/cofre/{segredo_id}/revelar",
+        data={"senha_reautenticacao": "senha-forte-123"},
+        follow_redirects=True,
+    )
+    assert resposta.status_code == 200
+    assert b"senha-secreta-999" not in resposta.data
+    assert b"VAULT_ENCRYPTION_KEY" in resposta.data
+
+
 def test_editar_mantendo_senha_em_branco_preserva_senha_atual(app, operador_client):
     segredo_id = _criar_segredo(app, senha="senha-original-999")
     cifra_original = db.session.get(Segredo, segredo_id).senha_cifrada

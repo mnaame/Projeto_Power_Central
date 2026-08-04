@@ -86,7 +86,7 @@ def revelar(segredo_id: int):
         db.session.commit()
         flash("Senha incorreta — não foi possível revelar.", "warning")
         return redirect(url_for("cofre.index", busca=busca, categoria=categoria))
-    except cofre_service.CofreDecifraError as exc:
+    except (cofre_service.CofreDecifraError, cofre_service.CofreSemChaveError) as exc:
         db.session.commit()
         flash(str(exc), "error")
         return redirect(url_for("cofre.index", busca=busca, categoria=categoria))
@@ -117,18 +117,25 @@ def novo():
                 senha_sugerida=senha_sugerida,
             )
 
-        segredo = cofre_service.criar(
-            titulo=form.titulo.data,
-            categoria=form.categoria.data,
-            login=form.login.data,
-            senha=form.senha.data,
-            url=form.url.data,
-            notas=form.notas.data,
-            nivel=form.nivel.data,
-            expira_em=form.expira_em.data,
-            user_id=current_user.id,
-            config=current_app.config,
-        )
+        try:
+            segredo = cofre_service.criar(
+                titulo=form.titulo.data,
+                categoria=form.categoria.data,
+                login=form.login.data,
+                senha=form.senha.data,
+                url=form.url.data,
+                notas=form.notas.data,
+                nivel=form.nivel.data,
+                expira_em=form.expira_em.data,
+                user_id=current_user.id,
+                config=current_app.config,
+            )
+        except cofre_service.CofreSemChaveError as exc:
+            flash(str(exc), "error")
+            return render_template(
+                "cofre/form.html", form=form, titulo_pagina="Novo segredo",
+                senha_sugerida=senha_sugerida,
+            )
         audit_service.registrar(
             action="cofre_criado",
             result="success",
@@ -164,19 +171,27 @@ def editar(segredo_id: int):
                 senha_sugerida=senha_sugerida,
             )
 
-        cofre_service.atualizar(
-            segredo,
-            titulo=form.titulo.data,
-            categoria=form.categoria.data,
-            login=form.login.data,
-            senha=form.senha.data,
-            url=form.url.data,
-            notas=form.notas.data,
-            nivel=form.nivel.data,
-            expira_em=form.expira_em.data,
-            user_id=current_user.id,
-            config=current_app.config,
-        )
+        try:
+            cofre_service.atualizar(
+                segredo,
+                titulo=form.titulo.data,
+                categoria=form.categoria.data,
+                login=form.login.data,
+                senha=form.senha.data,
+                url=form.url.data,
+                notas=form.notas.data,
+                nivel=form.nivel.data,
+                expira_em=form.expira_em.data,
+                user_id=current_user.id,
+                config=current_app.config,
+            )
+        except cofre_service.CofreSemChaveError as exc:
+            db.session.rollback()
+            flash(str(exc), "error")
+            return render_template(
+                "cofre/form.html", form=form, titulo_pagina="Editar segredo", segredo=segredo,
+                senha_sugerida=senha_sugerida,
+            )
         audit_service.registrar(
             action="cofre_editado",
             result="success",
