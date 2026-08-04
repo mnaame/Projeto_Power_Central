@@ -7,6 +7,7 @@ from app.models.auvo import AuvoChamado, AuvoDepara
 from app.models.report import ReportRun
 from app.extensions import db
 from app.services import report_service, settings_service
+from app.web.reports.routes import _periodo_fim_de_semana
 
 FUSO = ZoneInfo("America/Sao_Paulo")
 
@@ -41,7 +42,11 @@ def _bur(quando, *, conta, numero, nome, rec_iid):
 
 @pytest.fixture(autouse=True)
 def _fake_softguard(monkeypatch):
-    base = datetime(2026, 7, 25, 22, 0, 0, tzinfo=FUSO)
+    # Ancorado em "agora" (mesma conta de _periodo_fim_de_semana), não numa
+    # data fixa — uma data hardcoded vira "fim de semana passado" conforme
+    # o tempo passa, e o preset já não bate mais no período gerado.
+    inicio_fds, _ = _periodo_fim_de_semana(datetime.now(FUSO))
+    base = inicio_fds + timedelta(hours=4)
     eventos = [
         _bur(base, conta="1", numero="10", nome="VILLEFORT HM", rec_iid="v1"),
         _bur(base, conta="2", numero="20", nome="SUPER NOSSO CASTELO", rec_iid="s1"),
