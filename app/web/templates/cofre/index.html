@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Cofre de Senhas{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>Cofre de Senhas</h2>
+    <div style="display: flex; gap: var(--space-2);">
+      <a class="btn btn-primary" href="{{ url_for('cofre.novo') }}">Novo segredo</a>
+      {% if current_user.is_admin %}
+      <a class="btn btn-ghost" href="{{ url_for('cofre.configuracao') }}">Configuração</a>
+      {% endif %}
+    </div>
+  </div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Credenciais de sistemas da empresa (câmera/DVR, roteador, plataformas,
+    e-mail, acessos de cliente) — cifradas, com acesso por papel. Itens
+    <strong>restritos</strong> só admin vê. Revelar/copiar exige confirmar
+    sua senha de novo e fica registrado na auditoria.
+  </p>
+
+  <form method="get" action="{{ url_for('cofre.index') }}" class="card"
+        style="display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: flex-end;">
+    <div class="field" style="margin-bottom: 0; flex: 1; min-width: 220px;">
+      <label for="busca">Buscar (título, login ou URL)</label>
+      <input id="busca" type="text" name="busca" value="{{ busca }}" placeholder="ex.: DVR Loja Centro">
+    </div>
+    <div class="field" style="margin-bottom: 0;">
+      <label for="categoria">Categoria</label>
+      <select id="categoria" name="categoria">
+        <option value="">Todas</option>
+        {% for opcao in categorias %}
+        <option value="{{ opcao }}" {{ 'selected' if categoria == opcao }}>{{ opcao }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-ghost">Filtrar</button>
+  </form>
+</div>
+
+<div class="section">
+  {% if segredos %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Título</th>
+          <th>Categoria</th>
+          <th>Login</th>
+          <th>URL</th>
+          <th>Nível</th>
+          <th>Senha</th>
+          <th>Atualizado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for segredo in segredos %}
+        <tr>
+          <td>
+            {{ segredo.titulo }}
+            {% if segredo.expira_em %}
+              {% if segredo.expira_em <= hoje %}
+              <span class="chip chip-critical" title="Venceu em {{ segredo.expira_em|data_curta }}">vencida</span>
+              {% elif segredo.expira_em <= hoje_mais_30 %}
+              <span class="chip chip-warning" title="Vence em {{ segredo.expira_em|data_curta }}">vence em breve</span>
+              {% endif %}
+            {% endif %}
+          </td>
+          <td>{{ segredo.categoria }}</td>
+          <td>{{ segredo.login or '—' }}</td>
+          <td>{{ segredo.url or '—' }}</td>
+          <td><span class="chip {{ 'chip-warning' if segredo.nivel == 'restrito' else 'chip-neutral' }}">{{ segredo.nivel }}</span></td>
+          <td>
+            {% if revelado and revelado.id == segredo.id %}
+            <span class="cofre-senha-revelada" data-cofre-revelado>{{ revelado.senha }}</span>
+            <button type="button" class="btn btn-ghost" data-cofre-copiar style="padding: var(--space-1) var(--space-2);">Copiar</button>
+            {% else %}
+            <details>
+              <summary class="muted" style="cursor: pointer;">Revelar</summary>
+              <form method="post" action="{{ url_for('cofre.revelar', segredo_id=segredo.id) }}"
+                    style="display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin-top: var(--space-2);">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="busca" value="{{ busca }}">
+                <input type="hidden" name="categoria" value="{{ categoria }}">
+                <input type="password" name="senha_reautenticacao" placeholder="sua senha" required
+                       autocomplete="current-password" style="width: 140px;">
+                <button type="submit" class="btn btn-ghost" style="padding: var(--space-1) var(--space-3);">Confirmar</button>
+              </form>
+            </details>
+            {% endif %}
+          </td>
+          <td class="is-numeric">{{ segredo.atualizado_em|data_local }}</td>
+          <td style="white-space: nowrap;">
+            <a href="{{ url_for('cofre.editar', segredo_id=segredo.id) }}">editar</a>
+            <form method="post" action="{{ url_for('cofre.excluir', segredo_id=segredo.id) }}"
+                  style="display: inline;" onsubmit="return confirm('Excluir \'{{ segredo.titulo }}\' do cofre?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" style="background: none; border: none; padding: 0; margin-left: var(--space-3); color: var(--color-status-critical); cursor: pointer; text-decoration: underline; font: inherit;">excluir</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted" style="margin-top: var(--space-3);">{{ segredos|length }} item(ns) exibido(s).</p>
+  {% else %}
+  <div class="card empty-state">
+    <h3>Nenhum segredo cadastrado</h3>
+    <p class="muted">Clique em "Novo segredo" para começar a guardar as credenciais da equipe.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

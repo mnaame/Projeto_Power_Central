@@ -110,6 +110,7 @@ def criar(
     nivel: str,
     user_id: int | None,
     config,
+    expira_em=None,
 ) -> Segredo:
     segredo = Segredo(
         titulo=titulo.strip(),
@@ -121,6 +122,7 @@ def criar(
         nivel=nivel,
         criado_por_user_id=user_id,
         atualizado_por_user_id=user_id,
+        expira_em=expira_em,
     )
     db.session.add(segredo)
     db.session.flush()
@@ -139,6 +141,7 @@ def atualizar(
     nivel: str,
     user_id: int | None,
     config,
+    expira_em=None,
 ) -> Segredo:
     """Senha vazia = "não trocar" (mesma UX de qualquer formulário de
     credencial que já existe no site)."""
@@ -151,6 +154,7 @@ def atualizar(
     segredo.notas_cifradas = cifrar(notas, config=config) if notas else None
     segredo.nivel = nivel
     segredo.atualizado_por_user_id = user_id
+    segredo.expira_em = expira_em
     return segredo
 
 

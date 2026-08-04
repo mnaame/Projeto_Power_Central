@@ -75,6 +75,14 @@
           </svg>
           Eficácia do Técnico
         </a>
+        <a class="sidebar-link {{ 'is-active' if request.path.startswith('/cofre') }}" href="{{ url_for('cofre.index') }}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            <circle cx="12" cy="16" r="1.6"></circle>
+          </svg>
+          Cofre de Senhas
+        </a>
         {% if current_user.is_admin %}
         <a class="sidebar-link {{ 'is-active' if request.endpoint == 'admin.usuarios' }}" href="{{ url_for('admin.usuarios') }}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">

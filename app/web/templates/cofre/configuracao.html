@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Configuração — Cofre de Senhas{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>Configuração — Cofre de Senhas</h2>
+    <a class="btn btn-ghost" href="{{ url_for('cofre.index') }}">Voltar</a>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Chave de cifragem (VAULT_ENCRYPTION_KEY)</h2></div>
+  <div class="card" style="max-width: 640px;">
+    <p>
+      Status:
+      <span class="chip {{ 'chip-ok' if chave_configurada else 'chip-critical' }}">
+        {{ 'Configurada' if chave_configurada else 'NÃO configurada' }}
+      </span>
+    </p>
+
+    <p class="muted">
+      As senhas guardadas no cofre são cifradas com uma chave própria,
+      <code>VAULT_ENCRYPTION_KEY</code> — diferente da chave usada para as
+      credenciais de integração (Auvo/Telegram). Ela fica só na variável de
+      ambiente do servidor, nunca no banco de dados e nunca no repositório.
+    </p>
+
+    <div class="banner banner-critical" role="status" style="margin-top: var(--space-4);">
+      <span>
+        <strong>Se essa chave se perder, todas as senhas do cofre ficam
+        irrecuperáveis</strong> — não existe "esqueci a senha" aqui, é
+        cifragem de verdade. Guarde uma cópia da chave em um lugar seguro,
+        <strong>separado</strong> do backup do banco de dados. Se as duas
+        coisas forem perdidas ou vazarem juntas, a proteção da cifragem não
+        serve de nada.
+      </span>
+    </div>
+
+    <p class="muted" style="margin-top: var(--space-4);">
+      Para gerar uma chave nova (ex.: na primeira instalação):
+    </p>
+    <pre style="background: var(--color-status-neutral-bg); padding: var(--space-3); border-radius: var(--radius-md); overflow-x: auto;"><code>python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"</code></pre>
+    <p class="muted">
+      Coloque o valor gerado na variável <code>VAULT_ENCRYPTION_KEY</code>
+      do ambiente (arquivo <code>.env</code> ou variável do sistema) e
+      reinicie o Power Central. Trocar a chave depois torna as senhas já
+      salvas ilegíveis — só cifre com ela senhas novas se planeja mantê-la
+      para sempre.
+    </p>
+  </div>
+</div>
+{% endblock %}

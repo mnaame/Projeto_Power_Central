@@ -475,6 +475,15 @@ summary.btn::-webkit-details-marker {
 .banner-warning  { background: var(--color-status-warning-bg); color: var(--color-status-warning); border-color: transparent; }
 .banner-info     { background: var(--color-status-neutral-bg); color: var(--color-text-secondary); border-color: transparent; }
 
+/* ---------- Cofre de Senhas ---------- */
+
+.cofre-senha-revelada {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  background: var(--color-status-neutral-bg);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
 /* ---------- Estado vazio ---------- */
 
 .empty-state {

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}{{ titulo_pagina }}{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>{{ titulo_pagina }}</h2>
+    <a class="btn btn-ghost" href="{{ url_for('cofre.index') }}">Voltar</a>
+  </div>
+</div>
+
+<div class="section">
+  <div class="card" style="max-width: 560px;">
+    <form method="post" novalidate>
+      {{ form.csrf_token }}
+
+      <div class="field">
+        {{ form.titulo.label }}
+        {{ form.titulo(autofocus=true) }}
+        {% for mensagem in form.titulo.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.categoria.label }}
+        {{ form.categoria() }}
+        {% for mensagem in form.categoria.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.login.label }}
+        {{ form.login(autocomplete="off") }}
+        {% for mensagem in form.login.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.senha.label }}
+        <div style="display: flex; gap: var(--space-2);">
+          {{ form.senha(autocomplete="new-password", data_cofre_senha_campo="1") }}
+          <button type="button" class="btn btn-ghost" data-cofre-gerar-senha="{{ senha_sugerida }}" style="white-space: nowrap;">
+            Gerar senha forte
+          </button>
+        </div>
+        {% if segredo %}
+        <p class="muted" style="font-size: var(--font-size-xs); margin-top: var(--space-1);">
+          Deixe em branco para manter a senha atual.
+        </p>
+        {% endif %}
+        <div data-cofre-forca-senha class="muted" style="font-size: var(--font-size-xs); margin-top: var(--space-1);"></div>
+        {% for mensagem in form.senha.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.url.label }}
+        {{ form.url() }}
+        {% for mensagem in form.url.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.notas.label }}
+        {{ form.notas(rows=3) }}
+        {% for mensagem in form.notas.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.nivel.label }}
+        {{ form.nivel() }}
+        {% for mensagem in form.nivel.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      <p class="muted" style="margin-top: calc(-1 * var(--space-3)); font-size: var(--font-size-xs);">
+        Restrito: só administradores veem, revelam ou editam este item.
+      </p>
+
+      <div class="field">
+        {{ form.expira_em.label }}
+        {{ form.expira_em() }}
+        {% for mensagem in form.expira_em.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <button type="submit" class="btn btn-primary">Salvar</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
