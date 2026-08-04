@@ -11,6 +11,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-insecure-change-me")
     ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY")
+    # Chave dedicada do Cofre de Senhas — separada da ENCRYPTION_KEY geral
+    # de propósito (um vazamento de uma não compromete a outra). Perder
+    # esta chave torna as senhas do cofre irrecuperáveis (é assim que
+    # cifra funciona) — ver docs/OPERACAO.md para orientação de backup.
+    VAULT_ENCRYPTION_KEY = os.environ.get("VAULT_ENCRYPTION_KEY")
 
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL", f"sqlite:///{BASE_DIR / 'instance' / 'power_central.db'}"
@@ -56,8 +61,11 @@ class TestingConfig(Config):
     WTF_CSRF_ENABLED = False
     START_SCHEDULER = False
     RATELIMIT_ENABLED = False
-    # Chave Fernet fixa só para testes — nunca usar em produção.
+    # Chaves Fernet fixas só para testes — nunca usar em produção.
     ENCRYPTION_KEY = "DPmdqP8812octmZoWCmLjRSJg8b2xHd1-sTRyY64Rd0="
+    # Deliberadamente DIFERENTE da ENCRYPTION_KEY acima — prova em teste
+    # que as duas chaves são isoladas (ver test_cofre_service.py).
+    VAULT_ENCRYPTION_KEY = "obMnHf1JEwOq0dt1z4R2I1Jhbd3QQdnXVrcHkLj7ia8="
 
 
 CONFIG_MAP = {
