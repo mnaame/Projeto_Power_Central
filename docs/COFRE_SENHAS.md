@@ -94,9 +94,14 @@ constraint explicitamente em `nivel`.
 
 | Fase | Entrega | Prova |
 |---|---|---|
-| **COF1** | Domínio + modelo + migration + `VAULT_ENCRYPTION_KEY` + `cofre_service.py` | Unit (gerador/força) + integração (cifra ida-e-volta, filtro por papel, reautenticação, auditoria sem senha) |
-| **COF2** | Aba web completa (lista, revelar, criar/editar, config) | Integração web (RBAC, nível restrito) + screenshots claro/escuro |
-| **COF3** | Docs (`OPERACAO.md`) + validação final | Suíte completa verde |
+| **COF1** ✅ | Domínio + modelo + migration + `VAULT_ENCRYPTION_KEY` + `cofre_service.py` | Unit (gerador/força) + integração (cifra ida-e-volta, filtro por papel, reautenticação, auditoria sem senha) |
+| **COF2** ✅ | Aba web completa (lista, revelar, criar/editar, config) | Integração web (RBAC, nível restrito, chave ausente não derruba a tela) + screenshots claro/escuro |
+| **COF3** ✅ | Docs (`OPERACAO.md`) + validação final | Suíte completa verde |
+
+Módulo concluído. `admin.auditoria` (tela genérica já existente) cobre
+`cofre_senha_revelada`/`cofre_criado`/`cofre_editado`/`cofre_excluido`/
+`cofre_acesso_negado` sem precisar de tela própria — o filtro de ação é
+populado dinamicamente a partir do que já foi gravado.
 
 O que NUNCA entra no repositório: `VAULT_ENCRYPTION_KEY` de verdade, e
 qualquer senha real de sistema da empresa.

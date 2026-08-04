@@ -55,6 +55,12 @@ Preencha:
 
 - `SECRET_KEY`: qualquer texto longo e aleatório (usado para proteger a sessão de login).
 - `ENCRYPTION_KEY`: gere com `.venv\Scripts\python.exe -m flask generate-key` e cole o resultado.
+- `VAULT_ENCRYPTION_KEY`: só necessária se for usar a aba **Cofre de
+  Senhas** (§5.2.5) — gere do mesmo jeito (`flask generate-key`, chave
+  **diferente** da `ENCRYPTION_KEY` acima). Se perder essa chave depois de
+  cadastrar senhas no cofre, elas ficam irrecuperáveis — não é um "esqueci
+  a senha", é cifragem de verdade. Guarde uma cópia num lugar **separado**
+  do backup do banco de dados (§6).
 - `SOFTGUARD_HOST`, `SOFTGUARD_PORT`, `SOFTGUARD_CLIENT_ID`, `SOFTGUARD_USERNAME`, `SOFTGUARD_PASSWORD`: dados da conta de integração do portal.
 
 > O token do bot e o chat ID do Telegram **não** vão no `.env` — são
@@ -488,6 +494,35 @@ aqui é só o padrão.
 > BI escolheu bate. Se não bater, ajuste os candidatos em
 > `app/domain/bi.py` (`_CAMPOS_DATA_CONCLUSAO`) antes de usar os números
 > para avaliar técnicos.
+
+### 5.2.5 Cofre de Senhas
+
+A aba **Cofre de Senhas** guarda credenciais de sistemas da empresa
+(câmera/DVR, roteador, plataformas, e-mail, acessos de cliente) num só
+lugar, cifradas no banco (nunca em claro), com controle por papel e
+auditoria de todo acesso à senha.
+
+- **Níveis**: `equipe` (qualquer usuário logado vê e revela) e `restrito`
+  (só admin vê, revela, cria ou edita — inclusive marcar um item existente
+  como restrito). Um operador tentando acessar um item restrito por link
+  direto recebe "acesso negado" e isso fica registrado na auditoria.
+- **Revelar/copiar** pede a **sua própria senha de novo**, mesmo já
+  logado — camada extra barata contra tela esquecida aberta na mesa de
+  alguém. A senha aparece só naquela resposta (nunca em mensagem de
+  sucesso que fica na tela, nunca salva na sessão) e some da tela sozinha
+  depois de ~30s; o botão "Copiar" limpa a área de transferência no mesmo
+  prazo. Cada revelação — sucesso ou falha de reautenticação — fica na
+  auditoria.
+- **Criar/editar**: botão "Gerar senha forte" sugere uma senha aleatória
+  forte (não precisa digitar); deixar o campo de senha em branco ao editar
+  mantém a senha atual. O campo opcional "Lembrete de troca" destaca o
+  item na lista quando a data se aproxima ou já passou.
+- **Configuração** (só admin): mostra se a `VAULT_ENCRYPTION_KEY` está
+  configurada e repete o aviso de backup separado — ver §3.1 e §6.
+
+> Se a `VAULT_ENCRYPTION_KEY` não estiver configurada, a aba funciona
+> normalmente para listar itens, mas criar, editar ou revelar mostra um
+> aviso pedindo para configurar a chave (§3.1) antes de continuar.
 
 ### 5.3 Administração
 
