@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}Configuração — Central do Cliente{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>Configuração — Links da Central do Cliente</h2>
+    <a class="btn btn-ghost" href="{{ url_for('central_cliente.index') }}">Voltar</a>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Modo de operação</h2></div>
+  <div class="card" style="max-width: 640px;">
+    <p>
+      Modo atual:
+      {% if simulacao %}
+      <span class="chip chip-neutral">Simulação</span>
+      <span class="muted">— nada é enviado à Auvo; o lote registra o que seria criado.</span>
+      {% else %}
+      <span class="chip chip-warning">Produção</span>
+      <span class="muted">— contatos reais são criados, com link de acesso sem senha.</span>
+      {% endif %}
+    </p>
+
+    {% if simulacao %}
+    <form method="post" action="{{ url_for('central_cliente.alternar_modo') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="modo" value="producao">
+      <div class="field" style="display: flex; align-items: flex-start; gap: var(--space-2);">
+        <input type="checkbox" id="confirmar" name="confirmar" value="sim" style="margin-top: 4px;">
+        <label for="confirmar" style="margin-bottom: 0;">
+          Entendo que em produção o sistema cria contatos reais na Auvo com
+          link de acesso sem login/senha — um erro vaza o painel de um
+          cliente para outro. Já confirmei o endpoint (docs/CENTRAL_CLIENTE.md §6)
+          e testei em simulação antes.
+        </label>
+      </div>
+      <button type="submit" class="btn btn-primary">Ligar modo produção</button>
+    </form>
+    {% else %}
+    <form method="post" action="{{ url_for('central_cliente.alternar_modo') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="modo" value="simulacao">
+      <button type="submit" class="btn btn-primary">Voltar para simulação</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Parâmetros</h2></div>
+  <div class="card" style="max-width: 640px;">
+    <form method="post" action="{{ url_for('central_cliente.salvar_configuracao') }}" novalidate>
+      {{ form.csrf_token }}
+
+      <div class="field">
+        {{ form.score_minimo.label }}
+        {{ form.score_minimo(step="0.01") }}
+        {% for mensagem in form.score_minimo.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      <p class="muted" style="margin-top: calc(-1 * var(--space-3)); font-size: var(--font-size-xs);">
+        Score mínimo de casamento do de-para para um cliente entrar
+        automaticamente no lote (0 a 1). Abaixo disso, só entra se
+        marcado na mão na tela de preparação.
+      </p>
+
+      <div class="field">
+        {{ form.auvo_user_request.label }}
+        {{ form.auvo_user_request() }}
+        {% for mensagem in form.auvo_user_request.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      <p class="muted" style="margin-top: calc(-1 * var(--space-3)); font-size: var(--font-size-xs);">
+        Vira o valor pré-preenchido na tela de execução — item nº 3 do
+        playbook (docs/CENTRAL_CLIENTE.md §6).
+      </p>
+
+      <div class="field">
+        {{ form.cargo_padrao.label }}
+        {{ form.cargo_padrao() }}
+        {% for mensagem in form.cargo_padrao.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.pausa_segundos.label }}
+        {{ form.pausa_segundos(step="0.5") }}
+        {% for mensagem in form.pausa_segundos.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field" style="display: flex; align-items: center; gap: var(--space-2);">
+        {{ form.menu_solicitacoes() }}
+        {{ form.menu_solicitacoes.label }}
+      </div>
+      <div class="field" style="display: flex; align-items: center; gap: var(--space-2);">
+        {{ form.menu_os() }}
+        {{ form.menu_os.label }}
+      </div>
+      <div class="field" style="display: flex; align-items: center; gap: var(--space-2);">
+        {{ form.menu_orcamento() }}
+        {{ form.menu_orcamento.label }}
+      </div>
+
+      <div class="field" style="display: flex; align-items: center; gap: var(--space-2);">
+        {{ form.gerar_login_senha() }}
+        {{ form.gerar_login_senha.label }}
+      </div>
+      <div class="banner banner-warning" role="status">
+        <span>O acesso do cliente é <strong>só pelo link</strong>, sem
+        login. Deixe isto desligado até confirmar (F12) que a Auvo recusa
+        o contato sem login/senha — ver item nº 2 do playbook
+        (docs/CENTRAL_CLIENTE.md §6). Ligado, cada senha gerada fica
+        cifrada (nunca em claro) e não é reexibida na tela.</span>
+      </div>
+
+      <button type="submit" class="btn btn-primary">Salvar configuração</button>
+    </form>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Antes de rodar de verdade</h2></div>
+  <div class="card" style="max-width: 640px;">
+    <p class="muted">
+      Este módulo usa um endpoint interno da Auvo, não documentado. Antes
+      de desligar a simulação pela primeira vez, confirme pelo F12 do
+      navegador (comparando com um contato criado manualmente):
+    </p>
+    <ol class="muted" style="padding-left: var(--space-5);">
+      <li>O formato do identificador do link (o gerador daqui usa UUID
+      padrão — pode não bater com o que a Auvo usa de verdade).</li>
+      <li>Se os campos Login/Senha são realmente exigidos pela Auvo, ou se
+      podem ir vazios.</li>
+      <li>O id do usuário do painel a usar em <code>auvo-user-request</code>.</li>
+    </ol>
+    <p class="muted">Detalhes em <code>docs/CENTRAL_CLIENTE.md</code> §6.</p>
+  </div>
+</div>
+{% endblock %}

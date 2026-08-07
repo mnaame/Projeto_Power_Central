@@ -38,6 +38,14 @@ COLUNAS_DISPAROS = (
     "ZONA",
     "CONCLUSÃO MONITORAMENTO DISPARO.",
 )
+COLUNAS_CENTRAL_CLIENTE = (
+    "CLIENTE",
+    "ID AUVO",
+    "LOGIN",
+    "LINK DE ACESSO",
+    "CÓDIGO DO CONTATO",
+    "STATUS",
+)
 COLUNAS_BI_INTERVENCOES = (
     "DATA DA VISITA",
     "CONTA",
@@ -86,6 +94,11 @@ _LARGURAS = {
     "Nº DE VISITAS": 16,
     "ÚLTIMA CLASSIFICAÇÃO": 20,
     "DISPAROS/DIA ATUAL": 20,
+    "ID AUVO": 12,
+    "LOGIN": 22,
+    "LINK DE ACESSO": 60,
+    "CÓDIGO DO CONTATO": 16,
+    "STATUS": 14,
 }
 _COLUNAS_COM_QUEBRA = {"SITUAÇÃO", "ZONA", "MOTIVO", "CONCLUSÃO MONITORAMENTO DISPARO."}
 
@@ -179,6 +192,18 @@ def gerar_xlsx_disparos_geral(
     for grupo in grupos:
         ws = wb.create_sheet(grupo)
         _montar_aba(ws, COLUNAS_DISPAROS_GERAL, por_grupo.get(grupo, []))
+
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(caminho)
+
+
+def gerar_xlsx_central_cliente(caminho: Path, *, linhas: Sequence[Sequence[object]]) -> None:
+    """Uma linha por item do lote (Links da Central do Cliente) — documento
+    sensível (login/link de acesso sem senha), mesmo cuidado do Cofre."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "CENTRAL_CLIENTE"
+    _montar_aba(ws, COLUNAS_CENTRAL_CLIENTE, linhas)
 
     caminho.parent.mkdir(parents=True, exist_ok=True)
     wb.save(caminho)

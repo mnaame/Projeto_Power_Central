@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Central do Cliente{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>Links da Central do Cliente</h2>
+    <a class="btn btn-ghost" href="{{ url_for('central_cliente.configuracao') }}">Configuração</a>
+  </div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Cria contatos na Auvo com um link de acesso <strong>sem login e sem
+    senha</strong> para o cliente ver seus próprios chamados. Módulo de
+    maior risco do sistema — um erro vaza o painel de um cliente para
+    outro. Sempre passa por pré-visualização antes de enviar qualquer
+    coisa.
+  </p>
+
+  {% if simulacao %}
+  <div class="banner banner-info" role="status">
+    <span>Modo <strong>simulação</strong> — "executar" não envia nada de
+    verdade à Auvo, só registra o que seria criado. Desligar fica em
+    <a href="{{ url_for('central_cliente.configuracao') }}">Configuração</a>.</span>
+  </div>
+  {% else %}
+  <div class="banner banner-critical" role="alert">
+    <span><strong>Modo PRODUÇÃO ligado</strong> — "executar" cria
+    contatos reais na Auvo, com link de acesso sem senha. Confira a
+    pré-visualização com cuidado antes de confirmar.</span>
+  </div>
+  {% endif %}
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Preparar novo lote</h2></div>
+  <form method="post" action="{{ url_for('central_cliente.preparar') }}" novalidate
+        class="card" style="display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: flex-end;">
+    {{ form.csrf_token }}
+    <div class="field" style="margin-bottom: 0;">
+      {{ form.score_minimo.label }}
+      {{ form.score_minimo(step="0.01", placeholder="padrão da configuração") }}
+    </div>
+    <div class="field" style="margin-bottom: 0; flex: 1; min-width: 320px;">
+      {{ form.ids_extra.label }}
+      {{ form.ids_extra(placeholder="ex.: 13804973, 13804900") }}
+    </div>
+    <button type="submit" class="btn btn-primary">Pré-visualizar candidatos</button>
+  </form>
+</div>
+
+{% if previa is not none %}
+<div class="section">
+  <div class="section-title"><h2>Pré-visualização — nada foi enviado ainda</h2></div>
+
+  {% if previa %}
+  <form method="post" action="{{ url_for('central_cliente.executar') }}" data-loading-submit>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="total_linhas" value="{{ previa|length }}">
+
+    <div style="display: flex; gap: var(--space-2); margin-bottom: var(--space-3);">
+      <button type="button" class="btn btn-ghost" data-marcar-todas="1">Marcar todas</button>
+      <button type="button" class="btn btn-ghost" data-marcar-todas="0">Desmarcar todas</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>Cliente</th>
+            <th>ID Auvo</th>
+            <th>Conta</th>
+            <th>Score</th>
+            <th>Origem</th>
+            <th>Link (ilustrativo)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in previa %}
+          <tr>
+            <td>
+              <input type="checkbox" name="selecionar" value="{{ loop.index0 }}" data-linha-checkbox checked>
+              <input type="hidden" name="id_auvo_{{ loop.index0 }}" value="{{ item.id_auvo }}">
+              <input type="hidden" name="nome_{{ loop.index0 }}" value="{{ item.nome }}">
+            </td>
+            <td>{{ item.nome }}</td>
+            <td class="is-numeric">{{ item.id_auvo }}</td>
+            <td class="is-numeric">{{ item.conta_power or '—' }}</td>
+            <td class="is-numeric">{{ '%.2f'|format(item.score) if item.score is not none else '—' }}</td>
+            <td>
+              {% if item.manual %}
+              <span class="chip chip-warning">marcado na mão</span>
+              {% else %}
+              <span class="chip chip-ok">automático</span>
+              {% endif %}
+            </td>
+            <td class="muted" style="font-size: var(--font-size-xs);">{{ item.link_url }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card" style="max-width: 640px; margin-top: var(--space-4);">
+      <h3 style="margin-top: 0;">Executar</h3>
+      {% if not simulacao %}
+      <div class="field">
+        <label for="cookie">Cookie de sessão do painel (colado agora, nunca salvo)</label>
+        <textarea id="cookie" name="cookie" rows="3" placeholder="cole o cookie capturado no F12"></textarea>
+      </div>
+      <div class="field">
+        <label for="auvo_user_request">auvo-user-request</label>
+        <input id="auvo_user_request" type="text" name="auvo_user_request" value="{{ auvo_user_request_padrao }}">
+      </div>
+      <div class="field" style="display: flex; align-items: flex-start; gap: var(--space-2);">
+        <input type="checkbox" id="confirmar" name="confirmar" value="sim" style="margin-top: 4px;">
+        <label for="confirmar" style="margin-bottom: 0;">
+          Entendo que isto cria contatos reais na Auvo, com link de acesso
+          sem senha, para os clientes marcados acima.
+        </label>
+      </div>
+      {% else %}
+      <p class="muted">Em simulação — "executar" só registra o que seria
+      criado, sem tocar a Auvo.</p>
+      {% endif %}
+      <button type="submit" class="btn btn-primary">
+        {{ 'Executar (simulação)' if simulacao else 'Executar de verdade' }}
+      </button>
+    </div>
+  </form>
+  {% else %}
+  <div class="card empty-state">
+    <h3>Nenhum cliente elegível</h3>
+    <p class="muted">Ajuste o score mínimo ou marque IDs na mão acima.</p>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="section">
+  <div class="section-title"><h2>Histórico de lotes</h2></div>
+  {% if lotes %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Criado em</th>
+          <th>Por</th>
+          <th>Modo</th>
+          <th class="is-numeric">Itens</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set estilos = {'success': 'chip-ok', 'parcial': 'chip-warning', 'error': 'chip-critical', 'running': 'chip-neutral'} %}
+        {% for lote in lotes %}
+        <tr>
+          <td class="is-numeric">{{ lote.criado_em|data_local }}</td>
+          <td>{{ lote.criado_por.username if lote.criado_por else '—' }}</td>
+          <td><span class="chip {{ 'chip-neutral' if lote.simulacao else 'chip-warning' }}">{{ 'simulação' if lote.simulacao else 'produção' }}</span></td>
+          <td class="is-numeric">{{ lote.total_sucesso }}/{{ lote.total_itens }}</td>
+          <td><span class="chip {{ estilos.get(lote.status, 'chip-neutral') }}">{{ lote.status }}</span></td>
+          <td><a href="{{ url_for('central_cliente.lote_detalhe', lote_id=lote.id) }}">Ver</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Nenhum lote executado ainda.</p>
+  {% endif %}
+</div>
+{% endblock %}

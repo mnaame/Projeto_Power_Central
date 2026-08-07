@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Lote #{{ lote.id }} — Central do Cliente{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>Lote #{{ lote.id }}</h2>
+    <div style="display: flex; gap: var(--space-2);">
+      {% if lote.itens %}
+      <a class="btn btn-ghost" href="{{ url_for('central_cliente.exportar', lote_id=lote.id) }}">Exportar (.xlsx)</a>
+      {% endif %}
+      <a class="btn btn-ghost" href="{{ url_for('central_cliente.index') }}">Voltar</a>
+    </div>
+  </div>
+
+  {% set estilos_lote = {'success': 'chip-ok', 'parcial': 'chip-warning', 'error': 'chip-critical', 'running': 'chip-neutral'} %}
+  <div class="stat-grid">
+    <div class="stat-tile">
+      <div class="stat-tile-label">Status</div>
+      <div class="stat-tile-value" style="font-size: var(--font-size-xl);">
+        <span class="chip {{ estilos_lote.get(lote.status, 'chip-neutral') }}">{{ lote.status }}</span>
+      </div>
+      {% if lote.erro_mensagem %}
+      <div class="stat-tile-hint">{{ lote.erro_mensagem }}</div>
+      {% endif %}
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Modo</div>
+      <div class="stat-tile-value" style="font-size: var(--font-size-lg);">
+        <span class="chip {{ 'chip-neutral' if lote.simulacao else 'chip-warning' }}">{{ 'simulação' if lote.simulacao else 'produção' }}</span>
+      </div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Itens</div>
+      <div class="stat-tile-value">{{ lote.total_sucesso }}/{{ lote.total_itens }}</div>
+      <div class="stat-tile-hint">{{ lote.total_falha }} com erro</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Criado em</div>
+      <div class="stat-tile-value" style="font-size: var(--font-size-lg);">{{ lote.criado_em|data_local }}</div>
+      <div class="stat-tile-hint">{{ lote.criado_por.username if lote.criado_por else '—' }}</div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Cliente</th>
+          <th>ID Auvo</th>
+          <th>Status</th>
+          <th>Login</th>
+          <th>Link</th>
+          <th>Detalhe</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set estilos_item = {'criado': 'chip-ok', 'erro': 'chip-critical', 'pendente': 'chip-neutral'} %}
+        {% for item in lote.itens %}
+        <tr>
+          <td>{{ item.nome or '—' }}</td>
+          <td class="is-numeric">{{ item.id_auvo }}</td>
+          <td><span class="chip {{ estilos_item.get(item.status, 'chip-neutral') }}">{{ item.status }}</span></td>
+          <td>{{ item.login or '—' }}</td>
+          <td class="muted" style="font-size: var(--font-size-xs);">{{ item.link_url or '—' }}</td>
+          <td>{{ item.erro_mensagem or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
