@@ -71,8 +71,8 @@ def test_montar_lote_dedup_por_id_auvo(app):
     assert len(candidatos) == 1
 
 
-def test_montar_lote_exclui_ja_criado(app):
-    lote = CentralClienteLote(simulacao=True, status="running", total_itens=1)
+def test_montar_lote_exclui_ja_criado_em_lote_real(app):
+    lote = CentralClienteLote(simulacao=False, status="running", total_itens=1)
     db.session.add(lote)
     db.session.flush()
     db.session.add(CentralClienteLink(lote_id=lote.id, id_auvo=111, nome="X", status="criado"))
@@ -80,6 +80,21 @@ def test_montar_lote_exclui_ja_criado(app):
 
     _depara("95", 111, status="OK", score=0.9)
     assert svc.montar_lote(score_minimo=0.70) == []
+
+
+def test_montar_lote_nao_exclui_criado_em_simulacao(app):
+    """Simular não pode ter efeito nenhum sobre o que ainda pode ser
+    rodado de verdade — um 'criado' de lote em simulação não é link real
+    nenhum, é só um registro do que SERIA criado."""
+    lote = CentralClienteLote(simulacao=True, status="running", total_itens=1)
+    db.session.add(lote)
+    db.session.flush()
+    db.session.add(CentralClienteLink(lote_id=lote.id, id_auvo=111, nome="X", status="criado"))
+    db.session.commit()
+
+    _depara("95", 111, status="OK", score=0.9)
+    candidatos = svc.montar_lote(score_minimo=0.70)
+    assert [c["id_auvo"] for c in candidatos] == [111]
 
 
 def test_montar_lote_permite_retentar_apos_falha(app):

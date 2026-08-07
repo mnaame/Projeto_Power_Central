@@ -36,8 +36,12 @@ painel de um cliente para outro. Por isso:
    (config, padrão 0.70). REVISAR/NAO/score baixo só entram com marcação
    humana explícita na tela de preparação.
 2. **Dedup por `id_auvo`**: exclui quem já tem uma linha `CentralClienteLink`
-   com `status == "criado"` (idempotência real — re-rodar não duplica;
-   uma tentativa que falhou antes PODE ser re-tentada).
+   com `status == "criado"` **num lote real** (`simulacao == False`) —
+   idempotência de verdade (re-rodar não duplica; uma tentativa que
+   falhou antes PODE ser re-tentada). Um `criado` de lote em **simulação**
+   NÃO exclui: simular não pode ter efeito nenhum sobre o que ainda pode
+   ser rodado de verdade (bug corrigido em 07/08/2026 — a query original
+   não distinguia simulação de execução real).
 3. **Preparar/pré-visualizar** (`POST /central-cliente/preparar`): monta a
    lista elegível, mostra tabela (cliente, id_auvo, login, link que seria
    gerado, menus) — sem tocar a Auvo. O admin marca quais entram.
@@ -79,7 +83,8 @@ isolada, não upsert):
 - `CentralClienteLink`: id, lote_id (FK), id_auvo (indexado — **não**
   únique no banco: permite reter o histórico de tentativas falhas sem
   travar; a idempotência é uma regra de negócio em `montar_lote`, que só
-  olha para linhas com `status == "criado"`), nome, contato_codigo,
+  olha para linhas com `status == "criado"` **de lotes com
+  `simulacao == False`**), nome, contato_codigo,
   link_identificador, link_url, login (nullable), senha_cifrada
   (nullable — só populada se `central_gerar_login_senha=true`), menus
   (JSON), status (`pendente/criado/erro`), erro_mensagem, criado_em.

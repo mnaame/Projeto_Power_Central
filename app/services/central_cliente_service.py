@@ -47,14 +47,19 @@ def montar_lote(*, score_minimo: float | None = None, ids_extra: Iterable[int] =
     """Candidatos elegíveis: de-para OK com score >= mínimo (automático),
     ou marcados manualmente em `ids_extra` (REVISAR/NAO/score baixo — só
     entram com marcação humana, por especificação). Exclui quem já tem
-    link `criado` (idempotência real por `id_auvo`, não por conta —
-    duas contas do mesmo cliente Auvo geram só um candidato)."""
+    link `criado` **num lote real** (idempotência por `id_auvo`, não por
+    conta — duas contas do mesmo cliente Auvo geram só um candidato).
+    Um `criado` de lote em simulação não conta — simular não deveria ter
+    efeito nenhum sobre o que ainda pode ser rodado de verdade."""
     if score_minimo is None:
         score_minimo = settings_service.get_central_score_minimo()
     ids_extra_set = {int(i) for i in ids_extra}
 
     ja_criados = {
-        linha.id_auvo for linha in CentralClienteLink.query.filter_by(status="criado").all()
+        linha.id_auvo
+        for linha in CentralClienteLink.query.join(CentralClienteLote)
+        .filter(CentralClienteLink.status == "criado", CentralClienteLote.simulacao.is_(False))
+        .all()
     }
 
     candidatos: dict[int, dict] = {}
