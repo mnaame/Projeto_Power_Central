@@ -8,6 +8,7 @@ from app.models.auvo import AuvoChamado, AuvoDepara
 from app.models.tecnico import TecnicoLote, TecnicoLoteItem
 from app.models.bi import BiRun, BiIntervencao
 from app.models.cofre import Segredo
+from app.models.central_cliente import CentralClienteLote, CentralClienteLink
 
 __all__ = [
     "User",
@@ -25,4 +26,6 @@ __all__ = [
     "BiRun",
     "BiIntervencao",
     "Segredo",
+    "CentralClienteLote",
+    "CentralClienteLink",
 ]

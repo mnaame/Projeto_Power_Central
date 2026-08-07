@@ -70,6 +70,19 @@ DEFAULTS: dict[str, str] = {
     "bi_visitas_para_cronico": "3",
     "bi_periodo_padrao_dias": "90",
     "bi_amostra_minima_tecnico": "5",
+    # Módulo Links da Central do Cliente (Auvo) — simulação LIGADA por
+    # padrão: módulo de maior risco do sistema (escreve contatos reais com
+    # link de acesso sem login/senha na Auvo). Só desligar depois de
+    # confirmar o endpoint interno (docs/CENTRAL_CLIENTE.md §6).
+    "central_simulacao": "true",
+    "central_score_minimo": "0.70",
+    "central_auvo_user_request": "",
+    "central_menu_solicitacoes": "true",
+    "central_menu_os": "true",
+    "central_menu_orcamento": "false",
+    "central_pausa_segundos": "1",
+    "central_cargo_padrao": "Cliente",
+    "central_gerar_login_senha": "false",
 }
 
 _TELEGRAM_TOKEN_KEY = "telegram_bot_token"
@@ -361,3 +374,42 @@ def get_bi_periodo_padrao_dias() -> int:
 
 def get_bi_amostra_minima_tecnico() -> int:
     return int(get("bi_amostra_minima_tecnico"))
+
+
+# --- Módulo Links da Central do Cliente (Auvo) ---
+
+
+def central_simulacao() -> bool:
+    return get("central_simulacao").strip().lower() == "true"
+
+
+def get_central_score_minimo() -> float:
+    return float(get("central_score_minimo"))
+
+
+def get_central_auvo_user_request() -> str:
+    return get("central_auvo_user_request").strip()
+
+
+def central_menu_solicitacoes() -> bool:
+    return get("central_menu_solicitacoes").strip().lower() == "true"
+
+
+def central_menu_os() -> bool:
+    return get("central_menu_os").strip().lower() == "true"
+
+
+def central_menu_orcamento() -> bool:
+    return get("central_menu_orcamento").strip().lower() == "true"
+
+
+def get_central_pausa_segundos() -> float:
+    return float(get("central_pausa_segundos"))
+
+
+def get_central_cargo_padrao() -> str:
+    return get("central_cargo_padrao")
+
+
+def central_gerar_login_senha() -> bool:
+    return get("central_gerar_login_senha").strip().lower() == "true"
