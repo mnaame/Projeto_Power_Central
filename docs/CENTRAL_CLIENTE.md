@@ -174,13 +174,34 @@ senha gerada uma vez e não reexibida).
 Ver §9 do complemento original — resumo do que só um humano confirma via
 F12 antes da primeira execução real:
 
-1. **Formato do identificador** (8-4-4-4-12 vs 13) — capturar um link
-   real, comparar com `central_cliente.gerar_identificador()`.
-2. **Login/Senha são exigidos?** — testar com campos vazios primeiro;
-   só ligar `central_gerar_login_senha` se a Auvo recusar vazio.
-3. **`central_auvo_user_request`** — id do usuário do painel.
+1. ✅ **CONFIRMADO (07/08/2026)** — Formato do identificador: **8-4-4-4-13**
+   hex, não UUID padrão (12 no último grupo). Capturado de um `LinkAcesso`
+   real (`d9f316b4-93b1-4f1f-a3bf-dc2ebe529a200`) via F12 num contato de
+   teste. `central_cliente.gerar_identificador()` já gera nesse formato
+   (`secrets`, não `uuid.uuid4()`).
+2. ✅ **CONFIRMADO (07/08/2026)** — Login/Senha **podem ir vazios**; a
+   Auvo aceita e cria o contato normalmente (`Login: ""`, `Senha: ""` no
+   payload capturado, resposta de sucesso). `central_gerar_login_senha`
+   continua **desligado** por padrão — não é mais só cautela, é o
+   comportamento confirmado como correto.
+3. ✅ **CONFIRMADO (07/08/2026)** — `auvo-user-request` capturado:
+   `238031` (id do usuário logado no painel na hora do teste). Precisa
+   ser colocado em Configuração → "ID do usuário do painel" antes de
+   rodar em produção (cada usuário do painel tem o seu; se quem for
+   rodar o lote for outra pessoa, capturar de novo).
 4. Reconfirmar payload/endpoint se fizer semanas desde a última captura —
-   `auvo_painel_client.py` é o único arquivo a mexer.
+   `auvo_painel_client.py` é o único arquivo a mexer. Formato de resposta
+   (`success`/`codigo`/`mensagem`) ainda não foi conferido byte a byte
+   contra uma captura real — o parsing em `auvo_painel_client.py` segue o
+   que o complemento original descreveu; validar na primeira execução
+   real (ainda em simulação é seguro testar o parsing manualmente contra
+   a aba "Resposta" do F12).
+
+> Restou o formato exato do JSON de resposta (`success`, `codigo`,
+> `mensagem`) não conferido pixel a pixel — os 3 itens acima, que eram os
+> bloqueadores reais, estão confirmados. Ainda assim, mantenha a primeira
+> execução em produção pequena (1-2 clientes) e confira o resultado antes
+> de rodar um lote grande.
 
 ## 7. Fases
 
@@ -191,13 +212,15 @@ F12 antes da primeira execução real:
 | **LC3** ✅ | Aba web (preparar, executar, lote, exportar, configuração) | Integração web (admin-only, simulação por padrão) + screenshots claro/escuro |
 | **LC4** ✅ | Docs (`OPERACAO.md`) + validação final | Suíte completa verde |
 
-Módulo implementado e coberto por teste, mas **não validado contra
-produção** — nasce em simulação e deve continuar assim até um humano
-confirmar pelo F12 os itens do §6 (formato do identificador,
-Login/Senha, `auvo-user-request`). `admin.auditoria` (tela genérica já
-existente) cobre `central_lote_preparado`/`central_lote_executado`/
-`central_link_criado`/`central_lote_exportado`/`central_config_saved`/
-`central_modo_alterado` sem precisar de tela própria.
+Módulo implementado, coberto por teste, e com os 3 itens bloqueadores do
+§6 **confirmados via F12 contra um contato de teste real** (formato do
+identificador, Login/Senha vazios, `auvo-user-request`). Ainda não
+rodou um lote de produção de verdade — recomendação é começar pequeno
+(1-2 clientes) e conferir o resultado antes de um lote maior.
+`admin.auditoria` (tela genérica já existente) cobre
+`central_lote_preparado`/`central_lote_executado`/`central_link_criado`/
+`central_lote_exportado`/`central_config_saved`/`central_modo_alterado`
+sem precisar de tela própria.
 
 O que NUNCA entra no repositório: cookie de sessão real, credenciais reais
 da Auvo, qualquer contato/link de cliente real.

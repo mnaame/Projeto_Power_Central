@@ -1,12 +1,16 @@
-import uuid
+import re
 
 from app.domain.central_cliente import elegivel_automatico, gerar_identificador, montar_url
 
+# Formato confirmado contra um link real (docs/CENTRAL_CLIENTE.md §6): 8
+# grupos hex separados por hífen, tamanhos 8-4-4-4-13 — NÃO é UUID padrão
+# (que seria 8-4-4-4-12).
+_PADRAO_IDENTIFICADOR = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{13}$")
 
-def test_gerar_identificador_e_uuid_valido():
+
+def test_gerar_identificador_segue_o_formato_confirmado():
     identificador = gerar_identificador()
-    # Levanta ValueError se não for um UUID válido.
-    uuid.UUID(identificador)
+    assert _PADRAO_IDENTIFICADOR.match(identificador), identificador
 
 
 def test_gerar_identificador_e_diferente_a_cada_chamada():

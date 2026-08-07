@@ -6,15 +6,19 @@ HTTP fica em `integrations/auvo_painel_client.py`; a orquestração
 
 from __future__ import annotations
 
-import uuid
+import secrets
 
-# ATENÇÃO — NÃO CONFIRMADO (ver docs/CENTRAL_CLIENTE.md §6, item 1): o
-# complemento original suspeita que a Auvo gera o identificador no formato
-# 8-4-4-4-13 (hex), não o UUID v4 padrão (8-4-4-4-12). Até confirmar contra
-# um link real capturado no F12, usamos o UUID padrão. Função isolada de
-# propósito: se o formato certo for outro, o ajuste é só aqui.
+# Formato CONFIRMADO contra um link real capturado no F12 (ver
+# docs/CENTRAL_CLIENTE.md §6, item 1): 8-4-4-4-13 em hexadecimal — não é
+# UUID v4 padrão (que seria 8-4-4-4-12). Por isso geramos hex cru por
+# grupo (`secrets`, não `uuid.uuid4()`/`random`) em vez de usar o gerador
+# de UUID da lib padrão.
+_GRUPOS = (8, 4, 4, 4, 13)
+_HEX = "0123456789abcdef"
+
+
 def gerar_identificador() -> str:
-    return str(uuid.uuid4())
+    return "-".join("".join(secrets.choice(_HEX) for _ in range(tamanho)) for tamanho in _GRUPOS)
 
 
 URL_BASE = "https://novomillenium.auvo.com.br/share"

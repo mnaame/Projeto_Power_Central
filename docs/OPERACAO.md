@@ -551,10 +551,12 @@ pela API oficial).
   ser exportado em xlsx — **documento sensível** (tem login/link de
   acesso), mesmo cuidado do Cofre de Senhas.
 
-> **Antes de ligar produção pela primeira vez**, confirme pelo F12 do
-> navegador o formato real do identificador do link e se a Auvo exige
-> Login/Senha preenchidos — ver `docs/CENTRAL_CLIENTE.md` §6 (o gerador
-> deste módulo usa um palpite razoável, não confirmado contra produção).
+> O formato do identificador, Login/Senha vazios e o
+> `auvo-user-request` já foram **confirmados via F12** contra um contato
+> de teste real (ver `docs/CENTRAL_CLIENTE.md` §6). Mesmo assim, na
+> primeira execução em produção comece pequeno (1-2 clientes) e confira
+> o resultado antes de rodar um lote maior — o formato exato da resposta
+> da Auvo ainda não foi conferido byte a byte.
 
 ### 5.3 Administração
 

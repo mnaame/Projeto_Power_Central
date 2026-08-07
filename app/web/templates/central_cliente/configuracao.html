@@ -107,10 +107,10 @@
       </div>
       <div class="banner banner-warning" role="status">
         <span>O acesso do cliente é <strong>só pelo link</strong>, sem
-        login. Deixe isto desligado até confirmar (F12) que a Auvo recusa
-        o contato sem login/senha — ver item nº 2 do playbook
-        (docs/CENTRAL_CLIENTE.md §6). Ligado, cada senha gerada fica
-        cifrada (nunca em claro) e não é reexibida na tela.</span>
+        login. Confirmado via F12 (docs/CENTRAL_CLIENTE.md §6): a Auvo
+        aceita o contato com Login/Senha vazios — mantenha isto
+        desligado. Se ligado, cada senha gerada fica cifrada (nunca em
+        claro) e não é reexibida na tela.</span>
       </div>
 
       <button type="submit" class="btn btn-primary">Salvar configuração</button>
@@ -122,18 +122,24 @@
   <div class="section-title"><h2>Antes de rodar de verdade</h2></div>
   <div class="card" style="max-width: 640px;">
     <p class="muted">
-      Este módulo usa um endpoint interno da Auvo, não documentado. Antes
-      de desligar a simulação pela primeira vez, confirme pelo F12 do
-      navegador (comparando com um contato criado manualmente):
+      Este módulo usa um endpoint interno da Auvo, não documentado. Os 3
+      itens abaixo já foram confirmados via F12 contra um contato de
+      teste real:
     </p>
     <ol class="muted" style="padding-left: var(--space-5);">
-      <li>O formato do identificador do link (o gerador daqui usa UUID
-      padrão — pode não bater com o que a Auvo usa de verdade).</li>
-      <li>Se os campos Login/Senha são realmente exigidos pela Auvo, ou se
-      podem ir vazios.</li>
-      <li>O id do usuário do painel a usar em <code>auvo-user-request</code>.</li>
+      <li>✅ Formato do identificador: 8-4-4-4-13 em hex (já é o que o
+      gerador daqui produz).</li>
+      <li>✅ Login/Senha podem ir vazios — a Auvo aceita e cria o
+      contato normalmente.</li>
+      <li>✅ ID do usuário do painel para <code>auvo-user-request</code> —
+      confira se o valor salvo acima ("Parâmetros") ainda é o do usuário
+      que vai rodar o lote (cada login tem o seu).</li>
     </ol>
-    <p class="muted">Detalhes em <code>docs/CENTRAL_CLIENTE.md</code> §6.</p>
+    <p class="muted">
+      Mesmo assim, comece com um lote pequeno (1-2 clientes) na primeira
+      execução real e confira o resultado antes de rodar em volume —
+      detalhes em <code>docs/CENTRAL_CLIENTE.md</code> §6.
+    </p>
   </div>
 </div>
 {% endblock %}
