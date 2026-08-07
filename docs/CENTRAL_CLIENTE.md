@@ -186,10 +186,18 @@ F12 antes da primeira execução real:
 
 | Fase | Entrega | Prova |
 |---|---|---|
-| **LC1** | Domínio + modelos + migration + settings | Unit (identificador, url, elegibilidade) |
-| **LC2** | `auvo_painel_client.py` + `central_cliente_service.py` | Integração: simulação não chama a Auvo, execução real com client fake, cookie expirado aborta o resto do lote, dedup por id_auvo, falha isolada |
-| **LC3** | Aba web (preparar, executar, lote, exportar, configuração) | Integração web (admin-only, simulação por padrão) + screenshots claro/escuro |
-| **LC4** | Docs (`OPERACAO.md`) + validação final | Suíte completa verde |
+| **LC1** ✅ | Domínio + modelos + migration + settings | Unit (identificador, url, elegibilidade) |
+| **LC2** ✅ | `auvo_painel_client.py` + `central_cliente_service.py` | Integração: simulação não chama a Auvo, execução real com client fake, cookie expirado aborta o resto do lote, dedup por id_auvo, falha isolada |
+| **LC3** ✅ | Aba web (preparar, executar, lote, exportar, configuração) | Integração web (admin-only, simulação por padrão) + screenshots claro/escuro |
+| **LC4** ✅ | Docs (`OPERACAO.md`) + validação final | Suíte completa verde |
+
+Módulo implementado e coberto por teste, mas **não validado contra
+produção** — nasce em simulação e deve continuar assim até um humano
+confirmar pelo F12 os itens do §6 (formato do identificador,
+Login/Senha, `auvo-user-request`). `admin.auditoria` (tela genérica já
+existente) cobre `central_lote_preparado`/`central_lote_executado`/
+`central_link_criado`/`central_lote_exportado`/`central_config_saved`/
+`central_modo_alterado` sem precisar de tela própria.
 
 O que NUNCA entra no repositório: cookie de sessão real, credenciais reais
 da Auvo, qualquer contato/link de cliente real.

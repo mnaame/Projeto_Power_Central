@@ -524,6 +524,38 @@ auditoria de todo acesso à senha.
 > normalmente para listar itens, mas criar, editar ou revelar mostra um
 > aviso pedindo para configurar a chave (§3.1) antes de continuar.
 
+### 5.2.6 Central do Cliente (só admin)
+
+**Módulo de maior risco do sistema.** Cria contatos na Auvo com um link de
+acesso **sem login e sem senha**, para o cliente ver os próprios chamados —
+um erro vaza o painel de um cliente para outro. Usa um endpoint interno da
+Auvo, não documentado, autenticado por **cookie de sessão do painel** (não
+pela API oficial).
+
+- **Nasce em simulação** — "executar" só registra o que seria criado, sem
+  tocar a Auvo, até um admin desligar explicitamente em Configuração
+  (mesmo checkbox de confirmação do modo produção da aba Chamados).
+- **Fluxo em duas etapas**: "Preparar novo lote" monta a lista de clientes
+  elegíveis (de-para OK com score de casamento acima do mínimo, ou
+  marcados na mão por ID) e mostra a **pré-visualização** — nada é
+  enviado ainda. Só depois de conferir a lista é que se marca quais
+  entram e se clica em "Executar".
+- **Fora de simulação**, executar pede o **cookie de sessão do painel**
+  (copiado do navegador via F12) e o `auvo-user-request` a cada execução
+  — nunca ficam salvos; são usados só naquela chamada e descartados
+  depois.
+- **Não duplica**: um cliente que já tem link criado não volta a aparecer
+  como candidato num lote novo (uma tentativa que falhou pode ser
+  retentada).
+- Cada lote fica no histórico com os itens (criado/erro/pendente) e pode
+  ser exportado em xlsx — **documento sensível** (tem login/link de
+  acesso), mesmo cuidado do Cofre de Senhas.
+
+> **Antes de ligar produção pela primeira vez**, confirme pelo F12 do
+> navegador o formato real do identificador do link e se a Auvo exige
+> Login/Senha preenchidos — ver `docs/CENTRAL_CLIENTE.md` §6 (o gerador
+> deste módulo usa um palpite razoável, não confirmado contra produção).
+
 ### 5.3 Administração
 
 Em **Configurações** (só admin): janela de horas sem comunicação, lista de
