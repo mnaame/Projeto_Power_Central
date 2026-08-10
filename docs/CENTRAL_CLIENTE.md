@@ -115,6 +115,13 @@ o lote inteiro nesse caso, sem contar nada como criado a partir daí.
 - `montar_lote(*, score_minimo, ids_extra=())` — lê `AuvoDepara`, aplica
   elegibilidade automática + IDs marcados manualmente, exclui quem já tem
   link `criado`. Devolve a lista de candidatos (sem tocar a Auvo).
+- `buscar_clientes(termo, *, limite=30)` — lookup por nome/conta/id_auvo,
+  **sem** os filtros de `montar_lote` (não exige elegibilidade, não
+  exclui quem já tem link — pelo contrário, mostra o link existente).
+  Existe porque, sem isso, um cliente já processado simplesmente some de
+  qualquer busca (é excluído por `montar_lote`) e parece que nunca
+  existiu — bug de UX reportado em produção (cliente de teste "sumiu" ao
+  procurar de novo pelo ID). Usada pela busca na tela `index`.
 - `criar_lote(candidatos, *, simulacao, user_id)` — cria
   `CentralClienteLote` + itens `pendente`, **commita imediatamente**
   (mesmo motivo do BI: o lote sobrevive mesmo se a execução falhar logo
@@ -141,8 +148,13 @@ o lote inteiro nesse caso, sem contar nada como criado a partir daí.
 
 ## 3. Web — blueprint `central_cliente` (prefixo `/central-cliente`, admin-only)
 
-- **`index`**: lotes recentes + formulário "Preparar novo lote"
-  (score mínimo, IDs extra separados por vírgula).
+- **`index`** (aceita `?q=` GET): lotes recentes + "Buscar cliente"
+  (nome, conta ou id_auvo — `buscar_clientes`, mostra "já tem link" com
+  link pro lote em vez de simplesmente sumir) + formulário "Preparar novo
+  lote" (score mínimo, IDs extra separados por vírgula). Resultado da
+  busca sem link tem botão "Usar este ID" (JS mínimo, `app.js`) que
+  copia o id_auvo pro campo "IDs Auvo extra" — sem precisar decorar o
+  número.
 - **`preparar`** (POST): mostra a pré-visualização (tabela com checkbox
   por linha, mesmo padrão de `tecnico/index.html` "puxar agenda" →
   "gerar") — nada é enviado ainda.

@@ -384,3 +384,69 @@ def test_montar_link_whatsapp_item_com_senha_decifra_para_a_mensagem(app):
     link = svc.montar_link_whatsapp_item(item, config=app.config)
     texto = unquote(parse_qs(urlparse(link).query)["text"][0])
     assert texto == f"CLIENTE X login=cliente111 senha={senha_esperada}"
+
+
+# ---------- buscar_clientes ----------
+
+
+def test_buscar_clientes_termo_vazio_devolve_vazio(app):
+    assert svc.buscar_clientes("") == []
+    assert svc.buscar_clientes("   ") == []
+
+
+def test_buscar_clientes_por_nome(app):
+    _depara("95", 111, nome="AUTO MECANICA CENTRO")
+    _depara("96", 222, nome="OUTRA LOJA")
+    resultados = svc.buscar_clientes("auto mecanica")
+    assert [r["id_auvo"] for r in resultados] == [111]
+
+
+def test_buscar_clientes_por_id_auvo(app):
+    _depara("95", 111, nome="AUTO MECANICA")
+    resultados = svc.buscar_clientes("111")
+    assert [r["id_auvo"] for r in resultados] == [111]
+
+
+def test_buscar_clientes_por_conta(app):
+    _depara("95", 111, nome="AUTO MECANICA")
+    resultados = svc.buscar_clientes("95")
+    assert [r["id_auvo"] for r in resultados] == [111]
+
+
+def test_buscar_clientes_sem_resultado(app):
+    assert svc.buscar_clientes("nao existe nenhum cliente assim") == []
+
+
+def test_buscar_clientes_mostra_link_existente_de_producao(app):
+    _depara("95", 111, nome="AUTO MECANICA")
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "AUTO MECANICA"}], simulacao=False, user_id=None)
+    svc.executar_lote(
+        lote,
+        credentials=PainelCredentials(cookie="x", auvo_user_request="1"),
+        config=app.config,
+        client=FakePainelClient(),
+        sleep_fn=_sem_pausa,
+    )
+
+    resultados = svc.buscar_clientes("111")
+    assert len(resultados) == 1
+    link_existente = resultados[0]["link_existente"]
+    assert link_existente is not None
+    assert link_existente.lote.simulacao is False
+
+
+def test_buscar_clientes_mostra_link_existente_de_simulacao(app):
+    _depara("95", 111, nome="AUTO MECANICA")
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "AUTO MECANICA"}], simulacao=True, user_id=None)
+    svc.executar_lote(lote, credentials=None, config=app.config, sleep_fn=_sem_pausa)
+
+    resultados = svc.buscar_clientes("111")
+    link_existente = resultados[0]["link_existente"]
+    assert link_existente is not None
+    assert link_existente.lote.simulacao is True
+
+
+def test_buscar_clientes_sem_link_devolve_none(app):
+    _depara("95", 111, nome="AUTO MECANICA")
+    resultados = svc.buscar_clientes("111")
+    assert resultados[0]["link_existente"] is None

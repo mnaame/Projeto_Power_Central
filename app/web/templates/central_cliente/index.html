@@ -32,6 +32,70 @@
 </div>
 
 <div class="section">
+  <div class="section-title"><h2>Buscar cliente</h2></div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Por nome (Power ou Auvo), conta ou ID Auvo — mostra também quem já
+    tem link criado (não some da lista sem explicação).
+  </p>
+  <form method="get" action="{{ url_for('central_cliente.index') }}" class="card"
+        style="display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: flex-end;">
+    <div class="field" style="margin-bottom: 0; flex: 1; min-width: 260px;">
+      <label for="q">Nome, conta ou ID Auvo</label>
+      <input id="q" type="text" name="q" value="{{ busca }}" placeholder="ex.: Auto Mecânica, 95, 13804973">
+    </div>
+    <button type="submit" class="btn btn-ghost">Buscar</button>
+  </form>
+
+  {% if resultados_busca is not none %}
+  {% if resultados_busca %}
+  <div class="table-wrap" style="margin-top: var(--space-4);">
+    <table>
+      <thead>
+        <tr>
+          <th>Cliente</th>
+          <th>ID Auvo</th>
+          <th>Conta</th>
+          <th>Situação</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in resultados_busca %}
+        <tr>
+          <td>{{ item.nome }}</td>
+          <td class="is-numeric">{{ item.id_auvo }}</td>
+          <td class="is-numeric">{{ item.conta_power or '—' }}</td>
+          <td>
+            {% if item.link_existente %}
+            <span class="chip {{ 'chip-warning' if item.link_existente.lote.simulacao else 'chip-ok' }}">
+              já tem link ({{ 'simulação' if item.link_existente.lote.simulacao else 'produção' }})
+            </span>
+            {% elif item.status_depara == 'OK' %}
+            <span class="chip chip-ok">elegível automático</span>
+            {% else %}
+            <span class="chip chip-neutral">precisa marcação manual ({{ item.status_depara }})</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if item.link_existente %}
+            <a href="{{ url_for('central_cliente.lote_detalhe', lote_id=item.link_existente.lote_id) }}">Ver lote</a>
+            {% else %}
+            <button type="button" class="btn btn-ghost" data-central-adicionar-id="{{ item.id_auvo }}"
+                    style="padding: var(--space-1) var(--space-2);">Usar este ID</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted" style="margin-top: var(--space-3);">Nenhum cliente encontrado para "{{ busca }}".</p>
+  {% endif %}
+  {% endif %}
+</div>
+
+<div class="section">
   <div class="section-title"><h2>Preparar novo lote</h2></div>
   <form method="post" action="{{ url_for('central_cliente.preparar') }}" novalidate
         class="card" style="display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: flex-end;">

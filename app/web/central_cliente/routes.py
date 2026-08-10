@@ -52,6 +52,7 @@ def _parse_ids_extra(bruto: str | None) -> list[int]:
 @login_required
 @roles_required("admin")
 def index():
+    busca = (request.args.get("q") or "").strip()
     return render_template(
         "central_cliente/index.html",
         lotes=_lotes_recentes(),
@@ -59,6 +60,8 @@ def index():
         form=PrepararForm(),
         simulacao=settings_service.central_simulacao(),
         auvo_user_request_padrao=settings_service.get_central_auvo_user_request(),
+        busca=busca,
+        resultados_busca=central_cliente_service.buscar_clientes(busca) if busca else None,
     )
 
 
@@ -97,6 +100,8 @@ def preparar():
         form=form,
         simulacao=settings_service.central_simulacao(),
         auvo_user_request_padrao=settings_service.get_central_auvo_user_request(),
+        busca="",
+        resultados_busca=None,
     )
 
 

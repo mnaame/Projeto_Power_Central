@@ -30,6 +30,45 @@ def test_admin_acessa_index(admin_client):
     assert "simulação".encode("utf-8") in resposta.data
 
 
+# ---------- buscar cliente ----------
+
+
+def test_buscar_sem_termo_nao_mostra_resultados(admin_client):
+    resposta = admin_client.get("/central-cliente")
+    assert resposta.status_code == 200
+    assert "Nenhum cliente encontrado".encode("utf-8") not in resposta.data
+
+
+def test_buscar_por_nome_encontra_cliente(app, admin_client):
+    _depara("95", 111, nome="AUTO MECANICA CENTRO")
+    resposta = admin_client.get("/central-cliente?q=auto+mecanica")
+    assert resposta.status_code == 200
+    assert b"AUTO MECANICA CENTRO" in resposta.data
+
+
+def test_buscar_sem_resultado_mostra_aviso(admin_client):
+    resposta = admin_client.get("/central-cliente?q=ninguem-com-esse-nome")
+    assert resposta.status_code == 200
+    assert "Nenhum cliente encontrado".encode("utf-8") in resposta.data
+
+
+def test_buscar_mostra_ja_tem_link_em_vez_de_sumir(app, admin_client):
+    _depara("95", 111, nome="AUTO MECANICA")
+    admin_client.post(
+        "/central-cliente/executar",
+        data={
+            "total_linhas": "1",
+            "selecionar": "0",
+            "id_auvo_0": "111",
+            "nome_0": "AUTO MECANICA",
+        },
+    )
+    resposta = admin_client.get("/central-cliente?q=111")
+    assert resposta.status_code == 200
+    assert "já tem link".encode("utf-8") in resposta.data
+    assert b"Ver lote" in resposta.data
+
+
 def test_operador_nao_acessa_configuracao(operador_client):
     assert operador_client.get("/central-cliente/configuracao").status_code == 403
 

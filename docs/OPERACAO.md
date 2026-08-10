@@ -546,7 +546,12 @@ pela API oficial).
   depois.
 - **Não duplica**: um cliente que já tem link criado não volta a aparecer
   como candidato num lote novo (uma tentativa que falhou pode ser
-  retentada).
+  retentada). Por isso ele some da pré-visualização — não é bug, é a
+  idempotência funcionando. Para achar um cliente e confirmar que ele já
+  foi processado (ou pra descobrir o ID de alguém que ainda não tem link,
+  sem decorar o número), use a caixa **"Buscar cliente"** no topo da
+  página — busca por nome, conta ou ID e mostra "já tem link" com atalho
+  pro lote, em vez de simplesmente não aparecer em lugar nenhum.
 - Cada lote fica no histórico com os itens (criado/erro/pendente) e pode
   ser exportado em xlsx — **documento sensível** (tem login/link de
   acesso), mesmo cuidado do Cofre de Senhas.

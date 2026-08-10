@@ -63,6 +63,25 @@
     });
 
     document.addEventListener("click", function (evento) {
+      var botao = evento.target.closest("[data-central-adicionar-id]");
+      if (!botao) {
+        return;
+      }
+      var campo = document.getElementById("ids_extra");
+      if (!campo) {
+        return;
+      }
+      var id = botao.getAttribute("data-central-adicionar-id");
+      var atuais = campo.value.split(",").map(function (v) { return v.trim(); }).filter(Boolean);
+      if (atuais.indexOf(id) === -1) {
+        atuais.push(id);
+      }
+      campo.value = atuais.join(", ");
+      campo.scrollIntoView({ behavior: "smooth", block: "center" });
+      campo.focus();
+    });
+
+    document.addEventListener("click", function (evento) {
       var botao = evento.target.closest("[data-cofre-gerar-senha]");
       if (!botao) {
         return;

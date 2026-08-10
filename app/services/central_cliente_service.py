@@ -87,6 +87,56 @@ def montar_lote(*, score_minimo: float | None = None, ids_extra: Iterable[int] =
     return list(candidatos.values())
 
 
+def buscar_clientes(termo: str, *, limite: int = 30) -> list[dict]:
+    """Lookup por nome (Power ou Auvo), conta ou id_auvo — diferente de
+    `montar_lote`, aqui NÃO filtra por elegibilidade nem exclui quem já
+    tem link: o objetivo é achar um cliente específico e mostrar o
+    estado real dele (inclusive "já tem link"), não montar um lote novo.
+    Sem isso, um cliente que já recebeu link simplesmente some de
+    qualquer busca — parece que nunca existiu, quando na verdade já foi
+    processado."""
+    termo = (termo or "").strip()
+    if not termo:
+        return []
+
+    query = AuvoDepara.query
+    if termo.isdigit():
+        query = query.filter(
+            db.or_(AuvoDepara.id_auvo == int(termo), AuvoDepara.conta_power == termo)
+        )
+    else:
+        padrao = f"%{termo}%"
+        query = query.filter(
+            db.or_(AuvoDepara.nome_power.ilike(padrao), AuvoDepara.nome_auvo.ilike(padrao))
+        )
+    linhas = query.order_by(AuvoDepara.conta_power).limit(limite).all()
+
+    resultados: list[dict] = []
+    vistos: set[int] = set()
+    for linha in linhas:
+        if linha.id_auvo is None or linha.id_auvo in vistos:
+            continue
+        vistos.add(linha.id_auvo)
+
+        link_existente = (
+            CentralClienteLink.query.join(CentralClienteLote)
+            .filter(CentralClienteLink.id_auvo == linha.id_auvo, CentralClienteLink.status == "criado")
+            .order_by(CentralClienteLink.criado_em.desc())
+            .first()
+        )
+        resultados.append(
+            {
+                "id_auvo": linha.id_auvo,
+                "nome": linha.nome_auvo or linha.nome_power,
+                "conta_power": linha.conta_power,
+                "status_depara": linha.status,
+                "score": linha.score,
+                "link_existente": link_existente,
+            }
+        )
+    return resultados
+
+
 def prever(candidatos: list[dict]) -> list[dict]:
     """Pré-visualização (§1 passo 3): nada é persistido nem enviado à
     Auvo. O identificador mostrado é só ilustrativo — um novo é gerado na
