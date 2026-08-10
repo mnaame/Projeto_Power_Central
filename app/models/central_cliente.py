@@ -3,7 +3,7 @@ from app.models.types import TZDateTime
 from app.utils.time import utcnow
 
 LOTE_STATUSES = ("running", "success", "parcial", "error")
-LINK_STATUSES = ("pendente", "criado", "erro")
+LINK_STATUSES = ("pendente", "criado", "erro", "removido")
 
 
 class CentralClienteLote(db.Model):
@@ -47,7 +47,13 @@ class CentralClienteLink(db.Model):
     dentro de um lote. `id_auvo` **não** é único no banco — uma tentativa
     que falhou pode ser retentada em outro lote; a idempotência ("já tem
     link") é regra de negócio em `central_cliente_service.montar_lote`,
-    que só considera linhas com `status == 'criado'`."""
+    que só considera linhas com `status == 'criado'`.
+
+    `status == 'removido'`: o admin apagou o contato manualmente na Auvo
+    (ex.: era um teste) e marcou o registro como removido por aqui —
+    `central_cliente_service.remover_link`. Não apaga a linha (mantém o
+    histórico de auditoria), só tira do caminho de `status == 'criado'`,
+    liberando o cliente pra aparecer como candidato de novo."""
 
     __tablename__ = "central_cliente_links"
 
@@ -70,7 +76,7 @@ class CentralClienteLink(db.Model):
 
     __table_args__ = (
         db.CheckConstraint(
-            "status IN ('pendente', 'criado', 'erro')",
+            "status IN ('pendente', 'criado', 'erro', 'removido')",
             name="ck_central_cliente_links_status",
         ),
     )

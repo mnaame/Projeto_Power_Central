@@ -561,6 +561,12 @@ pela API oficial).
   configurável). O envio é **assistido** — o site só monta a mensagem, um
   humano confere e clica em enviar dentro do próprio WhatsApp. Sem
   telefone válido, a linha mostra "sem telefone" em vez do botão.
+- **"remover"** (na tela do lote, só em item `criado`): usar **só depois**
+  de já ter apagado o contato manualmente no painel da Auvo (ex.: era um
+  teste). Isso não mexe na Auvo — só avisa o Power Central que aquele
+  registro não vale mais, e o cliente volta a poder ser processado de
+  novo (aparece na busca e numa pré-visualização nova). O registro não é
+  apagado, só marcado como "removido" — fica no histórico do lote.
 
 > O formato do identificador, Login/Senha vazios e o
 > `auvo-user-request` já foram **confirmados via F12** contra um contato

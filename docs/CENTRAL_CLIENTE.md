@@ -98,8 +98,12 @@ isolada, não upsert):
   link_identificador, link_url, login (nullable), senha_cifrada
   (nullable — só populada se `central_gerar_login_senha=true`), telefone
   (nullable, já normalizado — busca via API oficial em `executar_lote`,
-  ver §1 passo 6), menus (JSON), status (`pendente/criado/erro`),
-  erro_mensagem, criado_em.
+  ver §1 passo 6), menus (JSON), status (`pendente/criado/erro/removido`),
+  erro_mensagem, criado_em. `removido` (migration `d90d1780e01f`): admin
+  apagou o contato manualmente na Auvo e marcou por aqui
+  (`central_cliente_service.remover_link`) — não apaga a linha (fica no
+  histórico/auditoria), só sai do caminho de `status == "criado"`, então
+  o cliente volta a aparecer como candidato elegível.
 
 ### 2.3 `app/integrations/auvo_painel_client.py` (isolado, não-oficial)
 
@@ -145,6 +149,12 @@ o lote inteiro nesse caso, sem contar nada como criado a partir daí.
 - `montar_link_whatsapp_item(item, *, config) -> str | None` — decifra a
   senha (se houver), renderiza a mensagem e monta o link `wa.me`; `None`
   se o item não tem telefone válido.
+- `remover_link(item, *, user=None)` — só aceita item com
+  `status == "criado"` (levanta `CentralClienteLinkNaoRemovivelError`
+  senão); marca `status = "removido"` e audita. Não chama a Auvo — é só
+  pra sincronizar depois de o admin já ter apagado o contato manualmente
+  lá (ex.: era teste). Não apaga a linha nem faz `db.session.commit()`
+  (mesmo padrão de `cofre_service.excluir` — quem commita é a rota).
 
 ## 3. Web — blueprint `central_cliente` (prefixo `/central-cliente`, admin-only)
 
@@ -173,6 +183,11 @@ o lote inteiro nesse caso, sem contar nada como criado a partir daí.
   `<a target="_blank">` simples, sem precisar de JS. 404 se o item não
   tiver telefone (o botão não deveria nem estar visível nesse caso) ou
   não pertencer ao lote da URL.
+- **`lote/<id>/item/<id>/remover`** (POST): marca o item como `removido`
+  (`remover_link`) — botão só aparece pra item `criado`, com confirm()
+  no navegador avisando "só use depois de apagar na Auvo". Não chama a
+  Auvo. Item que não existe/não é desse lote → 404; item que não está
+  `criado` (já removido, pendente, erro) → aviso, sem mudar nada.
 - **`exportar/<id>`**: xlsx (cliente, id_auvo, telefone, login, link,
   contato_codigo, status) — documento sensível (login/link de acesso),
   mesmo cuidado do Cofre.
@@ -221,7 +236,8 @@ os cita, já que o acesso confirmado é só por link).
   lista completa), `central_link_criado` (por item: id_auvo, nome,
   contato_codigo — nunca a senha), `central_lote_exportado`,
   `central_config_saved`, `central_whatsapp_aberto` (id_auvo/nome —
-  nunca o telefone completo nem a mensagem).
+  nunca o telefone completo nem a mensagem), `central_link_removido`
+  (id_auvo/nome/lote_id).
 - `roles_required("admin")` em toda rota — o 403 automático já audita
   (`unauthorized_access_attempt`), não precisa de checagem por item como
   o Cofre (aqui é módulo inteiro, não registro a registro).
@@ -286,6 +302,7 @@ F12 antes da primeira execução real:
 | **LC3** ✅ | Aba web (preparar, executar, lote, exportar, configuração) | Integração web (admin-only, simulação por padrão) + screenshots claro/escuro |
 | **LC4** ✅ | Docs (`OPERACAO.md`) + validação final | Suíte completa verde |
 | **LC5** ✅ | WhatsApp assistido (wa.me) + telefone normalizado via API oficial | Unit (normalizar_telefone, montar_link_whatsapp) + integração (busca de telefone não derruba o lote, mensagem com template, rota audita+redireciona, 404 sem telefone) + screenshots claro/escuro |
+| **LC6** ✅ | Busca por cliente (`buscar_clientes`) + `remover_link` (desfazer "já tem link" depois de apagar manualmente na Auvo) | Integração (busca por nome/conta/id, mostra link existente sem sumir; remover só aceita status='criado', libera o cliente pra `montar_lote` de novo) + screenshots claro/escuro |
 
 Módulo implementado, coberto por teste, e com os 3 itens bloqueadores do
 §6 **confirmados via F12 contra um contato de teste real** (formato do
@@ -295,7 +312,8 @@ rodou um lote de produção de verdade — recomendação é começar pequeno
 `admin.auditoria` (tela genérica já existente) cobre
 `central_lote_preparado`/`central_lote_executado`/`central_link_criado`/
 `central_lote_exportado`/`central_config_saved`/`central_modo_alterado`/
-`central_whatsapp_aberto` sem precisar de tela própria.
+`central_whatsapp_aberto`/`central_link_removido` sem precisar de tela
+própria.
 
 O que NUNCA entra no repositório: cookie de sessão real, credenciais reais
 da Auvo, qualquer contato/link de cliente real.

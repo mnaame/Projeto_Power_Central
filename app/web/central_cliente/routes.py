@@ -239,6 +239,29 @@ def whatsapp(lote_id: int, item_id: int):
     return redirect(link)
 
 
+@bp.route("/lote/<int:lote_id>/item/<int:item_id>/remover", methods=["POST"])
+@login_required
+@roles_required("admin")
+def remover(lote_id: int, item_id: int):
+    """Usar só depois de apagar o contato manualmente na Auvo (ex.: era
+    um teste) — isto não toca a Auvo, só libera o cliente pra aparecer
+    como candidato de novo por aqui. Não apaga a linha (fica 'removido',
+    mantém o histórico)."""
+    item = db.session.get(CentralClienteLink, item_id)
+    if item is None or item.lote_id != lote_id:
+        abort(404)
+
+    try:
+        central_cliente_service.remover_link(item, user=current_user)
+    except central_cliente_service.CentralClienteLinkNaoRemovivelError as exc:
+        flash(str(exc), "warning")
+        return redirect(url_for("central_cliente.lote_detalhe", lote_id=lote_id))
+
+    db.session.commit()
+    flash(f'"{item.nome}" marcado como removido — já pode ser criado de novo.', "info")
+    return redirect(url_for("central_cliente.lote_detalhe", lote_id=lote_id))
+
+
 @bp.route("/exportar/<int:lote_id>")
 @login_required
 @roles_required("admin")

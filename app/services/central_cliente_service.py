@@ -45,6 +45,11 @@ class CentralClienteLoteEmAndamentoError(Exception):
     """Este lote já está sendo executado (clique duplo)."""
 
 
+class CentralClienteLinkNaoRemovivelError(Exception):
+    """Só dá pra remover um registro com status 'criado' — pendente/erro
+    não bloqueiam ninguém, e 'removido' já está removido."""
+
+
 # ----------------------------------------------------------------------
 # Montagem do lote (elegibilidade + dedup) e pré-visualização
 # ----------------------------------------------------------------------
@@ -457,3 +462,23 @@ def executar_lote(
         return lote
     finally:
         _finalizar(lote.id)
+
+
+def remover_link(item: CentralClienteLink, *, user=None) -> None:
+    """Marca o registro como 'removido' — usar quando o contato foi
+    apagado manualmente na Auvo (ex.: era um teste). Não apaga a linha
+    (mantém o histórico de auditoria); só libera o cliente pra aparecer
+    como candidato de novo, já que `montar_lote` só exclui
+    `status == 'criado'`. Não faz nenhuma chamada à Auvo — quem já apagou
+    o contato lá é o admin, isto só sincroniza o nosso lado."""
+    if item.status != "criado":
+        raise CentralClienteLinkNaoRemovivelError(
+            f"Só é possível remover um item com status 'criado' (atual: {item.status})."
+        )
+    item.status = "removido"
+    audit_service.registrar(
+        action="central_link_removido",
+        result="success",
+        user=user,
+        details={"lote_id": item.lote_id, "id_auvo": item.id_auvo, "nome": item.nome},
+    )

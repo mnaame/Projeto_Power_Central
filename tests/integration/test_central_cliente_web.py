@@ -331,6 +331,80 @@ def test_operador_nao_acessa_whatsapp(operador_client):
     assert operador_client.get("/central-cliente/lote/1/item/1/whatsapp").status_code == 403
 
 
+# ---------- remover ----------
+
+
+def test_remover_marca_removido_e_libera_para_novo_lote(app, admin_client):
+    _depara("95", 111, nome="AUTO MECANICA")
+    admin_client.post(
+        "/central-cliente/executar",
+        data={
+            "total_linhas": "1",
+            "selecionar": "0",
+            "id_auvo_0": "111",
+            "nome_0": "AUTO MECANICA",
+        },
+    )
+    lote = CentralClienteLote.query.order_by(CentralClienteLote.id.desc()).first()
+    item = lote.itens[0]
+    assert item.status == "criado"
+
+    resposta = admin_client.post(
+        f"/central-cliente/lote/{lote.id}/item/{item.id}/remover", follow_redirects=True
+    )
+    assert resposta.status_code == 200
+    assert db.session.get(CentralClienteLink, item.id).status == "removido"
+
+    entrada = AuditLog.query.filter_by(action="central_link_removido").first()
+    assert entrada is not None
+
+    # volta a aparecer numa nova pré-visualização
+    resposta_preparar = admin_client.post(
+        "/central-cliente/preparar", data={"score_minimo": "0.70", "ids_extra": ""}
+    )
+    assert b"AUTO MECANICA" in resposta_preparar.data
+
+
+def test_remover_item_pendente_nao_remove(app, admin_client):
+    lote = CentralClienteLote(simulacao=True, status="running", total_itens=1)
+    db.session.add(lote)
+    db.session.flush()
+    item = CentralClienteLink(lote_id=lote.id, id_auvo=111, nome="X", status="pendente")
+    db.session.add(item)
+    db.session.commit()
+
+    resposta = admin_client.post(
+        f"/central-cliente/lote/{lote.id}/item/{item.id}/remover", follow_redirects=True
+    )
+    assert resposta.status_code == 200
+    assert db.session.get(CentralClienteLink, item.id).status == "pendente"
+
+
+def test_remover_item_de_outro_lote_404(app, admin_client):
+    for i in range(2):
+        admin_client.post(
+            "/central-cliente/executar",
+            data={
+                "total_linhas": "1",
+                "selecionar": "0",
+                "id_auvo_0": str(111 + i),
+                "nome_0": "CLIENTE X",
+            },
+        )
+    lotes = CentralClienteLote.query.order_by(CentralClienteLote.id).all()
+    primeiro_item = lotes[0].itens[0]
+    segundo_lote = lotes[1]
+
+    resposta = admin_client.post(
+        f"/central-cliente/lote/{segundo_lote.id}/item/{primeiro_item.id}/remover"
+    )
+    assert resposta.status_code == 404
+
+
+def test_operador_nao_remove(operador_client):
+    assert operador_client.post("/central-cliente/lote/1/item/1/remover").status_code == 403
+
+
 # ---------- configuração ----------
 
 

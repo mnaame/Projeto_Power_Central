@@ -450,3 +450,78 @@ def test_buscar_clientes_sem_link_devolve_none(app):
     _depara("95", 111, nome="AUTO MECANICA")
     resultados = svc.buscar_clientes("111")
     assert resultados[0]["link_existente"] is None
+
+
+# ---------- remover_link ----------
+
+
+def test_remover_link_marca_removido_e_audita(app):
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "AUTO MECANICA"}], simulacao=True, user_id=None)
+    svc.executar_lote(lote, credentials=None, config=app.config, sleep_fn=_sem_pausa)
+    item = lote.itens[0]
+    assert item.status == "criado"
+
+    svc.remover_link(item)
+    db.session.commit()
+
+    assert item.status == "removido"
+    entrada = AuditLog.query.filter_by(action="central_link_removido").first()
+    assert entrada is not None
+    assert entrada.details["id_auvo"] == 111
+
+
+def test_remover_link_pendente_levanta_erro(app):
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "AUTO MECANICA"}], simulacao=True, user_id=None)
+    item = lote.itens[0]
+    assert item.status == "pendente"
+
+    try:
+        svc.remover_link(item)
+        assert False, "deveria ter levantado CentralClienteLinkNaoRemovivelError"
+    except svc.CentralClienteLinkNaoRemovivelError:
+        pass
+    assert item.status == "pendente"
+
+
+def test_remover_link_ja_removido_levanta_erro(app):
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "AUTO MECANICA"}], simulacao=True, user_id=None)
+    svc.executar_lote(lote, credentials=None, config=app.config, sleep_fn=_sem_pausa)
+    item = lote.itens[0]
+    svc.remover_link(item)
+    db.session.commit()
+
+    try:
+        svc.remover_link(item)
+        assert False, "deveria ter levantado CentralClienteLinkNaoRemovivelError"
+    except svc.CentralClienteLinkNaoRemovivelError:
+        pass
+
+
+def test_montar_lote_permite_novo_candidato_apos_remover(app):
+    _depara("95", 111, status="OK", score=0.9, nome="AUTO MECANICA")
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "AUTO MECANICA"}], simulacao=False, user_id=None)
+    svc.executar_lote(
+        lote,
+        credentials=PainelCredentials(cookie="x", auvo_user_request="1"),
+        config=app.config,
+        client=FakePainelClient(),
+        sleep_fn=_sem_pausa,
+    )
+    assert svc.montar_lote(score_minimo=0.70) == []
+
+    svc.remover_link(lote.itens[0])
+    db.session.commit()
+
+    candidatos = svc.montar_lote(score_minimo=0.70)
+    assert [c["id_auvo"] for c in candidatos] == [111]
+
+
+def test_buscar_clientes_nao_mostra_link_removido(app):
+    _depara("95", 111, nome="AUTO MECANICA")
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "AUTO MECANICA"}], simulacao=True, user_id=None)
+    svc.executar_lote(lote, credentials=None, config=app.config, sleep_fn=_sem_pausa)
+    svc.remover_link(lote.itens[0])
+    db.session.commit()
+
+    resultados = svc.buscar_clientes("111")
+    assert resultados[0]["link_existente"] is None

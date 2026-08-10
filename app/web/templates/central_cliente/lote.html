@@ -57,7 +57,7 @@
         </tr>
       </thead>
       <tbody>
-        {% set estilos_item = {'criado': 'chip-ok', 'erro': 'chip-critical', 'pendente': 'chip-neutral'} %}
+        {% set estilos_item = {'criado': 'chip-ok', 'erro': 'chip-critical', 'pendente': 'chip-neutral', 'removido': 'chip-neutral'} %}
         {% for item in lote.itens %}
         <tr>
           <td>{{ item.nome or '—' }}</td>
@@ -66,13 +66,20 @@
           <td>{{ item.login or '—' }}</td>
           <td class="muted" style="font-size: var(--font-size-xs);">{{ item.link_url or '—' }}</td>
           <td>{{ item.erro_mensagem or '—' }}</td>
-          <td>
-            {% if item.status == 'criado' and item.telefone %}
-            <a class="btn btn-ghost" style="padding: var(--space-1) var(--space-2);"
-               href="{{ url_for('central_cliente.whatsapp', lote_id=lote.id, item_id=item.id) }}"
-               target="_blank" rel="noopener">Enviar no WhatsApp</a>
-            {% elif item.status == 'criado' %}
+          <td style="white-space: nowrap;">
+            {% if item.status == 'criado' %}
+            {% if item.telefone %}
+            <a href="{{ url_for('central_cliente.whatsapp', lote_id=lote.id, item_id=item.id) }}"
+               target="_blank" rel="noopener">WhatsApp</a>
+            {% else %}
             <span class="muted" style="font-size: var(--font-size-xs);">sem telefone</span>
+            {% endif %}
+            <form method="post" action="{{ url_for('central_cliente.remover', lote_id=lote.id, item_id=item.id) }}"
+                  style="display: inline;"
+                  onsubmit="return confirm('Marcar \'{{ item.nome }}\' como removido? Só faça isso se já apagou o contato na Auvo manualmente.');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" style="background: none; border: none; padding: 0; margin-left: var(--space-3); color: var(--color-status-critical); cursor: pointer; text-decoration: underline; font: inherit;">remover</button>
+            </form>
             {% else %}
             <span class="muted">—</span>
             {% endif %}
