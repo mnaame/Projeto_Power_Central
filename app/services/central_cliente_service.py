@@ -12,11 +12,18 @@ import threading
 import time
 from typing import Callable, Iterable
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 
-from app.domain.central_cliente import elegivel_automatico, gerar_identificador, montar_url
+from app.domain.central_cliente import (
+    elegivel_automatico,
+    gerar_identificador,
+    montar_link_whatsapp,
+    montar_url,
+    normalizar_telefone,
+)
 from app.domain.cofre import gerar_senha
 from app.extensions import db
+from app.integrations.auvo_client import AuvoClient, AuvoError
 from app.integrations.auvo_painel_client import (
     CentralClienteCookieExpiradoError,
     CentralClientePainelClient,
@@ -25,7 +32,7 @@ from app.integrations.auvo_painel_client import (
 )
 from app.models.auvo import AuvoDepara
 from app.models.central_cliente import CentralClienteLink, CentralClienteLote
-from app.services import audit_service, settings_service
+from app.services import audit_service, auvo_service, settings_service
 
 logger = logging.getLogger("central_cliente")
 
@@ -156,10 +163,94 @@ def _finalizar(lote_id: int) -> None:
         _lotes_em_execucao.discard(lote_id)
 
 
-def _cifrar_senha(senha: str, *, config) -> str:
+def _fernet(config) -> Fernet:
     chave = config["ENCRYPTION_KEY"]
-    fernet = Fernet(chave.encode() if isinstance(chave, str) else chave)
-    return fernet.encrypt(senha.encode()).decode()
+    return Fernet(chave.encode() if isinstance(chave, str) else chave)
+
+
+def _cifrar_senha(senha: str, *, config) -> str:
+    return _fernet(config).encrypt(senha.encode()).decode()
+
+
+def _decifrar_senha(senha_cifrada: str, *, config) -> str:
+    return _fernet(config).decrypt(senha_cifrada.encode()).decode()
+
+
+# ----------------------------------------------------------------------
+# Telefone (API oficial) e WhatsApp assistido (§5.5)
+# ----------------------------------------------------------------------
+
+
+def _id_cliente_auvo(cliente: dict) -> int | None:
+    for chave in ("id", "customerId", "idCustomer"):
+        valor = cliente.get(chave)
+        if valor is not None:
+            try:
+                return int(valor)
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def _telefone_bruto_cliente(cliente: dict) -> str:
+    for chave in ("phoneNumber", "phone", "cellPhone"):
+        valor = str(cliente.get(chave) or "").strip()
+        if valor:
+            return valor
+    return ""
+
+
+def _mapa_telefones(client: AuvoClient) -> dict[int, str]:
+    """id_auvo -> telefone bruto (ainda não normalizado), best-effort a
+    partir da API oficial. Nunca levanta — uma falha aqui não pode
+    derrubar a criação dos contatos, só deixa telefone/WhatsApp de fora
+    para aquele lote."""
+    try:
+        clientes = client.listar_clientes()
+    except AuvoError:
+        logger.warning("Central do Cliente: falha ao buscar telefones na Auvo (API oficial).")
+        return {}
+    mapa: dict[int, str] = {}
+    for cliente in clientes:
+        cid = _id_cliente_auvo(cliente)
+        telefone = _telefone_bruto_cliente(cliente)
+        if cid is not None and telefone:
+            mapa[cid] = telefone
+    return mapa
+
+
+class _ContextoMensagem(dict):
+    """Placeholder desconhecido no template fica literal em vez de
+    KeyError — o template é editável pelo admin e não pode derrubar a
+    tela."""
+
+    def __missing__(self, chave: str) -> str:
+        return "{" + chave + "}"
+
+
+def renderizar_mensagem_whatsapp(*, nome: str, link: str, login: str = "", senha: str = "") -> str:
+    template = settings_service.get_central_whatsapp_template()
+    contexto = _ContextoMensagem(nome=nome, link=link, login=login, senha=senha)
+    return template.format_map(contexto)
+
+
+def montar_link_whatsapp_item(item: CentralClienteLink, *, config) -> str | None:
+    """Link `wa.me` pronto pro item, com a mensagem preenchida — ou
+    `None` se não houver telefone válido (a tela não deve mostrar o
+    botão nesse caso). Envio continua assistido: só monta o link, quem
+    confirma o envio é o humano clicando dentro do WhatsApp."""
+    if not item.telefone:
+        return None
+    senha = ""
+    if item.senha_cifrada:
+        try:
+            senha = _decifrar_senha(item.senha_cifrada, config=config)
+        except InvalidToken:
+            senha = ""
+    mensagem = renderizar_mensagem_whatsapp(
+        nome=item.nome, link=item.link_url or "", login=item.login or "", senha=senha
+    )
+    return montar_link_whatsapp(item.telefone, mensagem)
 
 
 def executar_lote(
@@ -169,6 +260,7 @@ def executar_lote(
     config,
     pausa_segundos: float | None = None,
     client: CentralClientePainelClient | None = None,
+    auvo_client: AuvoClient | None = None,
     sleep_fn: Callable[[float], None] = time.sleep,
     user=None,
 ) -> CentralClienteLote:
@@ -176,7 +268,9 @@ def executar_lote(
     tocar a Auvo (guarda o que SERIA enviado). Em produção: cria contato
     por contato com pausa entre chamadas; cookie expirado aborta o
     restante do lote (itens não tentados ficam 'pendente', não 'erro').
-    Falha isolada por item nunca derruba os demais."""
+    Falha isolada por item nunca derruba os demais. Telefone é buscado na
+    API OFICIAL (não no endpoint interno) e normalizado — falha nessa
+    busca não derruba o lote, só deixa o WhatsApp indisponível."""
     if not _tentar_iniciar(lote.id):
         raise CentralClienteLoteEmAndamentoError(f"O lote #{lote.id} já está sendo executado.")
 
@@ -188,6 +282,10 @@ def executar_lote(
         menu_solicitacoes = settings_service.central_menu_solicitacoes()
         menu_os = settings_service.central_menu_os()
         menu_orcamento = settings_service.central_menu_orcamento()
+        ddi_whatsapp = settings_service.get_central_whatsapp_ddi()
+
+        cliente_oficial = auvo_client if auvo_client is not None else auvo_service.criar_cliente(config)
+        mapa_telefones = _mapa_telefones(cliente_oficial) if cliente_oficial is not None else {}
 
         pendentes = [item for item in lote.itens if item.status == "pendente"]
 
@@ -217,6 +315,10 @@ def executar_lote(
                 "os": menu_os,
                 "orcamento": menu_orcamento,
             }
+            telefone_bruto = mapa_telefones.get(item.id_auvo)
+            item.telefone = (
+                normalizar_telefone(telefone_bruto, ddi=ddi_whatsapp) if telefone_bruto else None
+            )
 
             if lote.simulacao:
                 item.link_identificador = identificador

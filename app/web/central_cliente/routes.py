@@ -18,7 +18,7 @@ from flask_login import current_user, login_required
 
 from app.extensions import db, limiter
 from app.integrations.auvo_painel_client import PainelCredentials
-from app.models.central_cliente import CentralClienteLote
+from app.models.central_cliente import CentralClienteLink, CentralClienteLote
 from app.services import audit_service, central_cliente_service, settings_service
 from app.services.report_xlsx import gerar_xlsx_central_cliente
 from app.web.auth.decorators import roles_required
@@ -208,6 +208,32 @@ def lote_detalhe(lote_id: int):
     return render_template("central_cliente/lote.html", lote=lote)
 
 
+@bp.route("/lote/<int:lote_id>/item/<int:item_id>/whatsapp")
+@login_required
+@roles_required("admin")
+def whatsapp(lote_id: int, item_id: int):
+    """Nunca dispara nada sozinho: só audita que o link foi gerado/aberto
+    e redireciona pro wa.me — quem confirma o envio é o humano, dentro do
+    próprio WhatsApp (§5.5 do complemento). Sem telefone válido, 404 (o
+    template já não deveria ter mostrado o botão)."""
+    item = db.session.get(CentralClienteLink, item_id)
+    if item is None or item.lote_id != lote_id:
+        abort(404)
+
+    link = central_cliente_service.montar_link_whatsapp_item(item, config=current_app.config)
+    if link is None:
+        abort(404)
+
+    audit_service.registrar(
+        action="central_whatsapp_aberto",
+        result="success",
+        user=current_user,
+        details={"lote_id": lote_id, "id_auvo": item.id_auvo, "nome": item.nome},
+    )
+    db.session.commit()
+    return redirect(link)
+
+
 @bp.route("/exportar/<int:lote_id>")
 @login_required
 @roles_required("admin")
@@ -224,6 +250,7 @@ def exportar(lote_id: int):
         (
             item.nome,
             item.id_auvo,
+            item.telefone or "",
             item.login or "",
             item.link_url or "",
             item.contato_codigo or "",

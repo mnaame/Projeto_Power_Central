@@ -37,6 +37,21 @@ def _sem_pausa(_segundos):
     pass
 
 
+class FakeAuvoClient:
+    """Fake da API OFICIAL (AuvoClient), usada só para buscar telefone."""
+
+    def __init__(self, clientes=None, falha=False):
+        self._clientes = clientes or []
+        self._falha = falha
+
+    def listar_clientes(self):
+        if self._falha:
+            from app.integrations.auvo_client import AuvoError
+
+            raise AuvoError("falha simulada")
+        return self._clientes
+
+
 # ---------- montar_lote ----------
 
 
@@ -276,3 +291,96 @@ def test_executar_lote_bloqueia_execucao_concorrente(app):
             pass
     finally:
         svc._finalizar(lote.id)
+
+
+# ---------- telefone (API oficial) + WhatsApp ----------
+
+
+def test_executar_lote_popula_telefone_normalizado(app):
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "CLIENTE X"}], simulacao=True, user_id=None)
+    fake_auvo = FakeAuvoClient(clientes=[{"id": 111, "phoneNumber": "(31) 99999-8888"}])
+    resultado = svc.executar_lote(
+        lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
+    )
+    assert resultado.itens[0].telefone == "5531999998888"
+
+
+def test_executar_lote_sem_telefone_na_auvo_fica_none(app):
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "CLIENTE X"}], simulacao=True, user_id=None)
+    fake_auvo = FakeAuvoClient(clientes=[{"id": 222, "phoneNumber": "31999998888"}])
+    resultado = svc.executar_lote(
+        lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
+    )
+    assert resultado.itens[0].telefone is None
+
+
+def test_executar_lote_telefone_invalido_fica_none(app):
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "CLIENTE X"}], simulacao=True, user_id=None)
+    fake_auvo = FakeAuvoClient(clientes=[{"id": 111, "phoneNumber": "123"}])
+    resultado = svc.executar_lote(
+        lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
+    )
+    assert resultado.itens[0].telefone is None
+
+
+def test_executar_lote_falha_ao_buscar_telefone_nao_derruba_o_lote(app):
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "CLIENTE X"}], simulacao=True, user_id=None)
+    fake_auvo = FakeAuvoClient(falha=True)
+    resultado = svc.executar_lote(
+        lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
+    )
+    assert resultado.status == "success"
+    assert resultado.itens[0].telefone is None
+
+
+def test_renderizar_mensagem_whatsapp_substitui_placeholders(app):
+    mensagem = svc.renderizar_mensagem_whatsapp(nome="Maria", link="https://x/y")
+    assert "Maria" in mensagem
+    assert "https://x/y" in mensagem
+
+
+def test_renderizar_mensagem_whatsapp_placeholder_desconhecido_fica_literal(app):
+    settings_service.set("central_whatsapp_template", "Oi {nome}, {campo_que_nao_existe}")
+    db.session.commit()
+    mensagem = svc.renderizar_mensagem_whatsapp(nome="Maria", link="https://x/y")
+    assert mensagem == "Oi Maria, {campo_que_nao_existe}"
+
+
+def test_montar_link_whatsapp_item_sem_telefone_devolve_none(app):
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "CLIENTE X"}], simulacao=True, user_id=None)
+    resultado = svc.executar_lote(lote, credentials=None, config=app.config, sleep_fn=_sem_pausa)
+    assert svc.montar_link_whatsapp_item(resultado.itens[0], config=app.config) is None
+
+
+def test_montar_link_whatsapp_item_com_telefone(app):
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "CLIENTE X"}], simulacao=True, user_id=None)
+    fake_auvo = FakeAuvoClient(clientes=[{"id": 111, "phoneNumber": "31999998888"}])
+    resultado = svc.executar_lote(
+        lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
+    )
+    item = resultado.itens[0]
+    link = svc.montar_link_whatsapp_item(item, config=app.config)
+    assert link.startswith("https://wa.me/5531999998888?text=")
+    assert "CLIENTE" in link or "CLIENTE".lower() in link.lower()
+
+
+def test_montar_link_whatsapp_item_com_senha_decifra_para_a_mensagem(app):
+    from urllib.parse import unquote, urlparse, parse_qs
+
+    settings_service.set("central_gerar_login_senha", "true")
+    settings_service.set("central_whatsapp_template", "{nome} login={login} senha={senha}")
+    db.session.commit()
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "CLIENTE X"}], simulacao=True, user_id=None)
+    fake_auvo = FakeAuvoClient(clientes=[{"id": 111, "phoneNumber": "31999998888"}])
+    resultado = svc.executar_lote(
+        lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
+    )
+    item = resultado.itens[0]
+    assert item.login == "cliente111"
+
+    fernet = Fernet(app.config["ENCRYPTION_KEY"])
+    senha_esperada = fernet.decrypt(item.senha_cifrada.encode()).decode()
+
+    link = svc.montar_link_whatsapp_item(item, config=app.config)
+    texto = unquote(parse_qs(urlparse(link).query)["text"][0])
+    assert texto == f"CLIENTE X login=cliente111 senha={senha_esperada}"

@@ -53,6 +53,7 @@
           <th>Login</th>
           <th>Link</th>
           <th>Detalhe</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -65,6 +66,17 @@
           <td>{{ item.login or '—' }}</td>
           <td class="muted" style="font-size: var(--font-size-xs);">{{ item.link_url or '—' }}</td>
           <td>{{ item.erro_mensagem or '—' }}</td>
+          <td>
+            {% if item.status == 'criado' and item.telefone %}
+            <a class="btn btn-ghost" style="padding: var(--space-1) var(--space-2);"
+               href="{{ url_for('central_cliente.whatsapp', lote_id=lote.id, item_id=item.id) }}"
+               target="_blank" rel="noopener">Enviar no WhatsApp</a>
+            {% elif item.status == 'criado' %}
+            <span class="muted" style="font-size: var(--font-size-xs);">sem telefone</span>
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>

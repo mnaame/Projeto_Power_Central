@@ -62,6 +62,7 @@ class CentralClienteLink(db.Model):
     link_url = db.Column(db.String(500), nullable=True)
     login = db.Column(db.String(200), nullable=True)
     senha_cifrada = db.Column(db.Text, nullable=True)
+    telefone = db.Column(db.String(20), nullable=True)
     menus = db.Column(db.JSON, nullable=True)
     status = db.Column(db.String(16), nullable=False, default="pendente")
     erro_mensagem = db.Column(db.Text, nullable=True)

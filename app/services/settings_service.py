@@ -83,6 +83,13 @@ DEFAULTS: dict[str, str] = {
     "central_pausa_segundos": "1",
     "central_cargo_padrao": "Cliente",
     "central_gerar_login_senha": "false",
+    "central_whatsapp_ddi": "55",
+    "central_whatsapp_template": (
+        "Ola, {nome}! Aqui e da Novo Millenium. "
+        "Este e o seu acesso a Central do Cliente, onde voce acompanha e abre "
+        "chamados: {link} . E so tocar no link, sem login nem senha. "
+        "Qualquer duvida, estamos a disposicao."
+    ),
 }
 
 _TELEGRAM_TOKEN_KEY = "telegram_bot_token"
@@ -413,3 +420,11 @@ def get_central_cargo_padrao() -> str:
 
 def central_gerar_login_senha() -> bool:
     return get("central_gerar_login_senha").strip().lower() == "true"
+
+
+def get_central_whatsapp_ddi() -> str:
+    return get("central_whatsapp_ddi").strip() or "55"
+
+
+def get_central_whatsapp_template() -> str:
+    return get("central_whatsapp_template")

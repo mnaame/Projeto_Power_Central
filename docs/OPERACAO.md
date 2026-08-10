@@ -550,6 +550,12 @@ pela API oficial).
 - Cada lote fica no histórico com os itens (criado/erro/pendente) e pode
   ser exportado em xlsx — **documento sensível** (tem login/link de
   acesso), mesmo cuidado do Cofre de Senhas.
+- **"Enviar no WhatsApp"**: cada contato criado com telefone válido (busca
+  automática na API oficial da Auvo) ganha um botão que abre o WhatsApp
+  numa aba nova, já com o contato certo e a mensagem pronta (template
+  configurável). O envio é **assistido** — o site só monta a mensagem, um
+  humano confere e clica em enviar dentro do próprio WhatsApp. Sem
+  telefone válido, a linha mostra "sem telefone" em vez do botão.
 
 > O formato do identificador, Login/Senha vazios e o
 > `auvo-user-request` já foram **confirmados via F12** contra um contato

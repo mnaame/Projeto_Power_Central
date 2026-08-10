@@ -214,6 +214,84 @@ def test_exportar_gera_xlsx(app, admin_client):
     )
 
 
+# ---------- whatsapp ----------
+
+
+def test_whatsapp_com_telefone_audita_e_redireciona(app, admin_client, monkeypatch):
+    from app.services import central_cliente_service
+
+    monkeypatch.setattr(central_cliente_service.auvo_service, "criar_cliente", lambda config: object())
+    monkeypatch.setattr(
+        central_cliente_service, "_mapa_telefones", lambda client: {111: "31999998888"}
+    )
+
+    admin_client.post(
+        "/central-cliente/executar",
+        data={
+            "total_linhas": "1",
+            "selecionar": "0",
+            "id_auvo_0": "111",
+            "nome_0": "CLIENTE X",
+        },
+    )
+    lote = CentralClienteLote.query.order_by(CentralClienteLote.id.desc()).first()
+    item = lote.itens[0]
+    assert item.telefone == "5531999998888"
+
+    resposta = admin_client.get(
+        f"/central-cliente/lote/{lote.id}/item/{item.id}/whatsapp", follow_redirects=False
+    )
+    assert resposta.status_code == 302
+    assert resposta.headers["Location"].startswith("https://wa.me/5531999998888?text=")
+
+    entrada = AuditLog.query.filter_by(action="central_whatsapp_aberto").first()
+    assert entrada is not None
+    assert entrada.details["id_auvo"] == 111
+
+
+def test_whatsapp_sem_telefone_404(app, admin_client):
+    admin_client.post(
+        "/central-cliente/executar",
+        data={
+            "total_linhas": "1",
+            "selecionar": "0",
+            "id_auvo_0": "111",
+            "nome_0": "CLIENTE X",
+        },
+    )
+    lote = CentralClienteLote.query.order_by(CentralClienteLote.id.desc()).first()
+    item = lote.itens[0]
+    assert item.telefone is None
+
+    resposta = admin_client.get(f"/central-cliente/lote/{lote.id}/item/{item.id}/whatsapp")
+    assert resposta.status_code == 404
+
+
+def test_whatsapp_item_de_outro_lote_404(app, admin_client):
+    for i in range(2):
+        admin_client.post(
+            "/central-cliente/executar",
+            data={
+                "total_linhas": "1",
+                "selecionar": "0",
+                "id_auvo_0": str(111 + i),
+                "nome_0": "CLIENTE X",
+            },
+        )
+    lotes = CentralClienteLote.query.order_by(CentralClienteLote.id).all()
+    primeiro_item = lotes[0].itens[0]
+    segundo_lote = lotes[1]
+
+    resposta = admin_client.get(
+        f"/central-cliente/lote/{segundo_lote.id}/item/{primeiro_item.id}/whatsapp"
+    )
+    assert resposta.status_code == 404
+
+
+def test_operador_nao_acessa_whatsapp(operador_client):
+    assert operador_client.get("/central-cliente/lote/1/item/1/whatsapp").status_code == 403
+
+
 # ---------- configuração ----------
 
 
