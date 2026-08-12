@@ -646,3 +646,144 @@ summary.btn::-webkit-details-marker {
 .poll-target {
   transition: opacity var(--transition-base);
 }
+
+/* ---------- Minhas Tarefas ---------- */
+
+.tarefas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.tarefa-bloco .section-title {
+  margin-bottom: var(--space-3);
+}
+
+.tarefa-rapida {
+  margin-bottom: var(--space-4);
+}
+
+.tarefa-rapida input[type="text"] {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+}
+
+.tarefa-rapida input[type="text"]:focus-visible {
+  border-color: var(--color-accent);
+}
+
+.tarefa-lista {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tarefa-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tarefa-item:last-child {
+  border-bottom: none;
+}
+
+.tarefa-item.is-atrasada {
+  background: var(--color-status-critical-bg);
+  border-radius: var(--radius-md);
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
+}
+
+.tarefa-check-form {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.tarefa-checkbox {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  cursor: pointer;
+  padding: 0;
+}
+
+.tarefa-checkbox.is-checked {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.tarefa-corpo {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+}
+
+.tarefa-titulo-link {
+  color: var(--color-text-primary);
+  text-decoration: none;
+  margin-right: var(--space-2);
+}
+
+.tarefa-titulo-link:hover {
+  text-decoration: underline;
+}
+
+.tarefa-titulo-feita {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+}
+
+.tarefa-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.tarefa-mover-btn,
+.tarefa-excluir-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.tarefa-excluir-btn {
+  color: var(--color-status-critical);
+}
+
+.tarefa-vazio {
+  font-size: var(--font-size-sm);
+}
+
+.tarefa-concluidas {
+  margin-top: var(--space-4);
+}
+
+.tarefa-concluidas summary {
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+}
+
+.tarefa-lista-concluidas {
+  margin-top: var(--space-2);
+}

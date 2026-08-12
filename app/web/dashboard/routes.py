@@ -7,7 +7,7 @@ from app.domain.ordering import ordenar_por_falha_mais_antiga
 from app.extensions import db
 from app.models.cycle import AlertSent, CollectionCycle
 from app.models.watchdog import WatchdogState
-from app.services import audit_service, settings_service, trigger_service
+from app.services import audit_service, settings_service, tarefa_service, trigger_service
 
 bp = Blueprint("dashboard", __name__)
 
@@ -65,7 +65,10 @@ def _dados_dashboard() -> dict:
     serie_grafico = _serie_grafico(historico)
     pontos_grafico = " ".join(f"{p['x']},{p['y']}" for p in serie_grafico)
 
+    tarefas_hoje = tarefa_service.contar_dia(current_user.id)
+
     return {
+        "tarefas_hoje": tarefas_hoje,
         "ultimo_sucesso": ultimo_sucesso,
         "ultimo_ciclo": ultimo_ciclo,
         "contas_sem_comunicacao": contas_sem_comunicacao,

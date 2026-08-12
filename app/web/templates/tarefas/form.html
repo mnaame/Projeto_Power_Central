@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Editar tarefa{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>Editar tarefa</h2>
+    <a class="btn btn-ghost" href="{{ url_for('tarefas.index') }}">Voltar</a>
+  </div>
+</div>
+
+<div class="section">
+  <div class="card" style="max-width: 560px;">
+    <form method="post" novalidate>
+      {{ form.csrf_token }}
+
+      <div class="field">
+        {{ form.titulo.label }}
+        {{ form.titulo(autofocus=true) }}
+        {% for mensagem in form.titulo.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.descricao.label }}
+        {{ form.descricao(rows=4) }}
+        {% for mensagem in form.descricao.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.horizonte.label }}
+        {{ form.horizonte() }}
+        {% for mensagem in form.horizonte.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.data.label }}
+        {{ form.data() }}
+        <p class="muted" style="font-size: var(--font-size-xs); margin-top: var(--space-1);">
+          Usada em Dia/Semana (define quando aparece). Em Fixa geralmente fica em branco.
+        </p>
+        {% for mensagem in form.data.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ form.prioridade.label }}
+        {{ form.prioridade() }}
+        {% for mensagem in form.prioridade.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <button type="submit" class="btn btn-primary">Salvar</button>
+    </form>
+  </div>
+
+  <div class="card" style="max-width: 560px; margin-top: var(--space-4);">
+    <form method="post" action="{{ url_for('tarefas.excluir', tarefa_id=tarefa.id) }}"
+          onsubmit="return confirm('Excluir &quot;{{ tarefa.titulo }}&quot;?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-ghost" style="color: var(--color-status-critical);">Excluir tarefa</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

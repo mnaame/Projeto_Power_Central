@@ -13,6 +13,20 @@
 </div>
 {% endif %}
 
+{% if tarefas_hoje.pendentes %}
+<a href="{{ url_for('tarefas.index') }}#bloco-dia" class="card" style="display: block; margin-bottom: var(--space-4); text-decoration: none; color: inherit;">
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap;">
+    <div>
+      <div class="stat-tile-label">Suas tarefas de hoje</div>
+      <div class="stat-tile-value" style="font-size: var(--font-size-2xl);">{{ tarefas_hoje.pendentes }} pendente(s)</div>
+    </div>
+    {% if tarefas_hoje.atrasadas %}
+    <span class="chip chip-critical">{{ tarefas_hoje.atrasadas }} atrasada(s)</span>
+    {% endif %}
+  </div>
+</a>
+{% endif %}
+
 <div class="stat-grid">
   <div class="stat-tile">
     <div class="stat-tile-label">Sem comunicação agora</div>

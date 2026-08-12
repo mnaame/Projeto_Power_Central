@@ -9,6 +9,7 @@ from app.models.tecnico import TecnicoLote, TecnicoLoteItem
 from app.models.bi import BiRun, BiIntervencao
 from app.models.cofre import Segredo
 from app.models.central_cliente import CentralClienteLote, CentralClienteLink
+from app.models.tarefa import Tarefa
 
 __all__ = [
     "User",
@@ -28,4 +29,5 @@ __all__ = [
     "Segredo",
     "CentralClienteLote",
     "CentralClienteLink",
+    "Tarefa",
 ]

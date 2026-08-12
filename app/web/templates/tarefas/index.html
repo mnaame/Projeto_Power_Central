@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Minhas Tarefas{% endblock %}
+
+{% macro bloco_tarefas(titulo, id_bloco, horizonte, tarefas, concluidas, hoje, placeholder) %}
+<div class="card tarefa-bloco" id="{{ id_bloco }}">
+  <div class="section-title">
+    <h2>{{ titulo }}</h2>
+  </div>
+
+  <form method="post" action="{{ url_for('tarefas.criar') }}" class="tarefa-rapida">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="horizonte" value="{{ horizonte }}">
+    <input type="text" name="titulo" placeholder="{{ placeholder }}" required maxlength="300" autocomplete="off">
+  </form>
+
+  {% if tarefas %}
+  <ul class="tarefa-lista">
+    {% for tarefa in tarefas %}
+    {% set atrasada = tarefa.status == 'pendente' and tarefa.data and tarefa.data < hoje %}
+    {% set estilo_prioridade = {'alta': 'chip-critical', 'media': 'chip-warning', 'baixa': 'chip-neutral'}[tarefa.prioridade] %}
+    <li class="tarefa-item{{ ' is-atrasada' if atrasada else '' }}">
+      <form method="post" action="{{ url_for('tarefas.concluir', tarefa_id=tarefa.id) }}" class="tarefa-check-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="tarefa-checkbox{{ ' is-checked' if tarefa.status == 'feito' else '' }}"
+                aria-label="{{ 'Marcar como pendente' if tarefa.status == 'feito' else 'Concluir' }}"
+                title="{{ 'Marcar como pendente' if tarefa.status == 'feito' else 'Concluir' }}"></button>
+      </form>
+      <span class="tarefa-corpo">
+        <a class="tarefa-titulo-link" href="{{ url_for('tarefas.editar', tarefa_id=tarefa.id) }}">{{ tarefa.titulo }}</a>
+        <span class="chip {{ estilo_prioridade }}">{{ tarefa.prioridade }}</span>
+        {% if atrasada %}
+        <span class="chip chip-critical">atrasada desde {{ tarefa.data|data_curta }}</span>
+        {% endif %}
+        <div class="tarefa-acoes">
+          {% for alvo, rotulo in [('dia', '→ Hoje'), ('semana', '→ Semana'), ('fixa', '→ Fixa')] %}
+          {% if alvo != horizonte %}
+          <form method="post" action="{{ url_for('tarefas.mover', tarefa_id=tarefa.id) }}" style="display: inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="horizonte" value="{{ alvo }}">
+            <button type="submit" class="tarefa-mover-btn">{{ rotulo }}</button>
+          </form>
+          {% endif %}
+          {% endfor %}
+          <form method="post" action="{{ url_for('tarefas.excluir', tarefa_id=tarefa.id) }}" style="display: inline;"
+                onsubmit="return confirm('Excluir &quot;{{ tarefa.titulo }}&quot;?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="tarefa-excluir-btn">excluir</button>
+          </form>
+        </div>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted tarefa-vazio">Nada por aqui.</p>
+  {% endif %}
+
+  {% if concluidas %}
+  <details class="tarefa-concluidas">
+    <summary class="muted">{{ concluidas|length }} concluída(s) hoje</summary>
+    <ul class="tarefa-lista tarefa-lista-concluidas">
+      {% for tarefa in concluidas %}
+      <li class="tarefa-item">
+        <form method="post" action="{{ url_for('tarefas.concluir', tarefa_id=tarefa.id) }}" class="tarefa-check-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="tarefa-checkbox is-checked" aria-label="Marcar como pendente" title="Marcar como pendente"></button>
+        </form>
+        <span class="tarefa-corpo tarefa-titulo-feita">{{ tarefa.titulo }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>Minhas Tarefas</h2>
+  </div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Suas tarefas pessoais — só você vê e edita as suas. Tarefa pendente com
+    data passada não some: fica marcada como <strong>atrasada</strong> até
+    você concluir, remarcar ou mover pra outro bloco.
+  </p>
+</div>
+
+<div class="section">
+  <div class="tarefas-grid">
+    {{ bloco_tarefas('Dia', 'bloco-dia', 'dia', dia, concluidas_hoje|selectattr('horizonte', 'equalto', 'dia')|list, hoje, 'Nova tarefa para hoje...') }}
+    {{ bloco_tarefas('Semana', 'bloco-semana', 'semana', semana, concluidas_hoje|selectattr('horizonte', 'equalto', 'semana')|list, hoje, 'Nova tarefa da semana...') }}
+    {{ bloco_tarefas('Fixas', 'bloco-fixas', 'fixa', fixas, concluidas_hoje|selectattr('horizonte', 'equalto', 'fixa')|list, hoje, 'Nova tarefa fixa...') }}
+  </div>
+</div>
+{% endblock %}

@@ -30,6 +30,7 @@ def register_blueprints(app) -> None:
     from app.web.cofre.routes import bp as cofre_bp
     from app.web.dashboard.routes import bp as dashboard_bp
     from app.web.reports.routes import bp as reports_bp
+    from app.web.tarefas.routes import bp as tarefas_bp
     from app.web.tecnico.routes import bp as tecnico_bp
 
     app.register_blueprint(auth_bp)
@@ -41,3 +42,4 @@ def register_blueprints(app) -> None:
     app.register_blueprint(bi_bp)
     app.register_blueprint(cofre_bp)
     app.register_blueprint(central_cliente_bp)
+    app.register_blueprint(tarefas_bp)

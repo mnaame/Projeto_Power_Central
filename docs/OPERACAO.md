@@ -575,6 +575,31 @@ pela API oficial).
 > o resultado antes de rodar um lote maior — o formato exato da resposta
 > da Auvo ainda não foi conferido byte a byte.
 
+### 5.2.7 Minhas Tarefas
+
+Aba **pessoal** (qualquer usuário logado, sem precisar ser admin) para
+organizar o próprio trabalho em três blocos: **Dia**, **Semana** e
+**Fixas**. Cada um só mostra as suas tarefas — ninguém vê ou mexe na
+tarefa de outra pessoa.
+
+- **Adicionar rápido**: digite o título no campo do topo de cada bloco e
+  aperte Enter — não precisa abrir formulário nenhum. Detalhes extras
+  (descrição, prioridade, data) se ajustam depois clicando no título da
+  tarefa.
+- **Atrasada não some**: uma tarefa do Dia ou da Semana que passou da
+  data e continua pendente aparece destacada em vermelho, com a data
+  original, dentro do próprio bloco atual — até você concluir, remarcar a
+  data ou mover pra outro bloco.
+- **Mover** ("→ Hoje" / "→ Semana" / "→ Fixa"): puxa a tarefa pra outro
+  horizonte na hora — por exemplo, decidir que uma tarefa da Semana vai
+  ser feita hoje.
+- **Concluir**: clique no quadradinho ao lado da tarefa. As concluídas no
+  dia ficam recolhidas no rodapé de cada bloco ("N concluída(s) hoje"),
+  riscadas — clique de novo pra desmarcar se foi engano.
+- Um cartão **"Suas tarefas de hoje"** aparece no Painel (dashboard)
+  quando há pendência, com a contagem e quantas estão atrasadas — atalho
+  direto pro bloco Dia sem precisar abrir a aba.
+
 ### 5.3 Administração
 
 Em **Configurações** (só admin): janela de horas sem comunicação, lista de
