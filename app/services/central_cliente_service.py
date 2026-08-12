@@ -248,10 +248,21 @@ def _id_cliente_auvo(cliente: dict) -> int | None:
 
 
 def _telefone_bruto_cliente(cliente: dict) -> str:
+    """`phoneNumber` na API oficial vem como **lista** (mesmo com um único
+    telefone, ex.: `["31999998888"]`) — confirmado em produção (cliente com
+    2 números). Usa o primeiro telefone não vazio da lista; se o campo vier
+    como texto solto (formato alternativo), aceita também."""
     for chave in ("phoneNumber", "phone", "cellPhone"):
-        valor = str(cliente.get(chave) or "").strip()
-        if valor:
-            return valor
+        valor = cliente.get(chave)
+        if isinstance(valor, (list, tuple)):
+            for item in valor:
+                texto = str(item or "").strip()
+                if texto:
+                    return texto
+            continue
+        texto = str(valor or "").strip()
+        if texto:
+            return texto
     return ""
 
 

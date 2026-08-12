@@ -314,6 +314,37 @@ def test_executar_lote_sem_telefone_na_auvo_fica_none(app):
     assert resultado.itens[0].telefone is None
 
 
+def test_executar_lote_telefone_como_lista_usa_primeiro(app):
+    """`phoneNumber` na API oficial vem como lista (confirmado em produção
+    com um cliente de 2 números) — usa o primeiro, não concatena todos."""
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "CLIENTE X"}], simulacao=True, user_id=None)
+    fake_auvo = FakeAuvoClient(
+        clientes=[{"id": 111, "phoneNumber": ["31995222809", "31996837126"]}]
+    )
+    resultado = svc.executar_lote(
+        lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
+    )
+    assert resultado.itens[0].telefone == "5531995222809"
+
+
+def test_executar_lote_telefone_lista_de_um_item(app):
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "CLIENTE X"}], simulacao=True, user_id=None)
+    fake_auvo = FakeAuvoClient(clientes=[{"id": 111, "phoneNumber": ["31999998888"]}])
+    resultado = svc.executar_lote(
+        lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
+    )
+    assert resultado.itens[0].telefone == "5531999998888"
+
+
+def test_executar_lote_telefone_lista_vazia_fica_none(app):
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "CLIENTE X"}], simulacao=True, user_id=None)
+    fake_auvo = FakeAuvoClient(clientes=[{"id": 111, "phoneNumber": []}])
+    resultado = svc.executar_lote(
+        lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
+    )
+    assert resultado.itens[0].telefone is None
+
+
 def test_executar_lote_telefone_invalido_fica_none(app):
     lote = svc.criar_lote([{"id_auvo": 111, "nome": "CLIENTE X"}], simulacao=True, user_id=None)
     fake_auvo = FakeAuvoClient(clientes=[{"id": 111, "phoneNumber": "123"}])

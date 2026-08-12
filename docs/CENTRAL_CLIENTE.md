@@ -59,6 +59,14 @@ painel de um cliente para outro. Por isso:
    WhatsApp (§5.5) — grava em `CentralClienteLink.telefone`. Falha nessa
    busca nunca derruba o lote, só deixa o WhatsApp indisponível para
    aquele item.
+   > **Confirmado em produção**: `phoneNumber` vem como **lista** de
+   > telefones (mesmo com um único número, ex.: `["31999998888"]`) — um
+   > cliente real com 2 números veio como
+   > `["31995222809", "31996837126"]`. `_telefone_bruto_cliente` usa o
+   > **primeiro** item não vazio da lista (não concatena); antes dessa
+   > correção, um cliente com mais de um telefone cadastrado ficava sem
+   > WhatsApp (a lista virava texto bruto e não passava na validação de
+   > tamanho — só "funcionava" com 1 telefone por coincidência).
 7. Grava em `CentralClienteLote`/`CentralClienteLink`, auditoria de cada
    criação, exportação em xlsx do lote (agora com telefone). Cada linha
    com telefone válido ganha o botão "Enviar no WhatsApp" (§5.5).
