@@ -68,9 +68,13 @@
           <td>{{ item.erro_mensagem or '—' }}</td>
           <td style="white-space: nowrap;">
             {% if item.status == 'criado' %}
-            {% if item.telefone %}
-            <a href="{{ url_for('central_cliente.whatsapp', lote_id=lote.id, item_id=item.id) }}"
-               target="_blank" rel="noopener">WhatsApp</a>
+            {% if item.telefones %}
+            <div>
+              {% for tel in item.telefones %}
+              <a href="{{ url_for('central_cliente.whatsapp', lote_id=lote.id, item_id=item.id, telefone=tel) }}"
+                 target="_blank" rel="noopener" style="white-space: nowrap;">{{ tel|telefone_exibicao }} · WhatsApp</a>{% if not loop.last %}<br>{% endif %}
+              {% endfor %}
+            </div>
             {% else %}
             <span class="muted" style="font-size: var(--font-size-xs);">sem telefone</span>
             {% endif %}

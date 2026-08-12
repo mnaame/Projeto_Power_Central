@@ -296,13 +296,13 @@ def test_executar_lote_bloqueia_execucao_concorrente(app):
 # ---------- telefone (API oficial) + WhatsApp ----------
 
 
-def test_executar_lote_popula_telefone_normalizado(app):
+def test_executar_lote_popula_telefones_normalizados(app):
     lote = svc.criar_lote([{"id_auvo": 111, "nome": "CLIENTE X"}], simulacao=True, user_id=None)
     fake_auvo = FakeAuvoClient(clientes=[{"id": 111, "phoneNumber": "(31) 99999-8888"}])
     resultado = svc.executar_lote(
         lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
     )
-    assert resultado.itens[0].telefone == "5531999998888"
+    assert resultado.itens[0].telefones == ["5531999998888"]
 
 
 def test_executar_lote_sem_telefone_na_auvo_fica_none(app):
@@ -311,12 +311,13 @@ def test_executar_lote_sem_telefone_na_auvo_fica_none(app):
     resultado = svc.executar_lote(
         lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
     )
-    assert resultado.itens[0].telefone is None
+    assert resultado.itens[0].telefones is None
 
 
-def test_executar_lote_telefone_como_lista_usa_primeiro(app):
+def test_executar_lote_telefone_como_lista_mantem_todos(app):
     """`phoneNumber` na API oficial vem como lista (confirmado em produção
-    com um cliente de 2 números) — usa o primeiro, não concatena todos."""
+    com um cliente de 2 números) — guarda todos os válidos, pra tela
+    deixar escolher pra qual número mandar."""
     lote = svc.criar_lote([{"id_auvo": 111, "nome": "CLIENTE X"}], simulacao=True, user_id=None)
     fake_auvo = FakeAuvoClient(
         clientes=[{"id": 111, "phoneNumber": ["31995222809", "31996837126"]}]
@@ -324,7 +325,7 @@ def test_executar_lote_telefone_como_lista_usa_primeiro(app):
     resultado = svc.executar_lote(
         lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
     )
-    assert resultado.itens[0].telefone == "5531995222809"
+    assert resultado.itens[0].telefones == ["5531995222809", "5531996837126"]
 
 
 def test_executar_lote_telefone_lista_de_um_item(app):
@@ -333,7 +334,18 @@ def test_executar_lote_telefone_lista_de_um_item(app):
     resultado = svc.executar_lote(
         lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
     )
-    assert resultado.itens[0].telefone == "5531999998888"
+    assert resultado.itens[0].telefones == ["5531999998888"]
+
+
+def test_executar_lote_telefones_repetidos_nao_duplica(app):
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "CLIENTE X"}], simulacao=True, user_id=None)
+    fake_auvo = FakeAuvoClient(
+        clientes=[{"id": 111, "phoneNumber": ["31999998888", "(31) 99999-8888"]}]
+    )
+    resultado = svc.executar_lote(
+        lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
+    )
+    assert resultado.itens[0].telefones == ["5531999998888"]
 
 
 def test_executar_lote_telefone_lista_vazia_fica_none(app):
@@ -342,7 +354,7 @@ def test_executar_lote_telefone_lista_vazia_fica_none(app):
     resultado = svc.executar_lote(
         lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
     )
-    assert resultado.itens[0].telefone is None
+    assert resultado.itens[0].telefones is None
 
 
 def test_executar_lote_telefone_invalido_fica_none(app):
@@ -351,7 +363,7 @@ def test_executar_lote_telefone_invalido_fica_none(app):
     resultado = svc.executar_lote(
         lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
     )
-    assert resultado.itens[0].telefone is None
+    assert resultado.itens[0].telefones is None
 
 
 def test_executar_lote_falha_ao_buscar_telefone_nao_derruba_o_lote(app):
@@ -361,7 +373,7 @@ def test_executar_lote_falha_ao_buscar_telefone_nao_derruba_o_lote(app):
         lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
     )
     assert resultado.status == "success"
-    assert resultado.itens[0].telefone is None
+    assert resultado.itens[0].telefones is None
 
 
 def test_renderizar_mensagem_whatsapp_substitui_placeholders(app):
@@ -380,7 +392,8 @@ def test_renderizar_mensagem_whatsapp_placeholder_desconhecido_fica_literal(app)
 def test_montar_link_whatsapp_item_sem_telefone_devolve_none(app):
     lote = svc.criar_lote([{"id_auvo": 111, "nome": "CLIENTE X"}], simulacao=True, user_id=None)
     resultado = svc.executar_lote(lote, credentials=None, config=app.config, sleep_fn=_sem_pausa)
-    assert svc.montar_link_whatsapp_item(resultado.itens[0], config=app.config) is None
+    item = resultado.itens[0]
+    assert svc.montar_link_whatsapp_item(item, telefone="5531999998888", config=app.config) is None
 
 
 def test_montar_link_whatsapp_item_com_telefone(app):
@@ -390,9 +403,35 @@ def test_montar_link_whatsapp_item_com_telefone(app):
         lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
     )
     item = resultado.itens[0]
-    link = svc.montar_link_whatsapp_item(item, config=app.config)
+    link = svc.montar_link_whatsapp_item(item, telefone="5531999998888", config=app.config)
     assert link.startswith("https://wa.me/5531999998888?text=")
     assert "CLIENTE" in link or "CLIENTE".lower() in link.lower()
+
+
+def test_montar_link_whatsapp_item_telefone_que_nao_e_do_item_devolve_none(app):
+    """Nunca abre num número arbitrário — só nos que vieram da Auvo pra
+    aquele cliente especificamente."""
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "CLIENTE X"}], simulacao=True, user_id=None)
+    fake_auvo = FakeAuvoClient(clientes=[{"id": 111, "phoneNumber": "31999998888"}])
+    resultado = svc.executar_lote(
+        lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
+    )
+    item = resultado.itens[0]
+    assert svc.montar_link_whatsapp_item(item, telefone="5511900000000", config=app.config) is None
+
+
+def test_montar_link_whatsapp_item_escolhe_qualquer_telefone_da_lista(app):
+    lote = svc.criar_lote([{"id_auvo": 111, "nome": "CLIENTE X"}], simulacao=True, user_id=None)
+    fake_auvo = FakeAuvoClient(
+        clientes=[{"id": 111, "phoneNumber": ["31995222809", "31996837126"]}]
+    )
+    resultado = svc.executar_lote(
+        lote, credentials=None, config=app.config, auvo_client=fake_auvo, sleep_fn=_sem_pausa
+    )
+    item = resultado.itens[0]
+    assert item.telefones == ["5531995222809", "5531996837126"]
+    link = svc.montar_link_whatsapp_item(item, telefone="5531996837126", config=app.config)
+    assert link.startswith("https://wa.me/5531996837126?text=")
 
 
 def test_montar_link_whatsapp_item_com_senha_decifra_para_a_mensagem(app):
@@ -412,7 +451,7 @@ def test_montar_link_whatsapp_item_com_senha_decifra_para_a_mensagem(app):
     fernet = Fernet(app.config["ENCRYPTION_KEY"])
     senha_esperada = fernet.decrypt(item.senha_cifrada.encode()).decode()
 
-    link = svc.montar_link_whatsapp_item(item, config=app.config)
+    link = svc.montar_link_whatsapp_item(item, telefone="5531999998888", config=app.config)
     texto = unquote(parse_qs(urlparse(link).query)["text"][0])
     assert texto == f"CLIENTE X login=cliente111 senha={senha_esperada}"
 

@@ -247,41 +247,41 @@ def _id_cliente_auvo(cliente: dict) -> int | None:
     return None
 
 
-def _telefone_bruto_cliente(cliente: dict) -> str:
+def _telefones_brutos_cliente(cliente: dict) -> list[str]:
     """`phoneNumber` na API oficial vem como **lista** (mesmo com um único
     telefone, ex.: `["31999998888"]`) — confirmado em produção (cliente com
-    2 números). Usa o primeiro telefone não vazio da lista; se o campo vier
-    como texto solto (formato alternativo), aceita também."""
+    2 números). Devolve todos os telefones não vazios do primeiro campo
+    preenchido (se vier como texto solto, formato alternativo, devolve
+    numa lista de 1)."""
     for chave in ("phoneNumber", "phone", "cellPhone"):
         valor = cliente.get(chave)
         if isinstance(valor, (list, tuple)):
-            for item in valor:
-                texto = str(item or "").strip()
-                if texto:
-                    return texto
+            numeros = [str(item or "").strip() for item in valor if str(item or "").strip()]
+            if numeros:
+                return numeros
             continue
         texto = str(valor or "").strip()
         if texto:
-            return texto
-    return ""
+            return [texto]
+    return []
 
 
-def _mapa_telefones(client: AuvoClient) -> dict[int, str]:
-    """id_auvo -> telefone bruto (ainda não normalizado), best-effort a
-    partir da API oficial. Nunca levanta — uma falha aqui não pode
-    derrubar a criação dos contatos, só deixa telefone/WhatsApp de fora
-    para aquele lote."""
+def _mapa_telefones(client: AuvoClient) -> dict[int, list[str]]:
+    """id_auvo -> lista de telefones brutos (ainda não normalizados),
+    best-effort a partir da API oficial. Nunca levanta — uma falha aqui
+    não pode derrubar a criação dos contatos, só deixa telefone/WhatsApp
+    de fora para aquele lote."""
     try:
         clientes = client.listar_clientes()
     except AuvoError:
         logger.warning("Central do Cliente: falha ao buscar telefones na Auvo (API oficial).")
         return {}
-    mapa: dict[int, str] = {}
+    mapa: dict[int, list[str]] = {}
     for cliente in clientes:
         cid = _id_cliente_auvo(cliente)
-        telefone = _telefone_bruto_cliente(cliente)
-        if cid is not None and telefone:
-            mapa[cid] = telefone
+        telefones = _telefones_brutos_cliente(cliente)
+        if cid is not None and telefones:
+            mapa[cid] = telefones
     return mapa
 
 
@@ -300,12 +300,13 @@ def renderizar_mensagem_whatsapp(*, nome: str, link: str, login: str = "", senha
     return template.format_map(contexto)
 
 
-def montar_link_whatsapp_item(item: CentralClienteLink, *, config) -> str | None:
+def montar_link_whatsapp_item(item: CentralClienteLink, *, telefone: str, config) -> str | None:
     """Link `wa.me` pronto pro item, com a mensagem preenchida — ou
-    `None` se não houver telefone válido (a tela não deve mostrar o
-    botão nesse caso). Envio continua assistido: só monta o link, quem
-    confirma o envio é o humano clicando dentro do WhatsApp."""
-    if not item.telefone:
+    `None` se `telefone` não for um dos telefones válidos do item (a tela
+    só deve oferecer os números que vieram da Auvo pra aquele cliente,
+    nunca um número arbitrário). Envio continua assistido: só monta o
+    link, quem confirma o envio é o humano clicando dentro do WhatsApp."""
+    if not item.telefones or telefone not in item.telefones:
         return None
     senha = ""
     if item.senha_cifrada:
@@ -316,7 +317,7 @@ def montar_link_whatsapp_item(item: CentralClienteLink, *, config) -> str | None
     mensagem = renderizar_mensagem_whatsapp(
         nome=item.nome, link=item.link_url or "", login=item.login or "", senha=senha
     )
-    return montar_link_whatsapp(item.telefone, mensagem)
+    return montar_link_whatsapp(telefone, mensagem)
 
 
 def executar_lote(
@@ -381,10 +382,13 @@ def executar_lote(
                 "os": menu_os,
                 "orcamento": menu_orcamento,
             }
-            telefone_bruto = mapa_telefones.get(item.id_auvo)
-            item.telefone = (
-                normalizar_telefone(telefone_bruto, ddi=ddi_whatsapp) if telefone_bruto else None
-            )
+            telefones_brutos = mapa_telefones.get(item.id_auvo, [])
+            telefones_normalizados: list[str] = []
+            for bruto in telefones_brutos:
+                normalizado = normalizar_telefone(bruto, ddi=ddi_whatsapp)
+                if normalizado and normalizado not in telefones_normalizados:
+                    telefones_normalizados.append(normalizado)
+            item.telefones = telefones_normalizados or None
 
             if lote.simulacao:
                 item.link_identificador = identificador

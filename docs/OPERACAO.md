@@ -556,8 +556,11 @@ pela API oficial).
   ser exportado em xlsx — **documento sensível** (tem login/link de
   acesso), mesmo cuidado do Cofre de Senhas.
 - **"Enviar no WhatsApp"**: cada contato criado com telefone válido (busca
-  automática na API oficial da Auvo) ganha um botão que abre o WhatsApp
-  numa aba nova, já com o contato certo e a mensagem pronta (template
+  automática na API oficial da Auvo) ganha um botão "Enviar no WhatsApp"
+  **para cada número cadastrado** naquele cliente — se tiver mais de um
+  telefone, aparece um botão por número (com o número formatado do
+  lado), e você escolhe pra qual mandar. O botão abre o WhatsApp numa
+  aba nova, já com o contato certo e a mensagem pronta (template
   configurável). O envio é **assistido** — o site só monta a mensagem, um
   humano confere e clica em enviar dentro do próprio WhatsApp. Sem
   telefone válido, a linha mostra "sem telefone" em vez do botão.

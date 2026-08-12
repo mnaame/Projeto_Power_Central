@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
+from app.domain.central_cliente import formatar_telefone_exibicao
 from app.domain.dates import FUSO_HORARIO
 from app.domain.formatting import formatar_duracao
 
@@ -24,3 +25,9 @@ def registrar_filtros(app) -> None:
         if valor is None:
             return "—"
         return formatar_duracao(valor, datetime.now(timezone.utc))
+
+    @app.template_filter("telefone_exibicao")
+    def telefone_exibicao(valor: str | None) -> str:
+        if not valor:
+            return "—"
+        return formatar_telefone_exibicao(valor)

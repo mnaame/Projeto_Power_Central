@@ -66,3 +66,17 @@ def montar_link_whatsapp(telefone: str, mensagem: str) -> str:
     dispara nada sozinho — só monta o link; quem confirma o envio é o
     humano que clica, dentro do próprio WhatsApp (§5.5 do complemento)."""
     return f"https://wa.me/{telefone}?text={quote(mensagem)}"
+
+
+def formatar_telefone_exibicao(telefone: str) -> str:
+    """Só para mostrar na tela — telefone normalizado (DDI+DDD+número)
+    vira "(DD) 9NNNN-NNNN", sem o DDI. Formato não reconhecido volta como
+    veio (nunca esconde o número por causa de formatação)."""
+    digitos = telefone
+    if digitos.startswith("55") and len(digitos) in _TAMANHOS_VALIDOS_BR:
+        digitos = digitos[2:]
+    if len(digitos) == 11:
+        return f"({digitos[:2]}) {digitos[2:7]}-{digitos[7:]}"
+    if len(digitos) == 10:
+        return f"({digitos[:2]}) {digitos[2:6]}-{digitos[6:]}"
+    return telefone

@@ -219,13 +219,20 @@ def lote_detalhe(lote_id: int):
 def whatsapp(lote_id: int, item_id: int):
     """Nunca dispara nada sozinho: só audita que o link foi gerado/aberto
     e redireciona pro wa.me — quem confirma o envio é o humano, dentro do
-    próprio WhatsApp (§5.5 do complemento). Sem telefone válido, 404 (o
-    template já não deveria ter mostrado o botão)."""
+    próprio WhatsApp (§5.5 do complemento). `telefone` vem da querystring
+    (a tela lista os telefones do cliente e cada um tem seu próprio link,
+    pra escolher qual usar quando há mais de um cadastrado); sem
+    telefone informado, cai no primeiro. Telefone que não é um dos
+    válidos do item (ou item sem telefone), 404 — nunca abre num número
+    arbitrário."""
     item = db.session.get(CentralClienteLink, item_id)
     if item is None or item.lote_id != lote_id:
         abort(404)
 
-    link = central_cliente_service.montar_link_whatsapp_item(item, config=current_app.config)
+    telefone = request.args.get("telefone") or (item.telefones[0] if item.telefones else "")
+    link = central_cliente_service.montar_link_whatsapp_item(
+        item, telefone=telefone, config=current_app.config
+    )
     if link is None:
         abort(404)
 
@@ -233,7 +240,7 @@ def whatsapp(lote_id: int, item_id: int):
         action="central_whatsapp_aberto",
         result="success",
         user=current_user,
-        details={"lote_id": lote_id, "id_auvo": item.id_auvo, "nome": item.nome},
+        details={"lote_id": lote_id, "id_auvo": item.id_auvo, "nome": item.nome, "telefone": telefone},
     )
     db.session.commit()
     return redirect(link)
@@ -278,7 +285,7 @@ def exportar(lote_id: int):
         (
             item.nome,
             item.id_auvo,
-            item.telefone or "",
+            ", ".join(item.telefones or []),
             item.login or "",
             item.link_url or "",
             item.contato_codigo or "",

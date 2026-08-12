@@ -261,7 +261,7 @@ def test_whatsapp_com_telefone_audita_e_redireciona(app, admin_client, monkeypat
 
     monkeypatch.setattr(central_cliente_service.auvo_service, "criar_cliente", lambda config: object())
     monkeypatch.setattr(
-        central_cliente_service, "_mapa_telefones", lambda client: {111: "31999998888"}
+        central_cliente_service, "_mapa_telefones", lambda client: {111: ["31999998888"]}
     )
 
     admin_client.post(
@@ -275,7 +275,7 @@ def test_whatsapp_com_telefone_audita_e_redireciona(app, admin_client, monkeypat
     )
     lote = CentralClienteLote.query.order_by(CentralClienteLote.id.desc()).first()
     item = lote.itens[0]
-    assert item.telefone == "5531999998888"
+    assert item.telefones == ["5531999998888"]
 
     resposta = admin_client.get(
         f"/central-cliente/lote/{lote.id}/item/{item.id}/whatsapp", follow_redirects=False
@@ -286,6 +286,64 @@ def test_whatsapp_com_telefone_audita_e_redireciona(app, admin_client, monkeypat
     entrada = AuditLog.query.filter_by(action="central_whatsapp_aberto").first()
     assert entrada is not None
     assert entrada.details["id_auvo"] == 111
+    assert entrada.details["telefone"] == "5531999998888"
+
+
+def test_whatsapp_com_dois_telefones_escolhe_pela_querystring(app, admin_client, monkeypatch):
+    from app.services import central_cliente_service
+
+    monkeypatch.setattr(central_cliente_service.auvo_service, "criar_cliente", lambda config: object())
+    monkeypatch.setattr(
+        central_cliente_service,
+        "_mapa_telefones",
+        lambda client: {111: ["31995222809", "31996837126"]},
+    )
+
+    admin_client.post(
+        "/central-cliente/executar",
+        data={
+            "total_linhas": "1",
+            "selecionar": "0",
+            "id_auvo_0": "111",
+            "nome_0": "CLIENTE X",
+        },
+    )
+    lote = CentralClienteLote.query.order_by(CentralClienteLote.id.desc()).first()
+    item = lote.itens[0]
+    assert item.telefones == ["5531995222809", "5531996837126"]
+
+    resposta = admin_client.get(
+        f"/central-cliente/lote/{lote.id}/item/{item.id}/whatsapp?telefone=5531996837126",
+        follow_redirects=False,
+    )
+    assert resposta.status_code == 302
+    assert resposta.headers["Location"].startswith("https://wa.me/5531996837126?text=")
+
+
+def test_whatsapp_telefone_arbitrario_na_querystring_404(app, admin_client, monkeypatch):
+    from app.services import central_cliente_service
+
+    monkeypatch.setattr(central_cliente_service.auvo_service, "criar_cliente", lambda config: object())
+    monkeypatch.setattr(
+        central_cliente_service, "_mapa_telefones", lambda client: {111: ["31999998888"]}
+    )
+
+    admin_client.post(
+        "/central-cliente/executar",
+        data={
+            "total_linhas": "1",
+            "selecionar": "0",
+            "id_auvo_0": "111",
+            "nome_0": "CLIENTE X",
+        },
+    )
+    lote = CentralClienteLote.query.order_by(CentralClienteLote.id.desc()).first()
+    item = lote.itens[0]
+
+    resposta = admin_client.get(
+        f"/central-cliente/lote/{lote.id}/item/{item.id}/whatsapp?telefone=5511900000000"
+    )
+    assert resposta.status_code == 404
 
 
 def test_whatsapp_sem_telefone_404(app, admin_client):
@@ -300,7 +358,7 @@ def test_whatsapp_sem_telefone_404(app, admin_client):
     )
     lote = CentralClienteLote.query.order_by(CentralClienteLote.id.desc()).first()
     item = lote.itens[0]
-    assert item.telefone is None
+    assert item.telefones is None
 
     resposta = admin_client.get(f"/central-cliente/lote/{lote.id}/item/{item.id}/whatsapp")
     assert resposta.status_code == 404

@@ -54,19 +54,23 @@ painel de um cliente para outro. Por isso:
    1s), falha isolada por cliente (não derruba o lote), aborta o lote
    inteiro se detectar cookie expirado (sem marcar ninguém como criado a
    partir daquele ponto).
-6. **Telefone**: busca `phoneNumber` do cliente pela **API oficial**
-   (`AuvoClient`, não o endpoint interno) e normaliza pro formato do
-   WhatsApp (§5.5) — grava em `CentralClienteLink.telefone`. Falha nessa
-   busca nunca derruba o lote, só deixa o WhatsApp indisponível para
-   aquele item.
+6. **Telefone(s)**: busca `phoneNumber` do cliente pela **API oficial**
+   (`AuvoClient`, não o endpoint interno) e normaliza cada número pro
+   formato do WhatsApp (§5.5) — grava a lista em
+   `CentralClienteLink.telefones` (JSON; migration `75e260835989`, antes
+   era uma coluna `telefone` única). Falha nessa busca nunca derruba o
+   lote, só deixa o WhatsApp indisponível para aquele item.
    > **Confirmado em produção**: `phoneNumber` vem como **lista** de
    > telefones (mesmo com um único número, ex.: `["31999998888"]`) — um
    > cliente real com 2 números veio como
-   > `["31995222809", "31996837126"]`. `_telefone_bruto_cliente` usa o
-   > **primeiro** item não vazio da lista (não concatena); antes dessa
-   > correção, um cliente com mais de um telefone cadastrado ficava sem
-   > WhatsApp (a lista virava texto bruto e não passava na validação de
-   > tamanho — só "funcionava" com 1 telefone por coincidência).
+   > `["31995222809", "31996837126"]`. `_telefones_brutos_cliente`
+   > devolve a lista inteira (normalizada e sem duplicatas em
+   > `executar_lote`) — a tela mostra **cada telefone com seu próprio
+   > botão de WhatsApp**, quem escolhe pra qual número mandar é o
+   > usuário. Antes dessa correção o código só lia texto solto: com mais
+   > de um telefone, a lista virava texto bruto e não passava na
+   > validação de tamanho — só "funcionava" (e só com o primeiro número)
+   > por coincidência.
 7. Grava em `CentralClienteLote`/`CentralClienteLink`, auditoria de cada
    criação, exportação em xlsx do lote (agora com telefone). Cada linha
    com telefone válido ganha o botão "Enviar no WhatsApp" (§5.5).
@@ -104,9 +108,11 @@ isolada, não upsert):
   olha para linhas com `status == "criado"` **de lotes com
   `simulacao == False`**), nome, contato_codigo,
   link_identificador, link_url, login (nullable), senha_cifrada
-  (nullable — só populada se `central_gerar_login_senha=true`), telefone
-  (nullable, já normalizado — busca via API oficial em `executar_lote`,
-  ver §1 passo 6), menus (JSON), status (`pendente/criado/erro/removido`),
+  (nullable — só populada se `central_gerar_login_senha=true`), telefones
+  (JSON, nullable — lista de telefones já normalizados, busca via API
+  oficial em `executar_lote`, ver §1 passo 6; migration `75e260835989`,
+  antes era uma coluna `telefone` única), menus (JSON), status
+  (`pendente/criado/erro/removido`),
   erro_mensagem, criado_em. `removido` (migration `d90d1780e01f`): admin
   apagou o contato manualmente na Auvo e marcou por aqui
   (`central_cliente_service.remover_link`) — não apaga a linha (fica no
@@ -182,23 +188,28 @@ o lote inteiro nesse caso, sem contar nada como criado a partir daí.
   (mesmo modelo do Relatório do Técnico — lotes são pequenos, é ação
   manual e rara).
 - **`lote/<id>`**: detalhe (itens, status, erro por item). Cada linha
-  `criado` com telefone válido ganha o botão "Enviar no WhatsApp";
-  `criado` sem telefone mostra "sem telefone" (nunca esconde a linha).
-- **`lote/<id>/item/<id>/whatsapp`**: **não** é um link direto pro
-  `wa.me` — é uma rota do próprio site que audita
-  (`central_whatsapp_aberto`) e só então redireciona (302) pro `wa.me`
-  com a mensagem pronta. Garante o registro de auditoria mesmo sendo um
-  `<a target="_blank">` simples, sem precisar de JS. 404 se o item não
-  tiver telefone (o botão não deveria nem estar visível nesse caso) ou
-  não pertencer ao lote da URL.
+  `criado` mostra **um botão "Enviar no WhatsApp" por telefone** válido
+  do cliente (formatado, ex. "(31) 99522-2809"), pra escolher pra qual
+  número mandar quando há mais de um cadastrado; `criado` sem telefone
+  mostra "sem telefone" (nunca esconde a linha).
+- **`lote/<id>/item/<id>/whatsapp?telefone=<numero>`**: **não** é um link
+  direto pro `wa.me` — é uma rota do próprio site que audita
+  (`central_whatsapp_aberto`, com o telefone escolhido nos detalhes) e só
+  então redireciona (302) pro `wa.me` com a mensagem pronta. Garante o
+  registro de auditoria mesmo sendo um `<a target="_blank">` simples, sem
+  precisar de JS. `telefone` tem que ser um dos telefones válidos
+  daquele item especificamente (nunca abre num número arbitrário — sem
+  o parâmetro, cai no primeiro); 404 se o item não tiver telefone, o
+  `telefone` da querystring não bater com nenhum dos dele, ou o item não
+  pertencer ao lote da URL.
 - **`lote/<id>/item/<id>/remover`** (POST): marca o item como `removido`
   (`remover_link`) — botão só aparece pra item `criado`, com confirm()
   no navegador avisando "só use depois de apagar na Auvo". Não chama a
   Auvo. Item que não existe/não é desse lote → 404; item que não está
   `criado` (já removido, pendente, erro) → aviso, sem mudar nada.
-- **`exportar/<id>`**: xlsx (cliente, id_auvo, telefone, login, link,
-  contato_codigo, status) — documento sensível (login/link de acesso),
-  mesmo cuidado do Cofre.
+- **`exportar/<id>`**: xlsx (cliente, id_auvo, telefones — todos,
+  separados por vírgula —, login, link, contato_codigo, status) —
+  documento sensível (login/link de acesso), mesmo cuidado do Cofre.
 - **`configuracao`**: settings `central_*` + aviso de risco (mesmo tom do
   banner do Cofre) + link para o playbook de quebra (§6).
 
@@ -243,8 +254,8 @@ os cita, já que o acesso confirmado é só por link).
   `central_lote_preparado`, `central_lote_executado` (totais, não a
   lista completa), `central_link_criado` (por item: id_auvo, nome,
   contato_codigo — nunca a senha), `central_lote_exportado`,
-  `central_config_saved`, `central_whatsapp_aberto` (id_auvo/nome —
-  nunca o telefone completo nem a mensagem), `central_link_removido`
+  `central_config_saved`, `central_whatsapp_aberto` (id_auvo/nome/
+  telefone escolhido — nunca a mensagem), `central_link_removido`
   (id_auvo/nome/lote_id).
 - `roles_required("admin")` em toda rota — o 403 automático já audita
   (`unauthorized_access_attempt`), não precisa de checagem por item como
@@ -261,11 +272,15 @@ número (disparo em massa por robô viola as regras do WhatsApp). **Não**
 usa bibliotecas não-oficiais (whatsapp-web.js e afins) — só o link público
 `https://wa.me/<telefone>?text=<mensagem>`.
 
-Telefone vem da API **oficial** da Auvo (`AuvoClient.listar_clientes()`,
-campo `phoneNumber`), buscado uma vez por execução do lote e normalizado
-(`normalizar_telefone`) — nunca do endpoint interno. Envio 100% automático
-(API oficial do WhatsApp Business, com templates aprovados pela Meta) fica
-como evolução futura — não implementado agora.
+Telefone(s) vêm da API **oficial** da Auvo (`AuvoClient.listar_clientes()`,
+campo `phoneNumber` — lista, mesmo com um único número), buscados uma vez
+por execução do lote e normalizados (`normalizar_telefone`) — nunca do
+endpoint interno. Cliente com mais de um telefone cadastrado mostra um
+botão por número na tela do lote; a rota `whatsapp` só aceita um telefone
+que esteja de fato entre os do item (`montar_link_whatsapp_item` valida
+isso), nunca um número arbitrário vindo da querystring. Envio 100%
+automático (API oficial do WhatsApp Business, com templates aprovados
+pela Meta) fica como evolução futura — não implementado agora.
 
 ## 6. Playbook de quebra / itens a confirmar antes de rodar de verdade
 
@@ -311,6 +326,7 @@ F12 antes da primeira execução real:
 | **LC4** ✅ | Docs (`OPERACAO.md`) + validação final | Suíte completa verde |
 | **LC5** ✅ | WhatsApp assistido (wa.me) + telefone normalizado via API oficial | Unit (normalizar_telefone, montar_link_whatsapp) + integração (busca de telefone não derruba o lote, mensagem com template, rota audita+redireciona, 404 sem telefone) + screenshots claro/escuro |
 | **LC6** ✅ | Busca por cliente (`buscar_clientes`) + `remover_link` (desfazer "já tem link" depois de apagar manualmente na Auvo) | Integração (busca por nome/conta/id, mostra link existente sem sumir; remover só aceita status='criado', libera o cliente pra `montar_lote` de novo) + screenshots claro/escuro |
+| **LC7** ✅ | Múltiplos telefones por cliente (`telefones` JSON, migration `75e260835989`) — corrige caso real de produção onde `phoneNumber` da Auvo é sempre lista; tela mostra um botão de WhatsApp por número, usuário escolhe | Integração (mantém todos os números normalizados sem duplicar, `montar_link_whatsapp_item` só aceita telefone que é do item) + screenshots claro/escuro |
 
 Módulo implementado, coberto por teste, e com os 3 itens bloqueadores do
 §6 **confirmados via F12 contra um contato de teste real** (formato do
