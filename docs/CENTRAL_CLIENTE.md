@@ -210,8 +210,11 @@ o lote inteiro nesse caso, sem contar nada como criado a partir daí.
 - **`exportar/<id>`**: xlsx (cliente, id_auvo, telefones — todos,
   separados por vírgula —, login, link, contato_codigo, status) —
   documento sensível (login/link de acesso), mesmo cuidado do Cofre.
-- **`configuracao`**: settings `central_*` + aviso de risco (mesmo tom do
-  banner do Cofre) + link para o playbook de quebra (§6).
+- **`configuracao`**: settings `central_*` (inclui DDI e a mensagem do
+  WhatsApp — `ConfiguracaoCentralForm.whatsapp_ddi`/`whatsapp_template`,
+  `TextAreaField` com os placeholders disponíveis explicados na tela) +
+  aviso de risco (mesmo tom do banner do Cofre) + link para o playbook
+  de quebra (§6).
 
 ## 4. Settings (`settings_service.DEFAULTS`)
 
@@ -243,7 +246,10 @@ senha gerada uma vez e não reexibida).
 normalização (`normalizar_telefone`) e o texto da mensagem, com
 placeholders `{nome}`/`{link}`/`{login}`/`{senha}` — os dois últimos só
 fazem sentido se `central_gerar_login_senha=true` (o template padrão não
-os cita, já que o acesso confirmado é só por link).
+os cita, já que o acesso confirmado é só por link). Editável na tela
+**Configuração** (campo de texto multi-linha) — antes só existia como
+constante em `DEFAULTS`, sem forma de mudar sem editar código; corrigido
+depois que a Novo Millenium pediu uma mensagem própria pro cliente.
 
 ## 5. Segurança
 
@@ -327,6 +333,7 @@ F12 antes da primeira execução real:
 | **LC5** ✅ | WhatsApp assistido (wa.me) + telefone normalizado via API oficial | Unit (normalizar_telefone, montar_link_whatsapp) + integração (busca de telefone não derruba o lote, mensagem com template, rota audita+redireciona, 404 sem telefone) + screenshots claro/escuro |
 | **LC6** ✅ | Busca por cliente (`buscar_clientes`) + `remover_link` (desfazer "já tem link" depois de apagar manualmente na Auvo) | Integração (busca por nome/conta/id, mostra link existente sem sumir; remover só aceita status='criado', libera o cliente pra `montar_lote` de novo) + screenshots claro/escuro |
 | **LC7** ✅ | Múltiplos telefones por cliente (`telefones` JSON, migration `75e260835989`) — corrige caso real de produção onde `phoneNumber` da Auvo é sempre lista; tela mostra um botão de WhatsApp por número, usuário escolhe | Integração (mantém todos os números normalizados sem duplicar, `montar_link_whatsapp_item` só aceita telefone que é do item) + screenshots claro/escuro |
+| **LC8** ✅ | DDI e mensagem do WhatsApp viram campos editáveis na tela Configuração (antes só dava pra mudar editando código) | Integração (form exige mensagem preenchida, DDI vazio cai no padrão "55") + screenshots claro/escuro |
 
 Módulo implementado, coberto por teste, e com os 3 itens bloqueadores do
 §6 **confirmados via F12 contra um contato de teste real** (formato do

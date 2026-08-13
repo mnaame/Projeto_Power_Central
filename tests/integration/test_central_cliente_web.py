@@ -476,6 +476,7 @@ def test_salvar_configuracao(app, admin_client):
             "pausa_segundos": "2",
             "menu_solicitacoes": "y",
             "menu_os": "y",
+            "whatsapp_template": "Oi {nome}, acesse: {link}",
         },
         follow_redirects=True,
     )
@@ -488,6 +489,59 @@ def test_salvar_configuracao(app, admin_client):
     assert settings_service.get_central_pausa_segundos() == 2.0
     assert settings_service.central_menu_solicitacoes() is True
     assert settings_service.central_menu_orcamento() is False
+
+
+def test_salvar_configuracao_sem_mensagem_whatsapp_nao_salva(app, admin_client):
+    """whatsapp_template é obrigatório — sem ele a validação falha e nada
+    (nem os outros campos do form) é salvo, form volta com erro."""
+    from app.services import settings_service
+
+    resposta = admin_client.post(
+        "/central-cliente/configuracao/salvar",
+        data={
+            "score_minimo": "0.85",
+            "cargo_padrao": "Contato Cliente",
+            "pausa_segundos": "2",
+        },
+        follow_redirects=True,
+    )
+    assert resposta.status_code == 200
+    assert settings_service.get_central_score_minimo() != 0.85
+
+
+def test_salvar_configuracao_whatsapp_ddi_e_template(app, admin_client):
+    from app.services import settings_service
+
+    admin_client.post(
+        "/central-cliente/configuracao/salvar",
+        data={
+            "score_minimo": "0.85",
+            "cargo_padrao": "Contato Cliente",
+            "pausa_segundos": "2",
+            "whatsapp_ddi": "351",
+            "whatsapp_template": "Ola {nome}, seu acesso: {link}",
+        },
+        follow_redirects=True,
+    )
+    assert settings_service.get_central_whatsapp_ddi() == "351"
+    assert settings_service.get_central_whatsapp_template() == "Ola {nome}, seu acesso: {link}"
+
+
+def test_salvar_configuracao_whatsapp_ddi_vazio_usa_padrao(app, admin_client):
+    from app.services import settings_service
+
+    admin_client.post(
+        "/central-cliente/configuracao/salvar",
+        data={
+            "score_minimo": "0.85",
+            "cargo_padrao": "Contato Cliente",
+            "pausa_segundos": "2",
+            "whatsapp_ddi": "",
+            "whatsapp_template": "Oi {nome}: {link}",
+        },
+        follow_redirects=True,
+    )
+    assert settings_service.get_central_whatsapp_ddi() == "55"
 
 
 def test_alternar_modo_producao_exige_confirmacao(admin_client):

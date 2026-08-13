@@ -561,9 +561,11 @@ pela API oficial).
   telefone, aparece um botão por número (com o número formatado do
   lado), e você escolhe pra qual mandar. O botão abre o WhatsApp numa
   aba nova, já com o contato certo e a mensagem pronta (template
-  configurável). O envio é **assistido** — o site só monta a mensagem, um
-  humano confere e clica em enviar dentro do próprio WhatsApp. Sem
-  telefone válido, a linha mostra "sem telefone" em vez do botão.
+  configurável — em Configuração, campo "Mensagem do WhatsApp", aceita
+  os placeholders `{nome}`, `{link}`, `{login}` e `{senha}`). O envio é
+  **assistido** — o site só monta a mensagem, um humano confere e clica
+  em enviar dentro do próprio WhatsApp. Sem telefone válido, a linha
+  mostra "sem telefone" em vez do botão.
 - **"remover"** (na tela do lote, só em item `criado`): usar **só depois**
   de já ter apagado o contato manualmente no painel da Auvo (ex.: era um
   teste). Isso não mexe na Auvo — só avisa o Power Central que aquele

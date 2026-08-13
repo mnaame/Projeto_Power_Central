@@ -327,6 +327,8 @@ def _form_configuracao_preenchido() -> ConfiguracaoCentralForm:
         menu_os=settings_service.central_menu_os(),
         menu_orcamento=settings_service.central_menu_orcamento(),
         gerar_login_senha=settings_service.central_gerar_login_senha(),
+        whatsapp_ddi=settings_service.get_central_whatsapp_ddi(),
+        whatsapp_template=settings_service.get_central_whatsapp_template(),
     )
 
 
@@ -374,6 +376,14 @@ def salvar_configuracao():
         "central_gerar_login_senha",
         "true" if form.gerar_login_senha.data else "false",
         updated_by_id=current_user.id,
+    )
+    settings_service.set(
+        "central_whatsapp_ddi",
+        (form.whatsapp_ddi.data or "").strip() or "55",
+        updated_by_id=current_user.id,
+    )
+    settings_service.set(
+        "central_whatsapp_template", form.whatsapp_template.data, updated_by_id=current_user.id
     )
 
     audit_service.registrar(

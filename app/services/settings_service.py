@@ -85,10 +85,17 @@ DEFAULTS: dict[str, str] = {
     "central_gerar_login_senha": "false",
     "central_whatsapp_ddi": "55",
     "central_whatsapp_template": (
-        "Ola, {nome}! Aqui e da Novo Millenium. "
-        "Este e o seu acesso a Central do Cliente, onde voce acompanha e abre "
-        "chamados: {link} . E so tocar no link, sem login nem senha. "
-        "Qualquer duvida, estamos a disposicao."
+        "Olá, {nome}! Aqui é da Novo Millenium.\n\n"
+        "Este é o seu acesso à Central do Cliente, onde você acompanha e abre "
+        "seus atendimentos de forma rápida e sem burocracia:\n"
+        "{link}\n\n"
+        "Como usar:\n"
+        "1) Toque no link (não pede login nem senha);\n"
+        "2) Para pedir um atendimento, use \"Solicitações\";\n"
+        "3) Para acompanhar um serviço, veja em \"Ordens de Serviço\".\n\n"
+        "Guarde este link com você — ele é o seu acesso pessoal à nossa central.\n\n"
+        "Ficou com alguma dúvida ou dificuldade para abrir suas ordens? É só "
+        "me acionar aqui mesmo por este WhatsApp que o suporte resolve com você!"
     ),
 }
 

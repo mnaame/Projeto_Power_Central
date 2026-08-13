@@ -113,6 +113,30 @@
         claro) e não é reexibida na tela.</span>
       </div>
 
+      <div class="field">
+        {{ form.whatsapp_ddi.label }}
+        {{ form.whatsapp_ddi(style="max-width: 120px;") }}
+        {% for mensagem in form.whatsapp_ddi.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      <p class="muted" style="margin-top: calc(-1 * var(--space-3)); font-size: var(--font-size-xs);">
+        Prefixado no telefone quando ele não vier com o DDI (padrão "55").
+      </p>
+
+      <div class="field">
+        {{ form.whatsapp_template.label }}
+        {{ form.whatsapp_template(rows=10) }}
+        {% for mensagem in form.whatsapp_template.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      <p class="muted" style="margin-top: calc(-1 * var(--space-3)); font-size: var(--font-size-xs);">
+        Mensagem pré-preenchida no botão "Enviar no WhatsApp" — o envio
+        continua assistido (o site só monta o texto, quem envia é um
+        humano dentro do WhatsApp). Placeholders disponíveis:
+        <code>{nome}</code>, <code>{link}</code>, <code>{login}</code> e
+        <code>{senha}</code> (os dois últimos só fazem sentido se "Gerar
+        login/senha" estiver ligado acima). Placeholder desconhecido
+        fica escrito literal na mensagem, não quebra a tela.
+      </p>
+
       <button type="submit" class="btn btn-primary">Salvar configuração</button>
     </form>
   </div>

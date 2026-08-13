@@ -1,5 +1,5 @@
 from flask_wtf import FlaskForm
-from wtforms import BooleanField, FloatField, StringField
+from wtforms import BooleanField, FloatField, StringField, TextAreaField
 from wtforms.validators import DataRequired, Length, NumberRange, Optional
 
 
@@ -30,4 +30,11 @@ class ConfiguracaoCentralForm(FlaskForm):
     menu_orcamento = BooleanField("Menu Orçamento")
     gerar_login_senha = BooleanField(
         "Gerar login/senha nos contatos (deixe desligado até confirmar que a Auvo exige — ver Configuração)"
+    )
+    whatsapp_ddi = StringField(
+        "DDI padrão do WhatsApp", validators=[Optional(), Length(max=4)]
+    )
+    whatsapp_template = TextAreaField(
+        "Mensagem do WhatsApp",
+        validators=[DataRequired(), Length(max=4000)],
     )
