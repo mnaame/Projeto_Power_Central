@@ -219,6 +219,30 @@ def test_clientes_separados_por_conta_e_ordenados_por_quantidade():
     assert [c.quantidade for c in clientes] == [2, 1]
 
 
+def test_horarios_todos_os_disparos_do_mais_antigo_para_o_mais_recente():
+    eventos = [
+        _evento("BUR", BASE + timedelta(minutes=10), rec_iid="1"),
+        _evento("BUR", BASE, rec_iid="2"),
+        _evento("BUR", BASE + timedelta(minutes=5), rec_iid="3"),
+    ]
+    clientes = consolidar_clientes(eventos)
+    assert clientes[0].horarios == (
+        BASE,
+        BASE + timedelta(minutes=5),
+        BASE + timedelta(minutes=10),
+    )
+
+
+def test_horarios_nao_inclui_disparo_invalido():
+    eventos = [
+        _evento("CLO", BASE, conta="111"),
+        _evento("BUR", BASE + timedelta(minutes=2), conta="111"),  # rotina, inválido
+        _evento("BUR", BASE + timedelta(minutes=20), conta="111"),  # válido
+    ]
+    clientes = consolidar_clientes(eventos)
+    assert clientes[0].horarios == (BASE + timedelta(minutes=20),)
+
+
 def test_cliente_sem_disparo_valido_fica_fora():
     eventos = [
         _evento("CLO", BASE, conta="111"),

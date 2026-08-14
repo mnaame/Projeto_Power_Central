@@ -48,6 +48,7 @@ class ClienteComDisparos:
     ocorrencia: str
     zonas: tuple[str, ...]
     ids_eventos_atendidos: tuple[str, ...]  # p/ buscar tempo de conclusão (mais recente 1º)
+    horarios: tuple[datetime, ...] = ()  # todos os disparos válidos, do mais antigo pro mais recente
 
 
 def _texto(valor: object) -> str:
@@ -246,6 +247,9 @@ def consolidar_clientes(
             key=lambda d: d.quando,
             reverse=True,
         )
+        horarios = tuple(
+            sorted(d.quando for d in validos if d.quando is not None)
+        )
 
         quantidade = len(validos)
         resultado.append(
@@ -261,6 +265,7 @@ def consolidar_clientes(
                 ),
                 zonas=tuple(zonas_distintas),
                 ids_eventos_atendidos=tuple(d.id_evento for d in atendidos_recentes),
+                horarios=horarios,
             )
         )
 

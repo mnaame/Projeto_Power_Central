@@ -99,6 +99,13 @@ def _tempos_via_timeline(client, ids_eventos) -> tuple[str, str]:
     return tempo_conclusao, tempo_ligar
 
 
+def _formatar_horarios(horarios) -> str:
+    """Um horário por linha na célula (mesmo padrão de `zonas`) — já vem
+    em `FUSO_HORARIO` (`parse_softguard_datetime`); inclui a data porque
+    um período manual pode passar de um dia para o outro."""
+    return "\n".join(h.strftime("%d/%m %H:%M") for h in horarios)
+
+
 def gerar_atendimentos(
     *,
     config,
@@ -265,6 +272,7 @@ def gerar_disparos(
                     (
                         cliente.cliente,
                         f"{cliente.quantidade}x",
+                        _formatar_horarios(cliente.horarios),
                         cliente.ocorrencia,
                         tempo,
                         tempo_ligar or "X",

@@ -198,11 +198,12 @@ def test_gerar_disparos_fim_a_fim_com_janela_movel(app):
     linha = [c.value for c in aba[2]]
     assert linha[0] == "CLIENTE X"
     assert linha[1] == "2x"
-    assert linha[2] == "ALEATORIO"
-    assert linha[3] == "00H11M05S"  # tempo do disparo atendido mais recente
-    assert linha[4] == "X"
-    assert linha[5] == "(28) IVP ENTRADA RM"
-    assert linha[6] is None or linha[6] == ""
+    assert linha[2] == "18/07 12:00\n18/07 12:10"  # horário de cada disparo
+    assert linha[3] == "ALEATORIO"
+    assert linha[4] == "00H11M05S"  # tempo do disparo atendido mais recente
+    assert linha[5] == "X"
+    assert linha[6] == "(28) IVP ENTRADA RM"
+    assert linha[7] is None or linha[7] == ""
 
 
 def test_gerar_disparos_preenche_tempo_para_ligar_quando_ha_chamada(app):
@@ -243,8 +244,8 @@ def test_gerar_disparos_preenche_tempo_para_ligar_quando_ha_chamada(app):
     wb = load_workbook(run.file_path)
     aba = wb["DISPAROS"]
     linha = [c.value for c in aba[2]]
-    assert linha[3] == "00H18M32S"  # tempo de conclusão
-    assert linha[4] == "00H18M00S"  # tempo para ligar (chamada - início)
+    assert linha[4] == "00H18M32S"  # tempo de conclusão
+    assert linha[5] == "00H18M00S"  # tempo para ligar (chamada - início)
 
 
 def test_janela_movel_encadeia_com_o_relatorio_anterior(app):

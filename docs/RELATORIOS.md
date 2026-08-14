@@ -12,7 +12,7 @@ Dois módulos novos no mesmo site, com a mesma sidebar/login/papéis:
 | Módulo | O que gera | Para quê |
 |---|---|---|
 | **Atendimentos** | Atendimentos NYE/NYC concluídos no período: cliente, resolução, tempo, monitor + aba DESCARTADOS | Produtividade da equipe de monitoramento |
-| **Disparos** | Uma linha por cliente com disparos BUR válidos no período: quantidade, zonas, tempo de conclusão | Locais com disparos aleatórios |
+| **Disparos** | Uma linha por cliente com disparos BUR válidos no período: quantidade, horário de cada disparo, zonas, tempo de conclusão | Locais com disparos aleatórios |
 
 Ambos: seletor de período, botão "Gerar relatório" (execução única por vez,
 com feedback), prévia na tela idêntica ao Excel, download .xlsx, histórico
@@ -69,7 +69,13 @@ Regras B.3, sobre eventos BUR/CLO/CLV/ROP/OPN/OPV/RCL agrupados por
   case-insensitive; lista configurável);
 - ocorrência: `ALEATORIO`, ou `ALEATORIO E RECORRENTE` a partir de
   `limite_recorrente` (padrão 15);
-- zonas distintas por cliente a partir de `_zon_cdescripcion`.
+- zonas distintas por cliente a partir de `_zon_cdescripcion`;
+- `horarios`: todos os `quando` dos disparos válidos (não só os
+  atendidos), do mais antigo pro mais recente — pedido explícito da
+  operação pra ver o horário de cada disparo, não só a quantidade; a
+  planilha empilha um por linha na célula (mesmo formato que `zonas`
+  já usa), com data porque um período manual pode passar de um dia
+  pro outro.
 
 ### 2.4 `services/report_service.py`
 
