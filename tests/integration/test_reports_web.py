@@ -160,20 +160,36 @@ def test_gerar_disparos_com_periodo_manual_hora_minuto(app, operador_client):
 def test_gerar_com_periodo_manual(app, operador_client):
     resposta = operador_client.post(
         "/relatorios/atendimentos/gerar",
-        data={"periodo": "manual", "inicio": "2026-07-01", "fim": "2026-07-02"},
+        data={"periodo": "manual", "inicio": "2026-07-01T00:00", "fim": "2026-07-02T23:59"},
         follow_redirects=True,
     )
     assert resposta.status_code == 200
 
     run = ReportRun.query.filter_by(module="atendimentos").one()
     assert run.period_start == datetime(2026, 7, 1, 0, 0, 0, tzinfo=FUSO)
-    assert run.period_end == datetime(2026, 7, 2, 23, 59, 59, tzinfo=FUSO)
+    assert run.period_end == datetime(2026, 7, 2, 23, 59, 0, tzinfo=FUSO)
+
+
+def test_gerar_atendimentos_com_periodo_manual_hora_minuto(app, operador_client):
+    """Pedido explícito: escolher hora/minuto no manual de Atendimentos
+    também, não só o dia inteiro — evita pegar evento de madrugada de um
+    dia que não devia entrar no período."""
+    resposta = operador_client.post(
+        "/relatorios/atendimentos/gerar",
+        data={"periodo": "manual", "inicio": "2026-07-01T07:00", "fim": "2026-07-01T19:00"},
+        follow_redirects=True,
+    )
+    assert resposta.status_code == 200
+
+    run = ReportRun.query.filter_by(module="atendimentos").one()
+    assert run.period_start == datetime(2026, 7, 1, 7, 0, tzinfo=FUSO)
+    assert run.period_end == datetime(2026, 7, 1, 19, 0, tzinfo=FUSO)
 
 
 def test_periodo_manual_invalido_avisa_sem_gerar(operador_client):
     resposta = operador_client.post(
         "/relatorios/atendimentos/gerar",
-        data={"periodo": "manual", "inicio": "2026-07-10", "fim": "2026-07-01"},
+        data={"periodo": "manual", "inicio": "2026-07-10T00:00", "fim": "2026-07-01T00:00"},
         follow_redirects=True,
     )
     assert "Período inválido".encode() in resposta.data

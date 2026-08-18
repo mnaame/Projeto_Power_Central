@@ -50,10 +50,6 @@ def _agora() -> datetime:
     return datetime.now(FUSO_HORARIO)
 
 
-def _parse_data(valor: str) -> datetime:
-    return datetime.strptime(valor, "%Y-%m-%d").replace(tzinfo=FUSO_HORARIO)
-
-
 def _parse_data_hora(valor: str) -> datetime:
     return datetime.strptime(valor, "%Y-%m-%dT%H:%M").replace(tzinfo=FUSO_HORARIO)
 
@@ -68,7 +64,7 @@ def _periodo_fim_de_semana(agora: datetime) -> tuple[datetime, datetime]:
     return inicio, fim
 
 
-def _periodo_do_form(modulo: str) -> tuple[datetime, datetime] | None:
+def _periodo_do_form() -> tuple[datetime, datetime] | None:
     """None = janela automática (só Disparos usa)."""
     preset = request.form.get("periodo", "ontem")
     agora = _agora()
@@ -83,13 +79,10 @@ def _periodo_do_form(modulo: str) -> tuple[datetime, datetime] | None:
         return inicio, hoje - timedelta(seconds=1)
     if preset == "7dias":
         return hoje - timedelta(days=7), agora
-    # manual — Disparos e Disparos Geral usam hora/minuto; Atendimentos, dia inteiro
-    if modulo in ("disparos", "disparos_geral"):
-        inicio = _parse_data_hora(request.form["inicio"])
-        fim = _parse_data_hora(request.form["fim"])
-    else:
-        inicio = _parse_data(request.form["inicio"])
-        fim = _parse_data(request.form["fim"]) + timedelta(hours=23, minutes=59, seconds=59)
+    # manual — todos os módulos aceitam hora/minuto, não só o dia (evita
+    # pegar evento de madrugada de um dia que não devia entrar no período)
+    inicio = _parse_data_hora(request.form["inicio"])
+    fim = _parse_data_hora(request.form["fim"])
     if fim < inicio:
         raise ValueError("Período inválido: fim antes do início.")
     return inicio, fim
@@ -191,7 +184,7 @@ def gerar(modulo: str):
         abort(404)
 
     try:
-        periodo = _periodo_do_form(modulo)
+        periodo = _periodo_do_form()
     except (ValueError, KeyError):
         flash("Período inválido — confira as datas.", "warning")
         return redirect(url_for("reports.pagina", modulo=modulo))

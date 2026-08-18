@@ -34,7 +34,7 @@
       </select>
     </div>
 
-    {% set com_hora = modulo in ['disparos', 'disparos_geral'] %}
+    {% set com_hora = modulo in ['atendimentos', 'disparos', 'disparos_geral'] %}
     <div class="field" style="margin-bottom: 0;">
       <label for="inicio">Início (manual)</label>
       <input id="inicio" type="{{ 'datetime-local' if com_hora else 'date' }}" name="inicio">

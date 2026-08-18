@@ -297,13 +297,16 @@ hora (tem um intervalo mínimo entre cliques, configurável).
 Duas páginas na barra lateral, para operador e admin:
 
 - **Atendimentos**: escolha o período (ontem, últimos 7 dias ou manual) e
-  clique "Gerar relatório". A prévia na tela é idêntica ao Excel; o botão
-  "Baixar Excel" traz o arquivo com a aba principal e a aba DESCARTADOS
-  (eventos fora do relatório, com o motivo — ex.: cliente armou).
+  clique "Gerar relatório". O manual aceita data **e hora/minuto** — evita
+  puxar evento de madrugada de um dia que não devia entrar no período (ex.:
+  quer só o turno da tarde de ontem, não o dia inteiro). A prévia na tela é
+  idêntica ao Excel; o botão "Baixar Excel" traz o arquivo com a aba
+  principal e a aba DESCARTADOS (eventos fora do relatório, com o motivo
+  — ex.: cliente armou).
 - **Disparos**: por padrão cobre "desde o último relatório até agora"
   (janela móvel — o próximo começa onde o anterior terminou); também
-  aceita período manual com data **e hora/minuto** (diferente de
-  Atendimentos, que é por dia inteiro). Uma linha por cliente, com
+  aceita período manual com data e hora/minuto, igual Atendimentos. Uma
+  linha por cliente, com
   quantidade, **horário de cada disparo** (coluna "HORÁRIOS DOS
   DISPAROS" — um por linha na célula, com data, na ordem em que
   aconteceram), zonas, tempo de conclusão e **tempo para ligar para o
