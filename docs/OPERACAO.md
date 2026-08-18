@@ -596,10 +596,16 @@ tarefa de outra pessoa.
   aperte Enter — não precisa abrir formulário nenhum. Detalhes extras
   (descrição, prioridade, data) se ajustam depois clicando no título da
   tarefa.
-- **Atrasada não some**: uma tarefa do Dia ou da Semana que passou da
-  data e continua pendente aparece destacada em vermelho, com a data
-  original, dentro do próprio bloco atual — até você concluir, remarcar a
-  data ou mover pra outro bloco.
+- **Atrasada não some**: uma tarefa do Dia que passou da data, ou da
+  Semana cuja semana inteira já terminou, e continua pendente, aparece
+  destacada em vermelho, com a data original, dentro do próprio bloco
+  atual — até você concluir, remarcar a data ou mover pra outro bloco.
+  Uma tarefa de Semana criada na segunda **não** fica atrasada nos outros
+  dias da mesma semana, só depois que a semana virar.
+- **Histórico**: botão "Ver histórico" no topo da tela mostra todas as
+  suas tarefas concluídas, mais recente primeiro, com data de conclusão
+  e um botão "reabrir" (volta pra pendente) — não fica só no "N
+  concluída(s) hoje" de cada bloco, que some no dia seguinte.
 - **Mover** ("→ Hoje" / "→ Semana" / "→ Fixa"): puxa a tarefa pra outro
   horizonte na hora — por exemplo, decidir que uma tarefa da Semana vai
   ser feita hoje.

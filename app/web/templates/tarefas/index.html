@@ -17,7 +17,7 @@
   {% if tarefas %}
   <ul class="tarefa-lista">
     {% for tarefa in tarefas %}
-    {% set atrasada = tarefa.status == 'pendente' and tarefa.data and tarefa.data < hoje %}
+    {% set atrasada = tarefa|tarefa_atrasada(hoje) %}
     {% set estilo_prioridade = {'alta': 'chip-critical', 'media': 'chip-warning', 'baixa': 'chip-neutral'}[tarefa.prioridade] %}
     <li class="tarefa-item{{ ' is-atrasada' if atrasada else '' }}">
       <form method="post" action="{{ url_for('tarefas.concluir', tarefa_id=tarefa.id) }}" class="tarefa-check-form">
@@ -79,6 +79,7 @@
 <div class="section">
   <div class="section-title">
     <h2>Minhas Tarefas</h2>
+    <a class="btn btn-ghost" href="{{ url_for('tarefas.historico') }}">Ver histórico</a>
   </div>
   <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
     Suas tarefas pessoais — só você vê e edita as suas. Tarefa pendente com

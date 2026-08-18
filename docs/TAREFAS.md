@@ -27,8 +27,15 @@ próprias tarefas.
 
 - `semana_corrente(referencia) -> (segunda, domingo)`: semana ISO (segunda
   a domingo) que contém `referencia`.
-- `esta_atrasada(data, status, *, hoje) -> bool`: `status == 'pendente'`
-  e `data < hoje`. Não muda nada — só informa a tela.
+- `esta_atrasada(data, status, *, horizonte, hoje) -> bool`: `status ==
+  'pendente'` e o **período já encerrado**. Pra `dia`, período é o
+  próprio dia (`data < hoje`). Pra `semana`, período é a semana inteira
+  que contém `data` (`data < inicio_da_semana_corrente(hoje)`) — **não**
+  `data < hoje` puro, que é o bug real corrigido (tarefa de Semana criada
+  na segunda aparecia atrasada já na terça, sem a semana ter acabado).
+  `fixa` nunca atrasa por aqui (não depende de `data`). Único lugar que
+  decide "atrasada" — a tela (`tarefa_atrasada` em `app/web/filters.py`)
+  e `tarefa_service.contar_dia` chamam essa função, não reimplementam.
 
 ### 2.2 `app/models/tarefa.py` (`Tarefa`) + migration `ecae4d947f47`
 
@@ -56,6 +63,9 @@ uma vez, na camada web, antes de chamar o serviço).
   dentro do dia local, de qualquer horizonte (a tela agrupa por bloco).
 - `contar_dia(user_id, ...) -> {"pendentes", "atrasadas"}` — usado pelo
   cartão do dashboard, sem carregar as tarefas inteiras.
+- `query_historico(user_id) -> Query` — todas as concluídas (qualquer
+  horizonte/data), mais recente primeiro; devolve a Query (não `.all()`)
+  pra tela paginar (`Query.paginate`, mesmo padrão de `admin.auditoria`).
 - `criar(*, user_id, titulo, horizonte, ...)` — adição rápida: só título +
   horizonte; `data` é preenchida sozinha (hoje pra Dia e pra Semana; Fixa
   fica sem data). Título vazio levanta `ValueError`.
@@ -83,6 +93,11 @@ uma vez, na camada web, antes de chamar o serviço).
 - **`editar` (GET/POST)**: formulário completo (`TarefaForm`, WTForms) —
   título, descrição, horizonte, data, prioridade. Mesma tela tem o botão
   "Excluir tarefa".
+- **`historico` (GET, aceita `?pagina=`)**: todas as concluídas do
+  usuário, mais recente primeiro, paginado (30/página — mesmo padrão de
+  `admin.auditoria`, `HISTORICO_POR_PAGINA`). Link "Ver histórico" no
+  topo do `index`. Cada linha tem "reabrir" (reusa a rota `concluir` —
+  ela já alterna feito↔pendente, não precisou de rota nova).
 - **Dashboard**: cartão "Suas tarefas de hoje" em `dashboard/_conteudo.html`
   (só aparece se houver pendente) com a contagem do Dia + chip de
   atrasadas, linkando pra `/tarefas#bloco-dia`. Reusa `contar_dia` — não
@@ -96,6 +111,7 @@ uma vez, na camada web, antes de chamar o serviço).
 | **TF2** ✅ | `tarefa_service.py` (queries por horizonte, criar/atualizar/concluir/mover/excluir) | Integração (isolamento por dono, atrasada aparece e não some, fixa sem data) |
 | **TF3** ✅ | Aba web completa (3 blocos, adição rápida, ações, editar) + link na sidebar | Integração web (RBAC de dono — 403/404, horizonte inválido — 400) + screenshots claro/escuro |
 | **TF4** ✅ | Cartão no dashboard + docs + validação final | Suíte completa verde |
+| **TF5** ✅ | Corrige `esta_atrasada` pra levar o horizonte em conta (bug real: Semana atrasava a cada dia, não só quando a semana acabava) + tela `historico` paginada | Unit (`esta_atrasada` por horizonte, cobrindo os 7 dias da mesma semana) + integração (isolamento por dono, ordenação, paginação, "reabrir") + screenshots claro/escuro |
 
 Módulo concluído. Fase 2 (não implementada, caminho aberto pelo campo
 `ordem` e pelo modelo simples): recorrência (`recorrencia` + job que

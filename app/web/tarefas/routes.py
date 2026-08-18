@@ -11,6 +11,7 @@ from app.web.tarefas.forms import TarefaForm
 bp = Blueprint("tarefas", __name__, url_prefix="/tarefas")
 
 _ANCORA_POR_HORIZONTE = {"dia": "bloco-dia", "semana": "bloco-semana", "fixa": "bloco-fixas"}
+HISTORICO_POR_PAGINA = 30
 
 
 def _carregar_ou_abort(tarefa_id: int) -> Tarefa:
@@ -45,6 +46,16 @@ def index():
         concluidas_hoje=concluidas_hoje,
         hoje=hoje,
     )
+
+
+@bp.route("/historico")
+@login_required
+def historico():
+    pagina = request.args.get("pagina", 1, type=int)
+    paginacao = tarefa_service.query_historico(current_user.id).paginate(
+        page=pagina, per_page=HISTORICO_POR_PAGINA, error_out=False
+    )
+    return render_template("tarefas/historico.html", paginacao=paginacao)
 
 
 @bp.route("/criar", methods=["POST"])

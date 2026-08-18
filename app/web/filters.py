@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone
 from app.domain.central_cliente import formatar_telefone_exibicao
 from app.domain.dates import FUSO_HORARIO
 from app.domain.formatting import formatar_duracao
+from app.domain.tarefas import esta_atrasada
 
 
 def registrar_filtros(app) -> None:
@@ -31,3 +32,7 @@ def registrar_filtros(app) -> None:
         if not valor:
             return "—"
         return formatar_telefone_exibicao(valor)
+
+    @app.template_filter("tarefa_atrasada")
+    def tarefa_atrasada(tarefa, hoje: date) -> bool:
+        return esta_atrasada(tarefa.data, tarefa.status, horizonte=tarefa.horizonte, hoje=hoje)

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Histórico — Minhas Tarefas{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>Histórico — Minhas Tarefas</h2>
+    <a class="btn btn-ghost" href="{{ url_for('tarefas.index') }}">Voltar</a>
+  </div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Todas as suas tarefas concluídas, mais recente primeiro. "Reabrir"
+    manda de volta pro quadro, como pendente.
+  </p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Título</th>
+          <th>Horizonte</th>
+          <th>Prioridade</th>
+          <th>Concluída em</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set rotulo_horizonte = {'dia': 'Dia', 'semana': 'Semana', 'fixa': 'Fixa'} %}
+        {% set estilo_prioridade = {'alta': 'chip-critical', 'media': 'chip-warning', 'baixa': 'chip-neutral'} %}
+        {% for tarefa in paginacao.items %}
+        <tr>
+          <td>{{ tarefa.titulo }}</td>
+          <td><span class="chip chip-neutral">{{ rotulo_horizonte.get(tarefa.horizonte, tarefa.horizonte) }}</span></td>
+          <td><span class="chip {{ estilo_prioridade.get(tarefa.prioridade, 'chip-neutral') }}">{{ tarefa.prioridade }}</span></td>
+          <td class="is-numeric">{{ tarefa.concluido_em|data_local }}</td>
+          <td style="white-space: nowrap;">
+            <form method="post" action="{{ url_for('tarefas.concluir', tarefa_id=tarefa.id) }}" style="display: inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" style="background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; font: inherit;">reabrir</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">Nenhuma tarefa concluída ainda.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if paginacao.pages > 1 %}
+  <div style="display: flex; gap: var(--space-2); margin-top: var(--space-4); align-items: center;">
+    {% if paginacao.has_prev %}
+    <a class="btn btn-ghost" href="{{ url_for('tarefas.historico', pagina=paginacao.prev_num) }}">Anterior</a>
+    {% endif %}
+    <span class="muted">Página {{ paginacao.page }} de {{ paginacao.pages }}</span>
+    {% if paginacao.has_next %}
+    <a class="btn btn-ghost" href="{{ url_for('tarefas.historico', pagina=paginacao.next_num) }}">Próxima</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

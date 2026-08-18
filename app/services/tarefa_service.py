@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 from app.domain.dates import FUSO_HORARIO
-from app.domain.tarefas import semana_corrente
+from app.domain.tarefas import esta_atrasada, semana_corrente
 from app.extensions import db
 from app.models.tarefa import PRIORIDADES, Tarefa
 from app.utils.time import utcnow
@@ -88,13 +88,24 @@ def listar_concluidas_hoje(user_id: int, *, referencia: date | None = None) -> l
     )
 
 
+def query_historico(user_id: int):
+    """Todas as concluídas do usuário (qualquer horizonte, qualquer data),
+    mais antiga por último — devolve a Query (não `.all()`) pra tela
+    paginar, já que dá pra acumular muita coisa com o tempo."""
+    return Tarefa.query.filter(
+        Tarefa.user_id == user_id, Tarefa.status == "feito"
+    ).order_by(Tarefa.concluido_em.desc())
+
+
 def contar_dia(user_id: int, *, referencia: date | None = None) -> dict:
     """Usado pelo cartão do dashboard: total pendente do Dia (já incluindo
     atrasadas) sem carregar as tarefas inteiras."""
     itens = listar_dia(user_id, referencia=referencia)
     pendentes = [t for t in itens if t.status == "pendente"]
     d = referencia or hoje()
-    atrasadas = [t for t in pendentes if t.data is not None and t.data < d]
+    atrasadas = [
+        t for t in pendentes if esta_atrasada(t.data, t.status, horizonte=t.horizonte, hoje=d)
+    ]
     return {"pendentes": len(pendentes), "atrasadas": len(atrasadas)}
 
 
