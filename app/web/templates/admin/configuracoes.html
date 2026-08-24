@@ -85,6 +85,16 @@
         {% for mensagem in form.atend_resolucao_indica_arme.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
       </div>
 
+      <div class="field">
+        {{ form.atend_horas_primeira_execucao.label }}
+        {{ form.atend_horas_primeira_execucao() }}
+        {% for mensagem in form.atend_horas_primeira_execucao.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      <p class="muted" style="margin-top: calc(-1 * var(--space-3)); font-size: var(--font-size-xs);">
+        Usado só na primeira vez que rodar "Desde o último relatório" — depois
+        disso a janela sempre continua de onde o relatório anterior parou.
+      </p>
+
       <h3 style="margin-top: var(--space-5);">Relatório de Disparos</h3>
 
       <div class="field">

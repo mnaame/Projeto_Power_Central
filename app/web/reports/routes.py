@@ -157,6 +157,8 @@ def pagina(modulo: str):
     janela_auto = None
     if modulo == "disparos":
         janela_auto = report_service.janela_disparos(agora=_agora())
+    elif modulo == "atendimentos":
+        janela_auto = report_service.janela_atendimentos(agora=_agora())
     fim_de_semana = _periodo_fim_de_semana(_agora()) if modulo == "disparos_geral" else None
 
     return render_template(
@@ -191,14 +193,9 @@ def gerar(modulo: str):
 
     try:
         if modulo == "atendimentos":
-            if periodo is None:
-                flash("Escolha um período para o relatório de atendimentos.", "warning")
-                return redirect(url_for("reports.pagina", modulo=modulo))
+            desde, hasta = periodo if periodo is not None else (None, None)
             run = report_service.gerar_atendimentos(
-                config=current_app.config,
-                desde=periodo[0],
-                hasta=periodo[1],
-                user_id=current_user.id,
+                config=current_app.config, desde=desde, hasta=hasta, user_id=current_user.id
             )
         elif modulo == "disparos_geral":
             if periodo is None:

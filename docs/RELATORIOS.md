@@ -106,16 +106,21 @@ Orquestra: consulta → domínio → persistência → .xlsx → auditoria.
   passados pra `processar_atendimento` de cada ocorrência da mesma conta
   — só isso permite ver se a conta armou depois, sem chamada extra à
   API. Fica limitado à mesma janela do relatório: se o cliente armar
-  DEPOIS do `hasta` escolhido, esse cruzamento não pega (mais um motivo
-  pra preferir o preset "Ontem", dia inteiro, em vez de um manual
-  estreito, quando a dúvida for exatamente essa);
-- Para Disparos: janela móvel = `period_end` do último `report_runs`
-  bem-sucedido do módulo **cujo period_end já passou** (persistido no
-  banco, auditável) — um manual sobre período antigo não reseta o
-  encadeamento pra trás, e um manual com fim no futuro (ex.: "hoje" gerado
-  de manhã) não trava os automáticos seguintes numa data que ainda não
-  chegou; primeira vez = `horas_primeira_execucao` (padrão 24h) para trás;
-  override manual na UI (aceita hora/minuto, não só o dia);
+  DEPOIS do `hasta` escolhido, esse cruzamento não pega nesse relatório
+  — mas com o preset "auto" (janela móvel, padrão) o próximo relatório
+  automaticamente começa onde este parou, então um arme tardio é pego
+  na geração seguinte; só fica de fato perdido se o operador usar um
+  manual estreito e nunca mais rodar sobre aquele intervalo;
+- Janela móvel (`janela_disparos`/`janela_atendimentos`, mesmo padrão pros
+  dois módulos): `period_end` do último `report_runs` bem-sucedido do
+  módulo **cujo period_end já passou** (persistido no banco, auditável) —
+  um manual sobre período antigo não reseta o encadeamento pra trás, e um
+  manual com fim no futuro (ex.: "hoje" gerado de manhã) não trava os
+  automáticos seguintes numa data que ainda não chegou; primeira vez =
+  `horas_primeira_execucao` (padrão 24h, configurável por módulo —
+  `disp_horas_primeira_execucao`/`atend_horas_primeira_execucao`) para
+  trás; override manual na UI (aceita hora/minuto, não só o dia) pros dois
+  módulos;
   tempo de conclusão e tempo para ligar via timeline dos disparos com
   `rec_ioperador != 0`, do mais recente para trás até achar,
   respectivamente, fechamento real (regra do módulo A) e uma chamada
@@ -136,7 +141,8 @@ Blueprint `reports`, duas páginas (`/relatorios/atendimentos`,
 `/relatorios/disparos`) na sidebar para **admin e operador**:
 
 - seletor de período com presets (ontem, últimos 7 dias, manual);
-  Disparos default "desde o último relatório";
+  Atendimentos e Disparos com default "desde o último relatório" (janela
+  móvel);
 - POST "Gerar relatório" → serviço (lock + auditoria `report_generated`
   com módulo, período e contagens) → redireciona para a prévia;
 - prévia paginada com as mesmas colunas do Excel + contadores (Disparos:
@@ -169,9 +175,10 @@ erDiagram
 - Config nova (chaves na tabela `settings` existente):
   Atendimentos — `atend_codigos_evento` (NYE,NYC), `atend_incluir_automaticos`
   (false), `atend_incluir_abertos` (false), `atend_resolucao_indica_arme`
-  (lista); Disparos — `disp_horas_primeira_execucao` (24),
-  `disp_limite_recorrente` (15), `disp_ignorar_zonas` (PANICO).
-- Janela móvel dos Disparos: derivada de `report_runs` (sem chave solta).
+  (lista), `atend_horas_primeira_execucao` (24); Disparos —
+  `disp_horas_primeira_execucao` (24), `disp_limite_recorrente` (15),
+  `disp_ignorar_zonas` (PANICO).
+- Janela móvel dos dois módulos: derivada de `report_runs` (sem chave solta).
 
 ## 4. Fases (cada uma termina testada e commitada)
 
@@ -184,6 +191,7 @@ erDiagram
 | **R5** | Corrige Atendimentos contando falha de arme mesmo quando a conta armou depois (bug real relatado: ocorrência fechada às 14h sem indicar arme, conta arma de verdade às 21h) — cruza com `CODIGOS_ARME` da própria conta no período | Unit (`processar_atendimento` com `armes_da_conta`: descarta só com arme *depois* do fechamento, ignora arme antes/de outra conta, prioridade sobre aberto) + integração (`gerar_atendimentos` busca os códigos de arme junto, isolamento por conta) + validação fim a fim reproduzindo o caso real |
 | **R6** | Adiciona hora/minuto no período manual de Atendimentos (antes só dia inteiro, igual Disparos já tinha) | Integração web (`datetime-local` nos dois módulos) |
 | **R7** | Coluna "HORÁRIOS DOS DISPAROS" no relatório de Disparos (pedido: ver o horário de cada disparo, não só a quantidade) | Unit (`ClienteComDisparos.horarios`) + integração (xlsx com a coluna nova) |
+| **R8** | Atendimentos ganha janela móvel ("desde o último relatório"), espelhando o que Disparos já tinha (pedido: evitar reescolher período manualmente e diminuir a chance de um arme tardio escapar do cruzamento da R5) — `janela_atendimentos` + `atend_horas_primeira_execucao` configurável | Integração (`gerar_atendimentos` sem `desde`/`hasta` usa a janela móvel e encadeia com o `report_runs` anterior; manual sobre período antigo não reseta o encadeamento; primeira execução configurável) |
 
 ## 5. Riscos/decisões em aberto
 

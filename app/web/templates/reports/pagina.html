@@ -16,7 +16,7 @@
     <div class="field" style="margin-bottom: 0;">
       <label for="periodo">Período</label>
       <select id="periodo" name="periodo">
-        {% if modulo == 'disparos' %}
+        {% if modulo in ('disparos', 'atendimentos') %}
         <option value="auto" selected>Desde o último relatório
           {%- if janela_auto %} ({{ janela_auto[0]|data_local }} → agora){% endif -%}
         </option>

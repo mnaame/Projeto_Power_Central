@@ -22,6 +22,7 @@ def _dados_config(**overrides):
         "periodic_report_interval_minutes": "60",
         "atend_codigos_evento": "NYE,NYC",
         "atend_resolucao_indica_arme": "ativado,armado remotamente",
+        "atend_horas_primeira_execucao": "24",
         "disp_horas_primeira_execucao": "24",
         "disp_limite_recorrente": "15",
         "disp_ignorar_zonas": "PANICO",

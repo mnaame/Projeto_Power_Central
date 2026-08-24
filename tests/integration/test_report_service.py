@@ -234,6 +234,64 @@ def test_lock_impede_geracao_concorrente(app):
         lock.release()
 
 
+def test_gerar_atendimentos_sem_periodo_usa_janela_movel(app):
+    """Pedido explícito: Atendimentos também aceita "desde o último
+    relatório", igual Disparos já tinha — evita perder um arme tardio
+    por causa de um período manual estreito demais."""
+    client = FakeSoftGuardClient()
+
+    run = report_service.gerar_atendimentos(
+        config=app.config, user_id=None, softguard_client=client
+    )
+    assert run.status == "success"
+    # primeira execução: 24h (padrão) para trás
+    duracao = run.period_end - run.period_start
+    assert abs(duracao - timedelta(hours=24)) < timedelta(minutes=1)
+
+
+def test_janela_movel_atendimentos_encadeia_com_o_relatorio_anterior(app):
+    client = FakeSoftGuardClient()
+
+    primeiro = report_service.gerar_atendimentos(
+        config=app.config, user_id=None, softguard_client=client
+    )
+    assert primeiro.status == "success"
+
+    segundo = report_service.gerar_atendimentos(
+        config=app.config, user_id=None, softguard_client=client
+    )
+    assert segundo.period_start == primeiro.period_end
+
+
+def test_janela_manual_atendimentos_nao_altera_encadeamento_automatico(app):
+    client = FakeSoftGuardClient()
+
+    report_service.gerar_atendimentos(config=app.config, user_id=None, softguard_client=client)
+    manual = report_service.gerar_atendimentos(
+        config=app.config, user_id=None, softguard_client=client,
+        desde=DESDE - timedelta(days=30), hasta=DESDE - timedelta(days=29),
+    )
+    assert manual.status == "success"
+
+    # o próximo automático parte do run de period_end mais recente
+    proximo = report_service.gerar_atendimentos(
+        config=app.config, user_id=None, softguard_client=client
+    )
+    assert proximo.period_start > DESDE  # não voltou 30 dias
+
+
+def test_janela_atendimentos_horas_primeira_execucao_configuravel(app):
+    settings_service.set("atend_horas_primeira_execucao", "6")
+    db.session.commit()
+    client = FakeSoftGuardClient()
+
+    run = report_service.gerar_atendimentos(
+        config=app.config, user_id=None, softguard_client=client
+    )
+    duracao = run.period_end - run.period_start
+    assert abs(duracao - timedelta(hours=6)) < timedelta(minutes=1)
+
+
 # ---------- Disparos ----------
 
 

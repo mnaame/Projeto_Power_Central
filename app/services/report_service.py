@@ -106,22 +106,50 @@ def _formatar_horarios(horarios) -> str:
     return "\n".join(h.strftime("%d/%m %H:%M") for h in horarios)
 
 
+def janela_atendimentos(*, agora: datetime) -> tuple[datetime, datetime]:
+    """Janela móvel, mesmo espírito de `janela_disparos`: do fim do
+    último relatório bem-sucedido até agora; primeira execução volta
+    `atend_horas_primeira_execucao`. Só considera relatórios cujo
+    `period_end` já passou (mesma razão de `janela_disparos`: um manual
+    sobre período antigo não deve "resetar" o encadeamento pra trás, e um
+    manual com fim no futuro não pode travar os automáticos seguintes)."""
+    ultimo = (
+        ReportRun.query.filter_by(module="atendimentos", status="success")
+        .filter(ReportRun.period_end <= agora)
+        .order_by(ReportRun.period_end.desc())
+        .first()
+    )
+    if ultimo is not None:
+        return ultimo.period_end, agora
+    horas = settings_service.get_atend_horas_primeira_execucao()
+    return agora - timedelta(hours=horas), agora
+
+
 def gerar_atendimentos(
     *,
     config,
-    desde: datetime,
-    hasta: datetime,
     user_id: int | None,
+    desde: datetime | None = None,
+    hasta: datetime | None = None,
     softguard_client=None,
 ) -> ReportRun:
-    """Gera o relatório de Atendimentos (módulo A) para o período."""
+    """Gera o relatório de Atendimentos (módulo A). Sem `desde`/`hasta`,
+    usa a janela móvel (mesmo padrão de Disparos — desde o fim do último
+    relatório bem-sucedido); com eles, é um override manual de período."""
 
     def _gerar() -> ReportRun:
+        agora = datetime.now(timezone.utc)
+        inicio, fim = (
+            (desde, hasta)
+            if desde is not None and hasta is not None
+            else janela_atendimentos(agora=agora)
+        )
+
         run = ReportRun(
             module="atendimentos",
             generated_by_user_id=user_id,
-            period_start=desde,
-            period_end=hasta,
+            period_start=inicio,
+            period_end=fim,
             status="running",
         )
         db.session.add(run)
@@ -141,8 +169,8 @@ def gerar_atendimentos(
             )
             eventos = client.buscar_historico(
                 codigos_alarme=codigos_busca,
-                desde=desde.astimezone(FUSO_HORARIO),
-                hasta=hasta.astimezone(FUSO_HORARIO) + timedelta(seconds=1),
+                desde=inicio.astimezone(FUSO_HORARIO),
+                hasta=fim.astimezone(FUSO_HORARIO) + timedelta(seconds=1),
             )
 
             codigos_ocorrencia_set = {c.upper() for c in codigos_ocorrencia}

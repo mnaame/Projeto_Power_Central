@@ -54,6 +54,10 @@ class ConfiguracoesForm(FlaskForm):
         "Termos de resolução que indicam arme (separados por vírgula)",
         validators=[DataRequired()],
     )
+    atend_horas_primeira_execucao = IntegerField(
+        "Primeira execução: horas para trás",
+        validators=[DataRequired(), NumberRange(min=1, max=720)],
+    )
 
     # Relatório de Disparos (B.5)
     disp_horas_primeira_execucao = IntegerField(
