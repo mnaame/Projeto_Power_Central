@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.domain.atendimentos import (
@@ -196,6 +196,51 @@ def test_evento_fechado_com_ativado_e_descartado_com_motivo():
 def test_evento_com_ainda_nao_foi_ativado_e_incluido():
     resultado = _processar(_timeline_fechada_manual("alarme ainda não foi ativado"))
     assert resultado.status == INCLUIDO
+
+
+# ---------- processar_atendimento — arme posterior na conta (caso real) ----------
+# Ocorrência fechada às 21:41:05 (fixture padrão), sem indicar arme na
+# resolução ("Cliente vai ativar mais tarde") — mesmo caso real que
+# motivou a checagem: monitoramento fecha achando que ainda não ativou,
+# mas a conta arma de verdade horas depois.
+
+
+def test_arme_depois_do_fechamento_descarta_mesmo_sem_resolucao_indicar():
+    arme_real = datetime(2026, 7, 18, 21, 50, 0, tzinfo=FUSO)  # depois do fechamento (21:41:05)
+    resultado = _processar(_timeline_fechada_manual(), armes_da_conta=[arme_real])
+    assert resultado.status == DESCARTADO
+    assert "armou depois" in resultado.motivo_descarte
+    assert "21:50" in resultado.motivo_descarte
+
+
+def test_arme_antes_do_fechamento_nao_conta():
+    # a conta já tinha armado ANTES desta ocorrência ser fechada (não é
+    # resolução dela) — não deve descartar por causa desse arme antigo.
+    arme_antigo = datetime(2026, 7, 18, 20, 0, 0, tzinfo=FUSO)
+    resultado = _processar(_timeline_fechada_manual(), armes_da_conta=[arme_antigo])
+    assert resultado.status == INCLUIDO
+
+
+def test_sem_arme_na_conta_continua_incluido():
+    resultado = _processar(_timeline_fechada_manual(), armes_da_conta=[])
+    assert resultado.status == INCLUIDO
+
+
+def test_arme_depois_tem_prioridade_mesmo_com_evento_ainda_aberto():
+    timeline = [_passo("7/18/2026 9:30:00 PM", "Inicio", "Evento recebido na Central")]
+    arme_real = DATA_EVENTO + timedelta(hours=2)
+    resultado = _processar(timeline, armes_da_conta=[arme_real])
+    assert resultado.status == DESCARTADO
+    assert "armou depois" in resultado.motivo_descarte
+
+
+def test_arme_depois_escolhe_o_mais_proximo_nao_o_ultimo():
+    mais_perto = datetime(2026, 7, 18, 21, 45, 0, tzinfo=FUSO)
+    mais_longe = datetime(2026, 7, 18, 23, 0, 0, tzinfo=FUSO)
+    resultado = _processar(
+        _timeline_fechada_manual(), armes_da_conta=[mais_longe, mais_perto]
+    )
+    assert "21:45" in resultado.motivo_descarte
 
 
 def test_fechamento_automatico_descartado_por_padrao():

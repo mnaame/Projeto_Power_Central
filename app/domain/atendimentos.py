@@ -200,6 +200,15 @@ def prefixo_do_dia(data: datetime) -> str:
     return _DIAS_SEMANA[data.weekday()]
 
 
+def _primeiro_arme_apos(
+    armes_da_conta: Sequence[datetime], referencia: datetime | None
+) -> datetime | None:
+    if referencia is None:
+        return None
+    posteriores = [a for a in armes_da_conta if a > referencia]
+    return min(posteriores) if posteriores else None
+
+
 def processar_atendimento(
     *,
     data_evento: datetime | None,
@@ -210,9 +219,21 @@ def processar_atendimento(
     incluir_automaticos: bool = False,
     incluir_abertos: bool = False,
     termos_arme: Sequence[str] = TERMOS_ARME_PADRAO,
+    armes_da_conta: Sequence[datetime] = (),
 ) -> AtendimentoProcessado:
     """Aplica as regras A.3 completas a um evento + sua linha do tempo e
-    devolve a linha pronta do relatório (incluída, descartada ou aberta)."""
+    devolve a linha pronta do relatório (incluída, descartada ou aberta).
+
+    `armes_da_conta`: horários de eventos de arme reais (CLO/CLV/ROP) da
+    CONTA inteira no período do relatório — não só desta ocorrência. Caso
+    real que motivou isto: o monitoramento fecha a ocorrência de "não
+    ativou" (ex.: às 14h, sem o cliente ter armado ainda — o comentário de
+    fechamento não indica arme), mas a loja arma de verdade horas depois
+    (ex.: 21h). Sem cruzar com o histórico da conta, o relatório contava
+    isso como falha sem nunca conferir se o cliente armou depois — por
+    isso este cruzamento vem **antes** das outras regras: é o fato mais
+    forte que existe (o cliente armou, ponto), então tem prioridade sobre
+    aberto/autoproceso/resolução."""
     analise = analisar_timeline(timeline)
 
     situacao_base = analise.situacao or ""
@@ -236,6 +257,15 @@ def processar_atendimento(
             monitor=analise.monitor or "",
             status=status,
             motivo_descarte=motivo,
+        )
+
+    referencia_arme = analise.fechamento or analise.inicio or data_evento
+    arme_depois = _primeiro_arme_apos(armes_da_conta, referencia_arme)
+    if arme_depois is not None:
+        return _resultado(
+            DESCARTADO,
+            f"Cliente armou depois, às {arme_depois:%H:%M} "
+            "(verificado no histórico da conta, não só na ocorrência)",
         )
 
     if analise.fechamento is None:

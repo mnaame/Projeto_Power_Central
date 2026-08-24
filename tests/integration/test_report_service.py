@@ -98,7 +98,7 @@ def test_gerar_atendimentos_fim_a_fim(app):
     assert run.status == "success"
     assert run.row_count == 1
     assert run.extra_counts == {"descartados": 1, "total_eventos": 2}
-    assert client.chamadas_historico[0]["codigos"] == ("NYE", "NYC")
+    assert client.chamadas_historico[0]["codigos"] == ("NYE", "NYC", "CLO", "CLV", "ROP")
 
     wb = load_workbook(run.file_path)
     aba = wb["ATENDIMENTOS"]
@@ -125,6 +125,87 @@ def test_gerar_atendimentos_fim_a_fim(app):
     celula = aba["A1"]
     assert celula.fill.start_color.rgb.endswith("21A366")
     assert celula.font.bold is True
+
+
+def _evento_clo(rec_iid, quando, conta="0004"):
+    return {
+        "rec_iid": rec_iid,
+        "rec_calarma": "CLO",
+        "rec_tfechahora": _fmt(quando),
+        "cue_ncuenta": conta,
+        "cue_cnombre": "VILLEFORT TROPICAL",
+        "rec_iidcuenta": "9385",
+    }
+
+
+def test_gerar_atendimentos_conta_armou_depois_descarta_mesmo_sem_resolucao_indicar(app):
+    """Caso real relatado: monitoramento fecha a ocorrência (21:41) sem o
+    cliente ter armado ainda ("vai ativar depois" não indica arme), mas a
+    conta arma de verdade horas mais tarde. Sem cruzar com o histórico da
+    conta, isso ficava contado como falha pra sempre."""
+    arme_real = DESDE + timedelta(hours=22)  # 22h, depois do fechamento (21:41)
+    client = FakeSoftGuardClient(
+        eventos=[
+            _evento_nye(rec_iid="500", conta="0004"),
+            _evento_clo(rec_iid="900", quando=arme_real, conta="0004"),
+        ],
+        timelines={"500": _timeline_fechada("Responsável avisado, vai ativar")},
+    )
+
+    run = report_service.gerar_atendimentos(
+        config=app.config, desde=DESDE, hasta=HASTA, user_id=None, softguard_client=client
+    )
+
+    assert run.status == "success"
+    assert run.row_count == 0
+    assert run.extra_counts == {"descartados": 1, "total_eventos": 1}
+
+    wb = load_workbook(run.file_path)
+    descartados = wb["DESCARTADOS"]
+    linha = [c.value for c in descartados[2]]
+    assert linha[1] == "0004"
+    assert "armou depois" in linha[4]
+    assert "22:00" in linha[4]
+
+
+def test_gerar_atendimentos_arme_de_outra_conta_nao_descarta(app):
+    """Isolamento por conta: um CLO de outro cliente não pode "resolver"
+    a ocorrência desta conta."""
+    arme_outra_conta = DESDE + timedelta(hours=22)
+    client = FakeSoftGuardClient(
+        eventos=[
+            _evento_nye(rec_iid="500", conta="0004"),
+            _evento_clo(rec_iid="900", quando=arme_outra_conta, conta="9999"),
+        ],
+        timelines={"500": _timeline_fechada("Responsável avisado, vai ativar")},
+    )
+
+    run = report_service.gerar_atendimentos(
+        config=app.config, desde=DESDE, hasta=HASTA, user_id=None, softguard_client=client
+    )
+
+    assert run.status == "success"
+    assert run.row_count == 1  # continua incluída — o arme foi de outra conta
+
+
+def test_gerar_atendimentos_arme_antes_do_fechamento_nao_descarta(app):
+    """Um CLO ANTES da ocorrência ser fechada não é a resolução dela —
+    não deve descartar por causa de um arme antigo."""
+    arme_antigo = DESDE + timedelta(hours=10)  # bem antes do fechamento (21:41)
+    client = FakeSoftGuardClient(
+        eventos=[
+            _evento_nye(rec_iid="500", conta="0004"),
+            _evento_clo(rec_iid="900", quando=arme_antigo, conta="0004"),
+        ],
+        timelines={"500": _timeline_fechada("Responsável avisado, vai ativar")},
+    )
+
+    run = report_service.gerar_atendimentos(
+        config=app.config, desde=DESDE, hasta=HASTA, user_id=None, softguard_client=client
+    )
+
+    assert run.status == "success"
+    assert run.row_count == 1
 
 
 def test_gerar_atendimentos_erro_do_portal_vira_status_error(app):

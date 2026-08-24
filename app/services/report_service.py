@@ -129,30 +129,55 @@ def gerar_atendimentos(
 
         try:
             client = softguard_client or _criar_cliente(config)
+            codigos_ocorrencia = settings_service.get_atend_codigos_evento()
+            # Busca também os códigos de arme (CLO/CLV/ROP — mesmos do módulo
+            # de Disparos) no MESMO período: sem isso, o relatório só olha a
+            # timeline da própria ocorrência e nunca sabe se a conta armou de
+            # verdade depois (caso real: monitoramento fecha "não ativou" às
+            # 14h sem o cliente ter armado ainda, a loja arma só às 21h — sem
+            # esse cruzamento, ficava contado como falha pra sempre).
+            codigos_busca = tuple(
+                dict.fromkeys((*codigos_ocorrencia, *dom_disp.CODIGOS_ARME))
+            )
             eventos = client.buscar_historico(
-                codigos_alarme=settings_service.get_atend_codigos_evento(),
+                codigos_alarme=codigos_busca,
                 desde=desde.astimezone(FUSO_HORARIO),
                 hasta=hasta.astimezone(FUSO_HORARIO) + timedelta(seconds=1),
             )
+
+            codigos_ocorrencia_set = {c.upper() for c in codigos_ocorrencia}
+            eventos_ocorrencia = []
+            armes_por_conta: dict[str, list[datetime]] = {}
+            for evento in eventos:
+                codigo = _campo(evento, "rec_calarma", "cod_calarma", "codigo").upper()
+                if codigo in codigos_ocorrencia_set:
+                    eventos_ocorrencia.append(evento)
+                if codigo in dom_disp.CODIGOS_ARME:
+                    conta = _campo(evento, "cue_ncuenta", "rec_iidcuenta")
+                    quando = _data_evento(evento)
+                    if conta and quando is not None:
+                        armes_por_conta.setdefault(conta, []).append(quando)
 
             incluir_automaticos = settings_service.atend_incluir_automaticos()
             incluir_abertos = settings_service.atend_incluir_abertos()
             termos_arme = settings_service.get_atend_resolucao_indica_arme()
 
             processados: list[dom_atend.AtendimentoProcessado] = []
-            for evento in eventos:
+            for evento in eventos_ocorrencia:
                 id_evento = _campo(evento, "rec_iid")
                 timeline = client.buscar_timeline(id_evento) if id_evento else []
+                conta = _campo(evento, "cue_ncuenta", "rec_iidcuenta")
                 processados.append(
                     dom_atend.processar_atendimento(
                         data_evento=_data_evento(evento),
-                        conta=_campo(evento, "cue_ncuenta", "rec_iidcuenta"),
+                        conta=conta,
                         cliente=_campo(evento, "cue_cnombre"),
                         evento=_campo(evento, "rec_calarma", "cod_calarma", "codigo"),
                         timeline=timeline,
                         incluir_automaticos=incluir_automaticos,
                         incluir_abertos=incluir_abertos,
                         termos_arme=termos_arme,
+                        armes_da_conta=armes_por_conta.get(conta, []),
                     )
                 )
 

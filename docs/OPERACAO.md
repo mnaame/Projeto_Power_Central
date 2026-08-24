@@ -303,6 +303,16 @@ Duas páginas na barra lateral, para operador e admin:
   idêntica ao Excel; o botão "Baixar Excel" traz o arquivo com a aba
   principal e a aba DESCARTADOS (eventos fora do relatório, com o motivo
   — ex.: cliente armou).
+  > Uma ocorrência de "não ativou" fechada pelo monitoramento sem o
+  > cliente ter armado ainda (ex.: fechada às 14h com "vai ativar mais
+  > tarde") **não fica contada como falha pra sempre**: se a conta armar
+  > de verdade mais tarde no mesmo período do relatório (ex.: 21h), ela
+  > sai da lista de falhas e vai pra DESCARTADOS com o motivo "Cliente
+  > armou depois, às HH:MM". Isso só enxerga arme dentro do **mesmo
+  > período** escolhido pro relatório — se o cliente armar depois do
+  > horário final escolhido, ainda vai aparecer como falha (gere de novo
+  > mais tarde, ou use o preset "Ontem"/dia inteiro em vez de um manual
+  > estreito quando isso for uma dúvida recorrente).
 - **Disparos**: por padrão cobre "desde o último relatório até agora"
   (janela móvel — o próximo começa onde o anterior terminou); também
   aceita período manual com data e hora/minuto, igual Atendimentos. Uma
