@@ -96,6 +96,78 @@
 </div>
 
 <div class="section">
+  <div class="section-title">
+    <h2>Clientes sem link</h2>
+    {% if sem_link %}<span class="chip chip-neutral">{{ sem_link | length }}</span>{% endif %}
+  </div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Lido do de-para (resposta exata — cruzar por nome dá falso "sem link"
+    quando o nome difere entre PowerCentral e Auvo). Os elegíveis entram
+    sozinhos no próximo lote; os demais precisam da sua confirmação
+    porque o link dá acesso ao painel sem senha.
+  </p>
+
+  {% if sem_link %}
+  <form method="post" action="{{ url_for('central_cliente.preparar') }}">
+    {{ form.csrf_token }}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 2.5rem;"></th>
+            <th>Conta</th>
+            <th>Nome na PowerCentral</th>
+            <th>Cliente Auvo</th>
+            <th>ID Auvo</th>
+            <th>Por que ainda não tem link</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in sem_link %}
+          <tr>
+            <td>
+              {% if item.selecionavel %}
+              <input type="checkbox" name="extra" value="{{ item.id_auvo }}"
+                     aria-label="Incluir {{ item.nome_power }}">
+              {% endif %}
+            </td>
+            <td class="is-numeric">{{ item.conta_power }}</td>
+            <td>{{ item.nome_power }}</td>
+            <td>{{ item.nome_auvo or '—' }}</td>
+            <td class="is-numeric">{{ item.id_auvo or '—' }}</td>
+            <td>
+              {% if item.elegivel %}
+              <span class="chip chip-ok">elegível</span>
+              {% elif item.duplicada %}
+              <span class="chip chip-neutral">mesmo cliente Auvo de outra conta</span>
+              {% else %}
+              <span class="chip chip-warning">{{ item.status_depara }}</span>
+              {% endif %}
+              <span class="muted">{{ item.motivo }}</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <button type="submit" class="btn btn-primary" style="margin-top: var(--space-4);">
+      Pré-visualizar com os marcados
+    </button>
+    <span class="muted" style="margin-left: var(--space-3);">
+      Nada é enviado à Auvo aqui — o próximo passo ainda é a
+      pré-visualização.
+    </span>
+  </form>
+  {% else %}
+  <div class="card">
+    <p class="muted" style="margin: 0;">
+      Todas as contas do de-para já têm link criado.
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+<div class="section">
   <div class="section-title"><h2>Preparar novo lote</h2></div>
   <form method="post" action="{{ url_for('central_cliente.preparar') }}" novalidate
         class="card" style="display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: flex-end;">

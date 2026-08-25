@@ -116,6 +116,58 @@ def test_preparar_com_ids_extra_inclui_manual(app, admin_client):
     assert "marcado na mão".encode("utf-8") in resposta.data
 
 
+def test_preparar_com_caixas_marcadas_inclui_sem_digitar_id(app, admin_client):
+    """A lista "Clientes sem link" manda os ids nas caixas — quem nunca
+    gerou link não tem o id_auvo à mão pra digitar no campo de texto."""
+    _depara("95", 111, status="REVISAR", score=0.4, nome="CLIENTE MARCADO")
+    resposta = admin_client.post(
+        "/central-cliente/preparar",
+        data={"score_minimo": "0.70", "ids_extra": "", "extra": "111"},
+    )
+    assert resposta.status_code == 200
+    assert b"CLIENTE MARCADO" in resposta.data
+    assert "marcado na mão".encode("utf-8") in resposta.data
+
+
+def test_preparar_junta_caixas_e_campo_de_texto_sem_duplicar(app, admin_client):
+    _depara("95", 111, status="REVISAR", score=0.4, nome="CLIENTE UM")
+    _depara("96", 222, status="REVISAR", score=0.4, nome="CLIENTE DOIS")
+    resposta = admin_client.post(
+        "/central-cliente/preparar",
+        data={"score_minimo": "0.70", "ids_extra": "111", "extra": ["111", "222"]},
+    )
+    assert resposta.status_code == 200
+    assert b"CLIENTE UM" in resposta.data
+    assert b"CLIENTE DOIS" in resposta.data
+    evento = AuditLog.query.filter_by(action="central_lote_preparado").one()
+    assert evento.details["ids_extra"] == [111, 222]  # sem repetir o 111
+
+
+# ---------- lista de quem está sem link ----------
+
+
+def test_index_lista_quem_esta_sem_link_com_motivo(app, admin_client):
+    _depara("95", 111, status="REVISAR", score=0.95, nome="PRECISA CONFIRMAR")
+    resposta = admin_client.get("/central-cliente")
+    assert resposta.status_code == 200
+    assert b"Clientes sem link" in resposta.data
+    assert b"PRECISA CONFIRMAR" in resposta.data
+
+
+def test_index_sem_link_nao_mostra_quem_ja_tem_link(app, admin_client):
+    lote = CentralClienteLote(simulacao=False, status="success", total_itens=1)
+    db.session.add(lote)
+    db.session.flush()
+    db.session.add(CentralClienteLink(lote_id=lote.id, id_auvo=111, nome="X", status="criado"))
+    db.session.commit()
+    _depara("95", 111, status="OK", score=0.9, nome="JA TEM LINK")
+
+    resposta = admin_client.get("/central-cliente")
+    assert resposta.status_code == 200
+    assert b"JA TEM LINK" not in resposta.data
+    assert "Todas as contas do de-para já têm link".encode("utf-8") in resposta.data
+
+
 # ---------- executar ----------
 
 

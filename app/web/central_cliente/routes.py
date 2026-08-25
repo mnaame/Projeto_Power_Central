@@ -62,6 +62,7 @@ def index():
         auvo_user_request_padrao=settings_service.get_central_auvo_user_request(),
         busca=busca,
         resultados_busca=central_cliente_service.buscar_clientes(busca) if busca else None,
+        sem_link=central_cliente_service.listar_sem_link(),
     )
 
 
@@ -77,7 +78,12 @@ def preparar():
     score_minimo = form.score_minimo.data
     if score_minimo is None:
         score_minimo = settings_service.get_central_score_minimo()
+    # Duas origens para o mesmo campo: o texto digitado (fluxo original) e
+    # as caixas marcadas na lista "Clientes sem link" — quem não tem link
+    # ainda não tem o id_auvo à mão pra digitar.
     ids_extra = _parse_ids_extra(form.ids_extra.data)
+    marcados = _parse_ids_extra(",".join(request.form.getlist("extra")))
+    ids_extra = list(dict.fromkeys([*ids_extra, *marcados]))
 
     candidatos = central_cliente_service.montar_lote(score_minimo=score_minimo, ids_extra=ids_extra)
     previa = central_cliente_service.prever(candidatos)
@@ -102,6 +108,7 @@ def preparar():
         auvo_user_request_padrao=settings_service.get_central_auvo_user_request(),
         busca="",
         resultados_busca=None,
+        sem_link=central_cliente_service.listar_sem_link(score_minimo=score_minimo),
     )
 
 

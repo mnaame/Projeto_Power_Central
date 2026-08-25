@@ -140,6 +140,17 @@ o lote inteiro nesse caso, sem contar nada como criado a partir daí.
   qualquer busca (é excluído por `montar_lote`) e parece que nunca
   existiu — bug de UX reportado em produção (cliente de teste "sumiu" ao
   procurar de novo pelo ID). Usada pela busca na tela `index`.
+- `listar_sem_link(*, score_minimo=None)` — **toda** conta do de-para sem
+  link, com o motivo de cada uma (elegível / REVISAR / NAO / score abaixo
+  do mínimo / sem `id_auvo` / mesmo cliente Auvo de outra conta). É o
+  complemento de `montar_lote`, que só devolve os elegíveis: quem estava
+  REVISAR/NAO/score baixo não aparecia em lugar nenhum, e a única forma de
+  incluir era digitar o `id_auvo` — justamente o número que não se tem
+  para quem nunca gerou link. Motivada por uma reconciliação real feita em
+  planilha, cruzando por NOME, que apontou 36 contas "sem link": esse
+  cruzamento é aproximado (nome difere entre PowerCentral e Auvo) e dá
+  falso positivo — o de-para é a fonte exata. Não decide nada sozinha: os
+  não-elegíveis continuam exigindo marcação humana na tela.
 - `criar_lote(candidatos, *, simulacao, user_id)` — cria
   `CentralClienteLote` + itens `pendente`, **commita imediatamente**
   (mesmo motivo do BI: o lote sobrevive mesmo se a execução falhar logo
@@ -174,8 +185,12 @@ o lote inteiro nesse caso, sem contar nada como criado a partir daí.
 
 - **`index`** (aceita `?q=` GET): lotes recentes + "Buscar cliente"
   (nome, conta ou id_auvo — `buscar_clientes`, mostra "já tem link" com
-  link pro lote em vez de simplesmente sumir) + formulário "Preparar novo
-  lote" (score mínimo, IDs extra separados por vírgula). Resultado da
+  link pro lote em vez de simplesmente sumir) + **"Clientes sem link"**
+  (`listar_sem_link` — quem falta e por quê, com caixas de seleção nos
+  que precisam de confirmação humana) + formulário "Preparar novo
+  lote" (score mínimo, IDs extra separados por vírgula). `preparar` junta
+  as duas origens de `ids_extra` (caixas marcadas `extra` + campo de
+  texto), sem duplicar. Resultado da
   busca sem link tem botão "Usar este ID" (JS mínimo, `app.js`) que
   copia o id_auvo pro campo "IDs Auvo extra" — sem precisar decorar o
   número.
@@ -334,6 +349,7 @@ F12 antes da primeira execução real:
 | **LC6** ✅ | Busca por cliente (`buscar_clientes`) + `remover_link` (desfazer "já tem link" depois de apagar manualmente na Auvo) | Integração (busca por nome/conta/id, mostra link existente sem sumir; remover só aceita status='criado', libera o cliente pra `montar_lote` de novo) + screenshots claro/escuro |
 | **LC7** ✅ | Múltiplos telefones por cliente (`telefones` JSON, migration `75e260835989`) — corrige caso real de produção onde `phoneNumber` da Auvo é sempre lista; tela mostra um botão de WhatsApp por número, usuário escolhe | Integração (mantém todos os números normalizados sem duplicar, `montar_link_whatsapp_item` só aceita telefone que é do item) + screenshots claro/escuro |
 | **LC8** ✅ | DDI e mensagem do WhatsApp viram campos editáveis na tela Configuração (antes só dava pra mudar editando código) | Integração (form exige mensagem preenchida, DDI vazio cai no padrão "55") + screenshots claro/escuro |
+| **LC9** ✅ | Lista "Clientes sem link" (`listar_sem_link`) com o motivo de cada um e caixas de seleção que alimentam `ids_extra` — antes, quem não era elegível automático não aparecia em lugar nenhum e só entrava digitando o `id_auvo` na mão | Integração (motivo por status/score, omite quem já tem link real, conta sem `id_auvo` não é selecionável, duas contas do mesmo cliente Auvo marcam uma vez) + web (caixas marcadas entram no lote, juntam com o campo de texto sem duplicar) + screenshots claro/escuro |
 
 Módulo implementado, coberto por teste, e com os 3 itens bloqueadores do
 §6 **confirmados via F12 contra um contato de teste real** (formato do

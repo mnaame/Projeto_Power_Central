@@ -112,6 +112,81 @@ def test_montar_lote_nao_exclui_criado_em_simulacao(app):
     assert [c["id_auvo"] for c in candidatos] == [111]
 
 
+# ---------- listar_sem_link ----------
+
+
+def _sem_link_por_conta(**kwargs):
+    return {item["conta_power"]: item for item in svc.listar_sem_link(**kwargs)}
+
+
+def test_listar_sem_link_mostra_revisar_e_score_baixo_com_motivo(app):
+    _depara("95", 111, status="OK", score=0.9, nome="ELEGIVEL")
+    _depara("96", 222, status="REVISAR", score=0.95, nome="AMBIGUO")
+    _depara("97", 333, status="OK", score=0.5, nome="SCORE BAIXO")
+    _depara("98", 444, status="NAO", score=0.9, nome="NAO RECEBE")
+
+    itens = _sem_link_por_conta(score_minimo=0.70)
+
+    assert itens["95"]["elegivel"] is True
+    assert itens["95"]["selecionavel"] is False  # já entra sozinho
+
+    assert itens["96"]["elegivel"] is False
+    assert itens["96"]["selecionavel"] is True
+    assert "REVISAR" in itens["96"]["motivo"]
+
+    assert itens["97"]["selecionavel"] is True
+    assert "0.50" in itens["97"]["motivo"] and "0.70" in itens["97"]["motivo"]
+
+    assert itens["98"]["selecionavel"] is True
+    assert "NAO" in itens["98"]["motivo"]
+
+
+def test_listar_sem_link_omite_quem_ja_tem_link_real(app):
+    lote = CentralClienteLote(simulacao=False, status="success", total_itens=1)
+    db.session.add(lote)
+    db.session.flush()
+    db.session.add(CentralClienteLink(lote_id=lote.id, id_auvo=111, nome="X", status="criado"))
+    db.session.commit()
+
+    _depara("95", 111, status="OK", score=0.9)
+    _depara("96", 222, status="REVISAR", score=0.9)
+
+    assert list(_sem_link_por_conta(score_minimo=0.70)) == ["96"]
+
+
+def test_listar_sem_link_conta_sem_id_auvo_nao_e_selecionavel(app):
+    """Sem cliente Auvo vinculado não há o que criar — o conserto é no
+    de-para, não aqui."""
+    _depara("95", None, status="REVISAR", score=None, nome="SEM VINCULO")
+
+    item = _sem_link_por_conta(score_minimo=0.70)["95"]
+    assert item["selecionavel"] is False
+    assert "de-para" in item["motivo"]
+
+
+def test_listar_sem_link_duas_contas_do_mesmo_cliente_marcam_uma_vez(app):
+    """Loja + tesouraria apontam pro mesmo cliente Auvo: as duas aparecem
+    (a operação pensa por conta), mas o link é um só."""
+    _depara("95", 111, status="REVISAR", score=0.9, nome="LOJA CENTRO")
+    _depara("96", 111, status="REVISAR", score=0.9, nome="TESOURARIA CENTRO")
+
+    itens = _sem_link_por_conta(score_minimo=0.70)
+    assert itens["95"]["selecionavel"] is True
+    assert itens["96"]["selecionavel"] is False
+    assert itens["96"]["duplicada"] is True
+
+
+def test_listar_sem_link_vazio_quando_todos_tem_link(app):
+    lote = CentralClienteLote(simulacao=False, status="success", total_itens=1)
+    db.session.add(lote)
+    db.session.flush()
+    db.session.add(CentralClienteLink(lote_id=lote.id, id_auvo=111, nome="X", status="criado"))
+    db.session.commit()
+
+    _depara("95", 111, status="OK", score=0.9)
+    assert svc.listar_sem_link(score_minimo=0.70) == []
+
+
 def test_montar_lote_permite_retentar_apos_falha(app):
     lote = CentralClienteLote(simulacao=True, status="error", total_itens=1)
     db.session.add(lote)
@@ -435,7 +510,7 @@ def test_montar_link_whatsapp_item_escolhe_qualquer_telefone_da_lista(app):
 
 
 def test_montar_link_whatsapp_item_com_senha_decifra_para_a_mensagem(app):
-    from urllib.parse import unquote, urlparse, parse_qs
+    from urllib.parse import urlparse, parse_qs
 
     settings_service.set("central_gerar_login_senha", "true")
     settings_service.set("central_whatsapp_template", "{nome} login={login} senha={senha}")
@@ -452,7 +527,11 @@ def test_montar_link_whatsapp_item_com_senha_decifra_para_a_mensagem(app):
     senha_esperada = fernet.decrypt(item.senha_cifrada.encode()).decode()
 
     link = svc.montar_link_whatsapp_item(item, telefone="5531999998888", config=app.config)
-    texto = unquote(parse_qs(urlparse(link).query)["text"][0])
+    # `parse_qs` JÁ decodifica — o `unquote` extra que havia aqui decodificava
+    # de novo e quebrava quando a senha sorteada continha "%" seguido de dois
+    # dígitos hex (ex.: "AZ%637Sx" virava "AZc7Sx"). Era a causa das falhas
+    # intermitentes deste teste.
+    texto = parse_qs(urlparse(link).query)["text"][0]
     assert texto == f"CLIENTE X login=cliente111 senha={senha_esperada}"
 
 

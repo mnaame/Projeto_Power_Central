@@ -571,6 +571,25 @@ pela API oficial).
   sem decorar o número), use a caixa **"Buscar cliente"** no topo da
   página — busca por nome, conta ou ID e mostra "já tem link" com atalho
   pro lote, em vez de simplesmente não aparecer em lugar nenhum.
+- **"Clientes sem link"**: a lista de quem a automação ainda não atendeu,
+  lida do de-para (resposta exata — cruzar por nome numa planilha dá
+  falso "sem link" quando o nome difere entre PowerCentral e Auvo, que é
+  o normal). Cada linha diz **por que** não tem link:
+  - *elegível* — entra sozinho no próximo lote, não precisa fazer nada;
+  - *REVISAR / NAO / score abaixo do mínimo* — tem caixa de seleção: a
+    automação não cria sozinha de propósito, porque o link dá acesso ao
+    painel sem senha e um casamento errado vaza o painel de um cliente
+    para outro. Confira o "Cliente Auvo" da linha e marque só os que
+    você reconhece;
+  - *sem cliente Auvo no de-para* — não dá pra criar link nenhum; o
+    conserto é vincular a conta na aba **Chamados → de-para** primeiro;
+  - *mesmo cliente Auvo de outra conta* — loja e tesouraria do mesmo
+    local: o link é um só, então só a primeira linha leva a caixa.
+
+  Marcar as caixas e clicar em "Pré-visualizar com os marcados" leva pro
+  mesmo fluxo de sempre (prévia → executar) — **não envia nada à Auvo
+  nesse clique**. É o caminho para criar os que faltam sem fazer um a um
+  na mão.
 - Cada lote fica no histórico com os itens (criado/erro/pendente) e pode
   ser exportado em xlsx — **documento sensível** (tem login/link de
   acesso), mesmo cuidado do Cofre de Senhas.

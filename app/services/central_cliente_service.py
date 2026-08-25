@@ -67,12 +67,7 @@ def montar_lote(*, score_minimo: float | None = None, ids_extra: Iterable[int] =
         score_minimo = settings_service.get_central_score_minimo()
     ids_extra_set = {int(i) for i in ids_extra}
 
-    ja_criados = {
-        linha.id_auvo
-        for linha in CentralClienteLink.query.join(CentralClienteLote)
-        .filter(CentralClienteLink.status == "criado", CentralClienteLote.simulacao.is_(False))
-        .all()
-    }
+    ja_criados = _ids_com_link_criado()
 
     candidatos: dict[int, dict] = {}
     for linha in AuvoDepara.query.order_by(AuvoDepara.conta_power).all():
@@ -90,6 +85,81 @@ def montar_lote(*, score_minimo: float | None = None, ids_extra: Iterable[int] =
             "manual": not elegivel,
         }
     return list(candidatos.values())
+
+
+def _ids_com_link_criado() -> set[int]:
+    return {
+        linha.id_auvo
+        for linha in CentralClienteLink.query.join(CentralClienteLote)
+        .filter(CentralClienteLink.status == "criado", CentralClienteLote.simulacao.is_(False))
+        .all()
+    }
+
+
+def listar_sem_link(*, score_minimo: float | None = None) -> list[dict]:
+    """Todas as contas do de-para que ainda NÃO têm link, com o motivo de
+    cada uma — a resposta exata para "quem a automação deixou de fora".
+
+    Existe porque `montar_lote` só devolve os elegíveis: quem está
+    REVISAR/NAO/score baixo simplesmente não aparecia em lugar nenhum, e
+    a única forma de incluir era digitar o `id_auvo` na mão — justamente
+    o número que não se tem para quem nunca gerou link. Cruzar por NOME
+    (planilha) não serve: nome diferente entre PowerCentral e Auvo dá
+    falso "sem link", e o de-para é a fonte exata.
+
+    Não decide nada sozinho: quem não é elegível automaticamente continua
+    exigindo marcação humana na tela (este módulo cria acesso sem senha —
+    um casamento errado vaza o painel de um cliente para outro)."""
+    if score_minimo is None:
+        score_minimo = settings_service.get_central_score_minimo()
+
+    ja_criados = _ids_com_link_criado()
+    vistos: set[int] = set()
+    faltantes = []
+    for linha in AuvoDepara.query.order_by(AuvoDepara.conta_power).all():
+        if linha.id_auvo is not None and linha.id_auvo in ja_criados:
+            continue
+
+        elegivel = elegivel_automatico(linha.status, linha.score, score_minimo=score_minimo)
+        if linha.id_auvo is None:
+            motivo = "Sem cliente Auvo no de-para — vincular antes de gerar link"
+            acionavel = False
+        elif elegivel:
+            motivo = "Elegível — entra sozinho no próximo lote"
+            acionavel = False
+        elif linha.status == "NAO":
+            motivo = "De-para marcado NAO (cliente que não recebe link)"
+            acionavel = True
+        elif linha.status != "OK":
+            motivo = f"De-para {linha.status} — confirmar o cliente antes de gerar"
+            acionavel = True
+        else:
+            marcado = "sem score" if linha.score is None else f"score {linha.score:.2f}"
+            motivo = f"OK, mas {marcado} — abaixo do mínimo {score_minimo:.2f}"
+            acionavel = True
+
+        # Duas contas podem apontar pro mesmo cliente Auvo (loja +
+        # tesouraria): as duas aparecem na lista, mas só a primeira leva
+        # a caixa de seleção — o link é um só, por cliente Auvo.
+        duplicada = linha.id_auvo is not None and linha.id_auvo in vistos
+        if linha.id_auvo is not None:
+            vistos.add(linha.id_auvo)
+
+        faltantes.append(
+            {
+                "conta_power": linha.conta_power,
+                "nome_power": linha.nome_power,
+                "nome_auvo": linha.nome_auvo,
+                "id_auvo": linha.id_auvo,
+                "status_depara": linha.status,
+                "score": linha.score,
+                "elegivel": elegivel,
+                "motivo": motivo,
+                "selecionavel": acionavel and not duplicada,
+                "duplicada": duplicada,
+            }
+        )
+    return faltantes
 
 
 def buscar_clientes(termo: str, *, limite: int = 30) -> list[dict]:
