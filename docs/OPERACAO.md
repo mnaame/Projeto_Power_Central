@@ -720,6 +720,20 @@ Confira `Get-Service PowerCentral` — se não está `Running`, veja os logs em
 `logs\service_stderr.log` e `logs\power_central.log`. Erro comum: `.env`
 faltando ou com `ENCRYPTION_KEY`/`SECRET_KEY` vazios.
 
+**"Internal Server Error" numa página logo depois de atualizar**
+Quase sempre é o `flask db upgrade` que ficou pra trás: o código novo já
+conhece uma coluna que o banco ainda não tem. No log
+(`logs\power_central.log`) aparece `OperationalError: no such column: ...`
+com o nome da coluna que falta. Rode o passo que faltou da §7:
+
+```powershell
+$env:FLASK_APP = "app:create_app"
+.venv\Scripts\python.exe -m flask db upgrade
+```
+
+e reinicie o serviço. **`git pull` sozinho não basta** quando a versão traz
+migração — o aviso de "precisa de migração" vem junto com a entrega.
+
 **O serviço não inicia**
 Rode manualmente para ver o erro na tela:
 `\.venv\Scripts\waitress-serve.exe --call app:create_app` (dentro da pasta
