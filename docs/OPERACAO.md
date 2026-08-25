@@ -304,17 +304,19 @@ Duas páginas na barra lateral, para operador e admin:
   inteiro). A prévia na tela é idêntica ao Excel; o botão "Baixar Excel"
   traz o arquivo com a aba principal e a aba DESCARTADOS (eventos fora do
   relatório, com o motivo — ex.: cliente armou).
-  > Uma ocorrência de "não ativou" fechada pelo monitoramento sem o
-  > cliente ter armado ainda (ex.: fechada às 14h com "vai ativar mais
-  > tarde") **não fica contada como falha pra sempre**: se a conta armar
-  > de verdade mais tarde no mesmo período do relatório (ex.: 21h), ela
-  > sai da lista de falhas e vai pra DESCARTADOS com o motivo "Cliente
-  > armou depois, às HH:MM". Isso só enxerga arme dentro do **mesmo
-  > período** escolhido pro relatório — mas com o preset padrão (janela
-  > móvel) o próximo relatório automaticamente começa onde este terminou,
-  > então um arme depois do horário final acaba pego na geração seguinte
-  > sem precisar fazer nada; só fica de fato perdido se for gerado um
-  > manual estreito e ninguém rodar de novo sobre aquele intervalo.
+  > Uma ocorrência de "não ativou" **não fica contada como falha quando o
+  > cliente acabou armando**: o relatório cruza cada ocorrência com o
+  > histórico de arme (CLO/CLV/ROP) da própria conta e, se achar um arme
+  > real **depois do horário do evento**, joga a linha pra DESCARTADOS com
+  > o motivo "Cliente armou depois, às HH:MM". Vale tanto pro arme que
+  > acontece antes de o monitoramento fechar a ocorrência (o mais comum:
+  > a loja arma e só então o operador encerra) quanto pro que acontece
+  > depois — inclusive **na madrugada do dia seguinte**, fora da janela do
+  > relatório: a busca de arme vai além do fim do período de propósito.
+  > O prazo é o "Aceitar arme até (horas depois do evento)" em
+  > Configurações (padrão 12h) — passou disso, é falha de verdade
+  > (armar 3 dias depois não muda o fato de que naquela noite a loja
+  > dormiu desarmada).
 - **Disparos**: por padrão cobre "desde o último relatório até agora"
   (janela móvel — o próximo começa onde o anterior terminou); também
   aceita período manual com data e hora/minuto, igual Atendimentos. Uma

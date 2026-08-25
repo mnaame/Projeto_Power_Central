@@ -95,6 +95,18 @@
         disso a janela sempre continua de onde o relatório anterior parou.
       </p>
 
+      <div class="field">
+        {{ form.atend_horas_arme_posterior.label }}
+        {{ form.atend_horas_arme_posterior() }}
+        {% for mensagem in form.atend_horas_arme_posterior.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      <p class="muted" style="margin-top: calc(-1 * var(--space-3)); font-size: var(--font-size-xs);">
+        Se a conta armar dentro desse prazo depois do "ainda não foi ativado",
+        não conta como falha (mesmo que o arme caia no dia seguinte ou depois
+        de o monitoramento já ter fechado a ocorrência). Passou do prazo, é
+        falha de verdade.
+      </p>
+
       <h3 style="margin-top: var(--space-5);">Relatório de Disparos</h3>
 
       <div class="field">

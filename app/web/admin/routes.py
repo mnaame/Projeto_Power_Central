@@ -117,6 +117,7 @@ def configuracoes():
         atend_incluir_abertos=settings_service.atend_incluir_abertos(),
         atend_resolucao_indica_arme=", ".join(settings_service.get_atend_resolucao_indica_arme()),
         atend_horas_primeira_execucao=settings_service.get_atend_horas_primeira_execucao(),
+        atend_horas_arme_posterior=settings_service.get_atend_horas_arme_posterior(),
         disp_horas_primeira_execucao=settings_service.get_disp_horas_primeira_execucao(),
         disp_limite_recorrente=settings_service.get_disp_limite_recorrente(),
         disp_ignorar_zonas=", ".join(settings_service.get_disp_ignorar_zonas()),
@@ -218,6 +219,11 @@ def salvar_configuracoes():
             updated_by_id=current_user.id,
         )
         settings_service.set(
+            "atend_horas_arme_posterior",
+            str(form.atend_horas_arme_posterior.data),
+            updated_by_id=current_user.id,
+        )
+        settings_service.set(
             "disp_horas_primeira_execucao",
             str(form.disp_horas_primeira_execucao.data),
             updated_by_id=current_user.id,
@@ -267,6 +273,7 @@ def salvar_configuracoes():
                 "atend_incluir_abertos": form.atend_incluir_abertos.data,
                 "atend_resolucao_indica_arme": form.atend_resolucao_indica_arme.data,
                 "atend_horas_primeira_execucao": form.atend_horas_primeira_execucao.data,
+                "atend_horas_arme_posterior": form.atend_horas_arme_posterior.data,
                 "disp_horas_primeira_execucao": form.disp_horas_primeira_execucao.data,
                 "disp_limite_recorrente": form.disp_limite_recorrente.data,
                 "disp_ignorar_zonas": form.disp_ignorar_zonas.data,

@@ -167,10 +167,19 @@ def gerar_atendimentos(
             codigos_busca = tuple(
                 dict.fromkeys((*codigos_ocorrencia, *dom_disp.CODIGOS_ARME))
             )
+            # A busca vai ALÉM do fim do relatório (folga de
+            # `atend_horas_arme_posterior`) só para enxergar o arme que
+            # acontece depois da janela — caso real: evento "não ativou" às
+            # 22:51 e a loja arma 00:49, já no dia seguinte; com a busca
+            # terminando junto com o relatório, esse arme nunca era lido e a
+            # conta saía como falha. As OCORRÊNCIAS continuam limitadas ao
+            # período pedido (filtro logo abaixo) — a folga é só para arme.
+            horas_arme_posterior = settings_service.get_atend_horas_arme_posterior()
+            fim_busca = fim + timedelta(hours=horas_arme_posterior)
             eventos = client.buscar_historico(
                 codigos_alarme=codigos_busca,
                 desde=inicio.astimezone(FUSO_HORARIO),
-                hasta=fim.astimezone(FUSO_HORARIO) + timedelta(seconds=1),
+                hasta=fim_busca.astimezone(FUSO_HORARIO) + timedelta(seconds=1),
             )
 
             codigos_ocorrencia_set = {c.upper() for c in codigos_ocorrencia}
@@ -178,11 +187,13 @@ def gerar_atendimentos(
             armes_por_conta: dict[str, list[datetime]] = {}
             for evento in eventos:
                 codigo = _campo(evento, "rec_calarma", "cod_calarma", "codigo").upper()
-                if codigo in codigos_ocorrencia_set:
+                quando = _data_evento(evento)
+                if codigo in codigos_ocorrencia_set and (
+                    quando is None or inicio <= quando <= fim
+                ):
                     eventos_ocorrencia.append(evento)
                 if codigo in dom_disp.CODIGOS_ARME:
                     conta = _campo(evento, "cue_ncuenta", "rec_iidcuenta")
-                    quando = _data_evento(evento)
                     if conta and quando is not None:
                         armes_por_conta.setdefault(conta, []).append(quando)
 
@@ -206,6 +217,7 @@ def gerar_atendimentos(
                         incluir_abertos=incluir_abertos,
                         termos_arme=termos_arme,
                         armes_da_conta=armes_por_conta.get(conta, []),
+                        horas_arme_posterior=horas_arme_posterior,
                     )
                 )
 

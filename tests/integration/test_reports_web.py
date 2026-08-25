@@ -22,6 +22,17 @@ class FakeSoftGuardClient:
         return self.timelines.get(str(id_evento), [])
 
 
+def _ontem_as(hora, minuto, segundo=0):
+    """O fake precisa devolver evento DENTRO da janela pedida (o preset
+    "ontem" é relativo ao dia de hoje) — o portal real nunca devolveria um
+    evento fora do período consultado, e o serviço agora confere isso."""
+    ontem = datetime.now(FUSO).date() - timedelta(days=1)
+    momento = datetime.combine(ontem, datetime.min.time(), tzinfo=FUSO).replace(
+        hour=hora, minute=minuto, second=segundo
+    )
+    return momento.strftime("%m/%d/%Y %I:%M:%S %p")
+
+
 @pytest.fixture(autouse=True)
 def _softguard_fake(monkeypatch):
     cliente = FakeSoftGuardClient(
@@ -29,7 +40,7 @@ def _softguard_fake(monkeypatch):
             {
                 "rec_iid": "500",
                 "rec_calarma": "NYE",
-                "rec_tfechahora": "7/18/2026 9:30:00 PM",
+                "rec_tfechahora": _ontem_as(21, 30),
                 "cue_ncuenta": "0004",
                 "cue_cnombre": "VILLEFORT TROPICAL",
                 "rec_iidcuenta": "9385",
@@ -40,14 +51,14 @@ def _softguard_fake(monkeypatch):
         timelines={
             "500": [
                 {
-                    "etl_tFechaHora": "7/18/2026 9:30:00 PM",
+                    "etl_tFechaHora": _ontem_as(21, 30),
                     "etl_cAccion": "Inicio",
                     "etl_cObservacion": "Evento recebido na Central",
                     "etl_iAccionCode": "",
                     "ope_cnombre": "",
                 },
                 {
-                    "etl_tFechaHora": "7/18/2026 9:41:05 PM",
+                    "etl_tFechaHora": _ontem_as(21, 41, 5),
                     "etl_cAccion": "Procesar",
                     "etl_cObservacion": "Evento processado",
                     "etl_iAccionCode": "122",

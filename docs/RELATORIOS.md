@@ -56,11 +56,18 @@ Regras A.3, funções sobre listas de dicts brutos:
   pra sempre — nunca cruzava com o resto do histórico da conta pra ver
   se ela armou depois. Agora `processar_atendimento` recebe os horários
   de eventos de arme reais (CLO/CLV/ROP, mesmos códigos do módulo de
-  Disparos) da conta inteira no período; se houver um **depois** do
-  fechamento (ou do início, se ainda sem fechamento), descarta com o
-  motivo `"Cliente armou depois, às HH:MM (verificado no histórico da
-  conta, não só na ocorrência)"` — checagem que tem prioridade sobre
+  Disparos) da conta inteira no período; se houver um **depois do horário
+  do evento** e dentro de `horas_arme_posterior` (padrão 12h), descarta
+  com o motivo `"Cliente armou depois, às HH:MM (verificado no histórico
+  da conta, não só na ocorrência)"` — checagem que tem prioridade sobre
   todas as outras (é o fato mais forte que existe: o cliente armou).
+  A referência é o **evento**, não o fechamento da ocorrência: ancorar no
+  fechamento (como na primeira versão) deixava passar justamente o caso
+  mais comum — a loja arma e só DEPOIS o monitoramento encerra o chamado,
+  então o arme ficava "antes do fechamento" e era ignorado (caso real:
+  NYC 17:01, ROP/CLV 18:45, ocorrência fechada depois disso). O limite
+  superior existe porque armar dias depois não desmente a falha daquela
+  noite.
 
 ### 2.3 `domain/disparos.py` (puro, sem I/O)
 
@@ -105,12 +112,14 @@ Orquestra: consulta → domínio → persistência → .xlsx → auditoria.
   eventos de arme viram `armes_por_conta` (dict conta → horários) e são
   passados pra `processar_atendimento` de cada ocorrência da mesma conta
   — só isso permite ver se a conta armou depois, sem chamada extra à
-  API. Fica limitado à mesma janela do relatório: se o cliente armar
-  DEPOIS do `hasta` escolhido, esse cruzamento não pega nesse relatório
-  — mas com o preset "auto" (janela móvel, padrão) o próximo relatório
-  automaticamente começa onde este parou, então um arme tardio é pego
-  na geração seguinte; só fica de fato perdido se o operador usar um
-  manual estreito e nunca mais rodar sobre aquele intervalo;
+  API. A busca de histórico vai até `hasta + atend_horas_arme_posterior`
+  (padrão 12h) e as ocorrências são filtradas de volta pro período pedido
+  em memória: a folga existe só pra enxergar o arme que cai **depois** do
+  fim da janela (caso real: evento 22:51, arme 00:49 do dia seguinte —
+  com a busca terminando junto com o relatório, esse CLO nunca era lido).
+  A janela móvel **não** resolveria isso sozinha — a ocorrência só aparece
+  na janela que contém o horário dela, e o relatório seguinte começa
+  depois e nunca reavalia aquele evento;
 - Janela móvel (`janela_disparos`/`janela_atendimentos`, mesmo padrão pros
   dois módulos): `period_end` do último `report_runs` bem-sucedido do
   módulo **cujo period_end já passou** (persistido no banco, auditável) —
@@ -175,7 +184,8 @@ erDiagram
 - Config nova (chaves na tabela `settings` existente):
   Atendimentos — `atend_codigos_evento` (NYE,NYC), `atend_incluir_automaticos`
   (false), `atend_incluir_abertos` (false), `atend_resolucao_indica_arme`
-  (lista), `atend_horas_primeira_execucao` (24); Disparos —
+  (lista), `atend_horas_primeira_execucao` (24),
+  `atend_horas_arme_posterior` (12); Disparos —
   `disp_horas_primeira_execucao` (24), `disp_limite_recorrente` (15),
   `disp_ignorar_zonas` (PANICO).
 - Janela móvel dos dois módulos: derivada de `report_runs` (sem chave solta).
@@ -192,6 +202,7 @@ erDiagram
 | **R6** | Adiciona hora/minuto no período manual de Atendimentos (antes só dia inteiro, igual Disparos já tinha) | Integração web (`datetime-local` nos dois módulos) |
 | **R7** | Coluna "HORÁRIOS DOS DISPAROS" no relatório de Disparos (pedido: ver o horário de cada disparo, não só a quantidade) | Unit (`ClienteComDisparos.horarios`) + integração (xlsx com a coluna nova) |
 | **R8** | Atendimentos ganha janela móvel ("desde o último relatório"), espelhando o que Disparos já tinha (pedido: evitar reescolher período manualmente e diminuir a chance de um arme tardio escapar do cruzamento da R5) — `janela_atendimentos` + `atend_horas_primeira_execucao` configurável | Integração (`gerar_atendimentos` sem `desde`/`hasta` usa a janela móvel e encadeia com o `report_runs` anterior; manual sobre período antigo não reseta o encadeamento; primeira execução configurável) |
+| **R9** | Corrige as duas falhas que sobraram da R5 (dois casos reais no mesmo dia): (a) a referência do cruzamento era o **fechamento** da ocorrência, então o arme que acontece ANTES do monitoramento fechar — o caso mais comum — era ignorado; passa a ser o **horário do evento**; (b) a busca de arme terminava junto com a janela do relatório, perdendo o arme da madrugada seguinte; passa a ir até `hasta + atend_horas_arme_posterior`, com as ocorrências filtradas de volta pro período pedido | Unit (arme entre evento e fechamento descarta; arme antes do evento não; arme fora do prazo continua falha; limite configurável) + integração (busca estendida além do `hasta`, ocorrência fora da janela não entra no relatório) |
 
 ## 5. Riscos/decisões em aberto
 

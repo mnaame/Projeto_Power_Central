@@ -58,6 +58,10 @@ class ConfiguracoesForm(FlaskForm):
         "Primeira execução: horas para trás",
         validators=[DataRequired(), NumberRange(min=1, max=720)],
     )
+    atend_horas_arme_posterior = IntegerField(
+        "Aceitar arme até (horas depois do evento)",
+        validators=[DataRequired(), NumberRange(min=1, max=72)],
+    )
 
     # Relatório de Disparos (B.5)
     disp_horas_primeira_execucao = IntegerField(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unicodedata
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Mapping, Sequence
 
 from app.domain.dates import parse_softguard_datetime
@@ -19,6 +19,10 @@ PREFIXO_COMENTARIO_AUTOMATICO = "--- PROCEDIMENTO"
 MONITOR_AUTOMATICO = "Automático"
 
 TERMOS_ARME_PADRAO: tuple[str, ...] = ("ativado", "armado remotamente", "armamento confirmado")
+
+# Por quanto tempo depois do evento "ainda não foi ativado" um arme real
+# ainda desmente a falha (padrão; configurável em `atend_horas_arme_posterior`).
+HORAS_ARME_POSTERIOR_PADRAO = 12
 
 _DIAS_SEMANA = ("SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM")
 
@@ -201,11 +205,20 @@ def prefixo_do_dia(data: datetime) -> str:
 
 
 def _primeiro_arme_apos(
-    armes_da_conta: Sequence[datetime], referencia: datetime | None
+    armes_da_conta: Sequence[datetime],
+    referencia: datetime | None,
+    *,
+    limite_horas: float,
 ) -> datetime | None:
+    """Primeiro arme real depois de `referencia`, dentro de `limite_horas`.
+
+    O limite existe porque "armou 3 dias depois" NÃO desmente a falha
+    daquela noite — só um arme dentro de um prazo razoável do horário
+    esperado significa que o cliente acabou armando."""
     if referencia is None:
         return None
-    posteriores = [a for a in armes_da_conta if a > referencia]
+    limite = referencia + timedelta(hours=limite_horas)
+    posteriores = [a for a in armes_da_conta if referencia < a <= limite]
     return min(posteriores) if posteriores else None
 
 
@@ -220,20 +233,22 @@ def processar_atendimento(
     incluir_abertos: bool = False,
     termos_arme: Sequence[str] = TERMOS_ARME_PADRAO,
     armes_da_conta: Sequence[datetime] = (),
+    horas_arme_posterior: float = HORAS_ARME_POSTERIOR_PADRAO,
 ) -> AtendimentoProcessado:
     """Aplica as regras A.3 completas a um evento + sua linha do tempo e
     devolve a linha pronta do relatório (incluída, descartada ou aberta).
 
     `armes_da_conta`: horários de eventos de arme reais (CLO/CLV/ROP) da
-    CONTA inteira no período do relatório — não só desta ocorrência. Caso
-    real que motivou isto: o monitoramento fecha a ocorrência de "não
-    ativou" (ex.: às 14h, sem o cliente ter armado ainda — o comentário de
-    fechamento não indica arme), mas a loja arma de verdade horas depois
-    (ex.: 21h). Sem cruzar com o histórico da conta, o relatório contava
-    isso como falha sem nunca conferir se o cliente armou depois — por
-    isso este cruzamento vem **antes** das outras regras: é o fato mais
-    forte que existe (o cliente armou, ponto), então tem prioridade sobre
-    aberto/autoproceso/resolução."""
+    CONTA inteira, do período do relatório **mais** a folga de
+    `horas_arme_posterior` depois dele (quem busca é o serviço) — não só
+    desta ocorrência. Caso real que motivou isto: o monitoramento fecha a
+    ocorrência de "não ativou" (ex.: às 14h, sem o cliente ter armado
+    ainda — o comentário de fechamento não indica arme), mas a loja arma
+    de verdade horas depois (ex.: 21h). Sem cruzar com o histórico da
+    conta, o relatório contava isso como falha sem nunca conferir se o
+    cliente armou depois — por isso este cruzamento vem **antes** das
+    outras regras: é o fato mais forte que existe (o cliente armou,
+    ponto), então tem prioridade sobre aberto/autoproceso/resolução."""
     analise = analisar_timeline(timeline)
 
     situacao_base = analise.situacao or ""
@@ -259,8 +274,18 @@ def processar_atendimento(
             motivo_descarte=motivo,
         )
 
-    referencia_arme = analise.fechamento or analise.inicio or data_evento
-    arme_depois = _primeiro_arme_apos(armes_da_conta, referencia_arme)
+    # A referência é o EVENTO ("ainda não foi ativado"), não o fechamento da
+    # ocorrência. Ancorar no fechamento (como era antes) deixava passar
+    # justamente o caso mais comum: o cliente arma e SÓ DEPOIS o monitoramento
+    # fecha o chamado — o arme ficava "antes do fechamento" e era ignorado,
+    # e a conta ia pro relatório como falha (caso real: NYC 17:01, ROP/CLV
+    # 18:45, ocorrência fechada depois disso). Depois do evento de "não
+    # ativou", qualquer arme real da conta desmente a falha, tendo o
+    # monitoramento fechado antes ou depois.
+    referencia_arme = data_evento or analise.inicio or analise.fechamento
+    arme_depois = _primeiro_arme_apos(
+        armes_da_conta, referencia_arme, limite_horas=horas_arme_posterior
+    )
     if arme_depois is not None:
         return _resultado(
             DESCARTADO,

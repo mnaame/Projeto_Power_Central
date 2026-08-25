@@ -25,6 +25,7 @@ DEFAULTS: dict[str, str] = {
     "atend_incluir_abertos": "false",
     "atend_resolucao_indica_arme": "ativado,armado remotamente,armamento confirmado",
     "atend_horas_primeira_execucao": "24",
+    "atend_horas_arme_posterior": "12",
     # Módulo Disparos (B.5)
     "disp_horas_primeira_execucao": "24",
     "disp_limite_recorrente": "15",
@@ -185,6 +186,10 @@ def get_atend_resolucao_indica_arme() -> tuple[str, ...]:
 
 def get_atend_horas_primeira_execucao() -> int:
     return int(get("atend_horas_primeira_execucao"))
+
+
+def get_atend_horas_arme_posterior() -> int:
+    return int(get("atend_horas_arme_posterior"))
 
 
 # --- Módulo Disparos (B.5) ---

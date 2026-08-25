@@ -198,11 +198,11 @@ def test_evento_com_ainda_nao_foi_ativado_e_incluido():
     assert resultado.status == INCLUIDO
 
 
-# ---------- processar_atendimento — arme posterior na conta (caso real) ----------
-# Ocorrência fechada às 21:41:05 (fixture padrão), sem indicar arme na
-# resolução ("Cliente vai ativar mais tarde") — mesmo caso real que
-# motivou a checagem: monitoramento fecha achando que ainda não ativou,
-# mas a conta arma de verdade horas depois.
+# ---------- processar_atendimento — arme posterior na conta (casos reais) ----------
+# Fixture padrão: evento às 21:30, ocorrência fechada às 21:41:05, sem
+# indicar arme na resolução ("Cliente vai ativar mais tarde"). A referência
+# do cruzamento é o EVENTO — qualquer arme real da conta depois dele (dentro
+# do prazo) desmente a falha, tendo o monitoramento fechado antes ou depois.
 
 
 def test_arme_depois_do_fechamento_descarta_mesmo_sem_resolucao_indicar():
@@ -213,12 +213,49 @@ def test_arme_depois_do_fechamento_descarta_mesmo_sem_resolucao_indicar():
     assert "21:50" in resultado.motivo_descarte
 
 
-def test_arme_antes_do_fechamento_nao_conta():
-    # a conta já tinha armado ANTES desta ocorrência ser fechada (não é
-    # resolução dela) — não deve descartar por causa desse arme antigo.
+def test_arme_antes_do_evento_nao_conta():
+    # a conta já tinha armado ANTES do evento de "não ativou" (é o ciclo
+    # anterior, não a resolução deste) — não deve descartar por isso.
     arme_antigo = datetime(2026, 7, 18, 20, 0, 0, tzinfo=FUSO)
     resultado = _processar(_timeline_fechada_manual(), armes_da_conta=[arme_antigo])
     assert resultado.status == INCLUIDO
+
+
+def test_arme_entre_o_evento_e_o_fechamento_descarta():
+    # Caso real (VETTORE PAMPULHA): NYC 17:01, arme remoto 18:45, e SÓ
+    # DEPOIS o monitoramento fecha a ocorrência. Ancorando no fechamento
+    # (como era antes) esse arme ficava "antes do fechamento" e era
+    # ignorado — a conta ia pro relatório como falha de arme.
+    arme_real = datetime(2026, 7, 18, 21, 35, 0, tzinfo=FUSO)  # evento 21:30, fechamento 21:41
+    resultado = _processar(_timeline_fechada_manual(), armes_da_conta=[arme_real])
+    assert resultado.status == DESCARTADO
+    assert "21:35" in resultado.motivo_descarte
+
+
+def test_arme_na_madrugada_seguinte_descarta():
+    # Caso real (MIL-0334): evento 24/08 22:51, arme 25/08 00:49 — o arme
+    # cai no dia seguinte, depois do fim da janela do relatório.
+    arme_madrugada = DATA_EVENTO + timedelta(hours=3, minutes=19)
+    resultado = _processar(_timeline_fechada_manual(), armes_da_conta=[arme_madrugada])
+    assert resultado.status == DESCARTADO
+    assert "00:49" in resultado.motivo_descarte
+
+
+def test_arme_muito_depois_nao_desmente_a_falha():
+    # armar 3 dias depois não muda o fato de que naquela noite dormiu
+    # desarmado — continua sendo falha.
+    arme_tardio = DATA_EVENTO + timedelta(days=3)
+    resultado = _processar(_timeline_fechada_manual(), armes_da_conta=[arme_tardio])
+    assert resultado.status == INCLUIDO
+
+
+def test_limite_do_arme_posterior_e_configuravel():
+    arme = DATA_EVENTO + timedelta(hours=20)
+    assert _processar(_timeline_fechada_manual(), armes_da_conta=[arme]).status == INCLUIDO
+    esticado = _processar(
+        _timeline_fechada_manual(), armes_da_conta=[arme], horas_arme_posterior=24
+    )
+    assert esticado.status == DESCARTADO
 
 
 def test_sem_arme_na_conta_continua_incluido():

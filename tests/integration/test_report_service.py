@@ -188,14 +188,89 @@ def test_gerar_atendimentos_arme_de_outra_conta_nao_descarta(app):
     assert run.row_count == 1  # continua incluída — o arme foi de outra conta
 
 
-def test_gerar_atendimentos_arme_antes_do_fechamento_nao_descarta(app):
-    """Um CLO ANTES da ocorrência ser fechada não é a resolução dela —
-    não deve descartar por causa de um arme antigo."""
-    arme_antigo = DESDE + timedelta(hours=10)  # bem antes do fechamento (21:41)
+def test_gerar_atendimentos_arme_antes_do_evento_nao_descarta(app):
+    """Um CLO ANTES do evento de "não ativou" é o ciclo anterior, não a
+    resolução deste — não deve descartar por causa de um arme antigo."""
+    arme_antigo = DESDE + timedelta(hours=10)  # bem antes do evento (21:30)
     client = FakeSoftGuardClient(
         eventos=[
             _evento_nye(rec_iid="500", conta="0004"),
             _evento_clo(rec_iid="900", quando=arme_antigo, conta="0004"),
+        ],
+        timelines={"500": _timeline_fechada("Responsável avisado, vai ativar")},
+    )
+
+    run = report_service.gerar_atendimentos(
+        config=app.config, desde=DESDE, hasta=HASTA, user_id=None, softguard_client=client
+    )
+
+    assert run.status == "success"
+    assert run.row_count == 1
+
+
+def test_gerar_atendimentos_arme_depois_do_fim_da_janela_descarta(app):
+    """Caso real (MIL-0334): evento "não ativou" às 22:51 e a loja arma às
+    00:49 do dia seguinte — depois do fim do relatório. Com a busca de arme
+    terminando junto com a janela, esse CLO nunca era lido e a conta saía
+    como falha de arme."""
+    evento_tarde = DESDE + timedelta(hours=22, minutes=51)
+    arme_madrugada = DESDE + timedelta(hours=24, minutes=49)  # 00:49 do dia seguinte
+    client = FakeSoftGuardClient(
+        eventos=[
+            _evento_nye(rec_iid="500", quando=evento_tarde, conta="0004"),
+            _evento_clo(rec_iid="900", quando=arme_madrugada, conta="0004"),
+        ],
+        timelines={"500": _timeline_fechada("Responsável avisado, vai ativar")},
+    )
+
+    run = report_service.gerar_atendimentos(
+        config=app.config, desde=DESDE, hasta=HASTA, user_id=None, softguard_client=client
+    )
+
+    assert run.status == "success"
+    assert run.row_count == 0
+    # a busca precisa ir além do fim do relatório para enxergar esse arme
+    assert client.chamadas_historico[0]["hasta"] > HASTA
+
+    wb = load_workbook(run.file_path)
+    linha = [c.value for c in wb["DESCARTADOS"][2]]
+    assert "armou depois" in linha[4]
+    assert "00:49" in linha[4]
+
+
+def test_gerar_atendimentos_ocorrencia_fora_da_janela_nao_entra(app):
+    """A folga de busca serve só para enxergar arme: uma ocorrência que
+    acontece depois do fim do período pedido não pode entrar no relatório."""
+    dentro = DESDE + timedelta(hours=22, minutes=51)
+    fora = DESDE + timedelta(hours=25)  # 01:00 do dia seguinte, fora do período
+    client = FakeSoftGuardClient(
+        eventos=[
+            _evento_nye(rec_iid="500", quando=dentro, conta="0004"),
+            _evento_nye(rec_iid="501", quando=fora, conta="0141"),
+        ],
+        timelines={
+            "500": _timeline_fechada("Responsável avisado, vai ativar"),
+            "501": _timeline_fechada("Responsável avisado, vai ativar"),
+        },
+    )
+
+    run = report_service.gerar_atendimentos(
+        config=app.config, desde=DESDE, hasta=HASTA, user_id=None, softguard_client=client
+    )
+
+    assert run.status == "success"
+    assert run.extra_counts["total_eventos"] == 1
+    assert run.row_count == 1
+
+
+def test_gerar_atendimentos_arme_muito_depois_continua_sendo_falha(app):
+    """Armar dias depois não desmente a falha daquela noite."""
+    settings_service.set("atend_horas_arme_posterior", "12")
+    arme_tardio = DESDE + timedelta(days=3)
+    client = FakeSoftGuardClient(
+        eventos=[
+            _evento_nye(rec_iid="500", conta="0004"),
+            _evento_clo(rec_iid="900", quando=arme_tardio, conta="0004"),
         ],
         timelines={"500": _timeline_fechada("Responsável avisado, vai ativar")},
     )
