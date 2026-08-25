@@ -113,7 +113,9 @@ isolada, não upsert):
   oficial em `executar_lote`, ver §1 passo 6; migration `75e260835989`,
   antes era uma coluna `telefone` única), menus (JSON), status
   (`pendente/criado/erro/removido`),
-  erro_mensagem, criado_em. `removido` (migration `d90d1780e01f`): admin
+  erro_mensagem, criado_em, `whatsapp_enviado_em`/`whatsapp_enviado_por_user_id`
+  (migration `c4a1d7f92b30` — marca manual de "já mandei o link deste no
+  WhatsApp", ver §2.4 `marcar_whatsapp_enviado`). `removido` (migration `d90d1780e01f`): admin
   apagou o contato manualmente na Auvo e marcou por aqui
   (`central_cliente_service.remover_link`) — não apaga a linha (fica no
   histórico/auditoria), só sai do caminho de `status == "criado"`, então
@@ -151,6 +153,12 @@ o lote inteiro nesse caso, sem contar nada como criado a partir daí.
   cruzamento é aproximado (nome difere entre PowerCentral e Auvo) e dá
   falso positivo — o de-para é a fonte exata. Não decide nada sozinha: os
   não-elegíveis continuam exigindo marcação humana na tela.
+- `marcar_whatsapp_enviado(item, *, enviado, user)` — liga/desliga a marca
+  de "link enviado no WhatsApp" (grava horário + quem, ou limpa os dois).
+  Marcação **humana** de propósito: abrir o `wa.me` não é envio (§5.5 — o
+  site nunca envia sozinho), então só quem mandou sabe dizer; e reversível,
+  porque marcar errado não pode virar "enviado" pra sempre. Serve para
+  trabalhar um lote grande em várias sessões sem perder onde parou.
 - `criar_lote(candidatos, *, simulacao, user_id)` — cria
   `CentralClienteLote` + itens `pendente`, **commita imediatamente**
   (mesmo motivo do BI: o lote sobrevive mesmo se a execução falhar logo
@@ -202,11 +210,22 @@ o lote inteiro nesse caso, sem contar nada como criado a partir daí.
   simulação) + os itens selecionados (hidden inputs). Roda sincronamente
   (mesmo modelo do Relatório do Técnico — lotes são pequenos, é ação
   manual e rara).
-- **`lote/<id>`**: detalhe (itens, status, erro por item). Cada linha
-  `criado` mostra **um botão "Enviar no WhatsApp" por telefone** válido
-  do cliente (formatado, ex. "(31) 99522-2809"), pra escolher pra qual
-  número mandar quando há mais de um cadastrado; `criado` sem telefone
-  mostra "sem telefone" (nunca esconde a linha).
+- **`lote/<id>`** (aceita `?q=` GET): detalhe (itens, status, erro por
+  item). Cada linha `criado` mostra **um botão "Enviar no WhatsApp" por
+  telefone** válido do cliente (formatado, ex. "(31) 99522-2809"), pra
+  escolher pra qual número mandar quando há mais de um cadastrado;
+  `criado` sem telefone mostra "sem telefone" (nunca esconde a linha).
+  `?q=` filtra por nome **em memória** (os itens do lote já vêm
+  carregados pela relationship; não vale uma query nova) — existe porque
+  a operação percorre a lista na ordem da PowerCentral, cliente por
+  cliente, e rolar uma tabela de 100+ linhas a cada um é inviável.
+  Cada linha `criado` também tem a marca de WhatsApp enviado, e o topo
+  ganha o card com o placar (enviados / total criado) pra dar pra parar
+  e retomar.
+- **`lote/<id>/item/<id>/marcar-whatsapp`** (POST): liga/desliga a marca
+  via `marcar_whatsapp_enviado` e volta pro `lote_detalhe` **preservando
+  o `q`** (senão o usuário perde o lugar na lista a cada clique) e com
+  âncora na própria linha. 404 se o item não for daquele lote.
 - **`lote/<id>/item/<id>/whatsapp?telefone=<numero>`**: **não** é um link
   direto pro `wa.me` — é uma rota do próprio site que audita
   (`central_whatsapp_aberto`, com o telefone escolhido nos detalhes) e só
@@ -350,6 +369,7 @@ F12 antes da primeira execução real:
 | **LC7** ✅ | Múltiplos telefones por cliente (`telefones` JSON, migration `75e260835989`) — corrige caso real de produção onde `phoneNumber` da Auvo é sempre lista; tela mostra um botão de WhatsApp por número, usuário escolhe | Integração (mantém todos os números normalizados sem duplicar, `montar_link_whatsapp_item` só aceita telefone que é do item) + screenshots claro/escuro |
 | **LC8** ✅ | DDI e mensagem do WhatsApp viram campos editáveis na tela Configuração (antes só dava pra mudar editando código) | Integração (form exige mensagem preenchida, DDI vazio cai no padrão "55") + screenshots claro/escuro |
 | **LC9** ✅ | Lista "Clientes sem link" (`listar_sem_link`) com o motivo de cada um e caixas de seleção que alimentam `ids_extra` — antes, quem não era elegível automático não aparecia em lugar nenhum e só entrava digitando o `id_auvo` na mão | Integração (motivo por status/score, omite quem já tem link real, conta sem `id_auvo` não é selecionável, duas contas do mesmo cliente Auvo marcam uma vez) + web (caixas marcadas entram no lote, juntam com o campo de texto sem duplicar) + screenshots claro/escuro |
+| **LC10** ✅ | Tela do lote ganha busca por nome + marca manual de "WhatsApp enviado" (`whatsapp_enviado_em`/`whatsapp_enviado_por_user_id`, migration `c4a1d7f92b30`) com placar no topo — trabalhar 116 itens na ordem da PowerCentral era inviável rolando a tabela, e não havia onde registrar até onde a operação tinha ido | Integração web (busca filtra por nome, estado vazio avisa, marcar/desmarcar audita, marcação preserva a busca, item de outro lote dá 404, operador não marca, placar conta certo) + screenshots claro/escuro |
 
 Módulo implementado, coberto por teste, e com os 3 itens bloqueadores do
 §6 **confirmados via F12 contra um contato de teste real** (formato do

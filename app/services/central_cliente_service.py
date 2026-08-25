@@ -33,6 +33,7 @@ from app.integrations.auvo_painel_client import (
 from app.models.auvo import AuvoDepara
 from app.models.central_cliente import CentralClienteLink, CentralClienteLote
 from app.services import audit_service, auvo_service, settings_service
+from app.utils.time import utcnow
 
 logger = logging.getLogger("central_cliente")
 
@@ -567,3 +568,24 @@ def remover_link(item: CentralClienteLink, *, user=None) -> None:
         user=user,
         details={"lote_id": item.lote_id, "id_auvo": item.id_auvo, "nome": item.nome},
     )
+
+
+def marcar_whatsapp_enviado(
+    item: CentralClienteLink, *, enviado: bool, user=None
+) -> CentralClienteLink:
+    """Liga/desliga a marca de "link enviado no WhatsApp" — controle
+    manual de onde a operação parou numa lista longa. É marcação humana
+    de propósito: abrir o wa.me não é envio (o site nunca envia sozinho,
+    §5.5), então só quem mandou de verdade sabe dizer. Reversível: marcar
+    errado não pode virar "enviado" pra sempre."""
+    item.whatsapp_enviado_em = utcnow() if enviado else None
+    item.whatsapp_enviado_por_user_id = (
+        getattr(user, "id", None) if enviado else None
+    )
+    audit_service.registrar(
+        action="central_whatsapp_marcado" if enviado else "central_whatsapp_desmarcado",
+        result="success",
+        user=user,
+        details={"lote_id": item.lote_id, "id_auvo": item.id_auvo, "nome": item.nome},
+    )
+    return item

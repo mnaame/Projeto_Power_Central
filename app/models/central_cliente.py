@@ -73,6 +73,16 @@ class CentralClienteLink(db.Model):
     status = db.Column(db.String(16), nullable=False, default="pendente")
     erro_mensagem = db.Column(db.Text, nullable=True)
     criado_em = db.Column(TZDateTime, nullable=False, default=utcnow)
+    # Controle manual do envio do link pelo WhatsApp: quem trabalha uma
+    # lista de 100+ clientes precisa saber onde parou. Marcado a mão (o
+    # site nunca envia nada sozinho — abrir o wa.me não é envio), e
+    # reversível: marcar errado não pode virar "enviado" pra sempre.
+    whatsapp_enviado_em = db.Column(TZDateTime, nullable=True)
+    whatsapp_enviado_por_user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id"), nullable=True
+    )
+
+    whatsapp_enviado_por = db.relationship("User", foreign_keys=[whatsapp_enviado_por_user_id])
 
     __table_args__ = (
         db.CheckConstraint(

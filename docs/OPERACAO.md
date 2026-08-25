@@ -593,6 +593,16 @@ pela API oficial).
 - Cada lote fica no histórico com os itens (criado/erro/pendente) e pode
   ser exportado em xlsx — **documento sensível** (tem login/link de
   acesso), mesmo cuidado do Cofre de Senhas.
+- **Trabalhar a lista de um lote**: na tela do lote tem uma busca por
+  nome ("Buscar cliente neste lote") — dá pra percorrer os clientes na
+  ordem da PowerCentral procurando um por um, em vez de rolar uma tabela
+  de 100+ linhas. Cada item criado tem um botão **"marcar enviado"**,
+  para registrar que o link já foi mandado no WhatsApp; o card
+  **"WhatsApp enviado"** no topo mostra o placar (ex.: 37/116), então dá
+  pra parar e retomar sem perder onde estava. A marcação é **manual de
+  propósito** — abrir o WhatsApp não é enviar, só quem mandou de verdade
+  sabe dizer — e é reversível ("desmarcar"). Marcar mantém a busca ativa,
+  então a lista não volta pro começo a cada clique.
 - **"Enviar no WhatsApp"**: cada contato criado com telefone válido (busca
   automática na API oficial da Auvo) ganha um botão "Enviar no WhatsApp"
   **para cada número cadastrado** naquele cliente — se tiver mais de um

@@ -287,6 +287,126 @@ def test_lote_detalhe_inexistente_404(admin_client):
     assert admin_client.get("/central-cliente/lote/999999").status_code == 404
 
 
+# ---------- busca dentro do lote + marca de WhatsApp enviado ----------
+
+
+def _lote_com_itens(*nomes, status="criado"):
+    lote = CentralClienteLote(
+        simulacao=False, status="success", total_itens=len(nomes), total_sucesso=len(nomes)
+    )
+    db.session.add(lote)
+    db.session.flush()
+    for indice, nome in enumerate(nomes, start=1):
+        db.session.add(
+            CentralClienteLink(
+                lote_id=lote.id, id_auvo=1000 + indice, nome=nome, status=status,
+                telefones=["5531999998888"],
+            )
+        )
+    db.session.commit()
+    return lote
+
+
+def test_lote_detalhe_busca_filtra_por_nome(app, admin_client):
+    lote = _lote_com_itens("VILLEFORT TROPICAL", "RP TENNIS CLUB", "VILLEFORT HM")
+
+    resposta = admin_client.get(f"/central-cliente/lote/{lote.id}?q=villefort")
+    assert resposta.status_code == 200
+    assert b"VILLEFORT TROPICAL" in resposta.data
+    assert b"VILLEFORT HM" in resposta.data
+    assert b"RP TENNIS CLUB" not in resposta.data
+
+
+def test_lote_detalhe_busca_sem_resultado_avisa(app, admin_client):
+    lote = _lote_com_itens("VILLEFORT TROPICAL")
+
+    resposta = admin_client.get(f"/central-cliente/lote/{lote.id}?q=inexistente")
+    assert resposta.status_code == 200
+    assert "Nenhum cliente com".encode("utf-8") in resposta.data
+
+
+def test_lote_detalhe_sem_busca_mostra_todos(app, admin_client):
+    lote = _lote_com_itens("VILLEFORT TROPICAL", "RP TENNIS CLUB")
+
+    resposta = admin_client.get(f"/central-cliente/lote/{lote.id}")
+    assert resposta.status_code == 200
+    assert b"VILLEFORT TROPICAL" in resposta.data
+    assert b"RP TENNIS CLUB" in resposta.data
+
+
+def test_marcar_whatsapp_enviado_e_desmarcar(app, admin_client):
+    lote = _lote_com_itens("VILLEFORT TROPICAL")
+    item = lote.itens[0]
+
+    admin_client.post(
+        f"/central-cliente/lote/{lote.id}/item/{item.id}/marcar-whatsapp",
+        data={"enviado": "1"},
+        follow_redirects=True,
+    )
+    item = db.session.get(CentralClienteLink, item.id)
+    assert item.whatsapp_enviado_em is not None
+    assert item.whatsapp_enviado_por_user_id is not None
+    assert AuditLog.query.filter_by(action="central_whatsapp_marcado").count() == 1
+
+    admin_client.post(
+        f"/central-cliente/lote/{lote.id}/item/{item.id}/marcar-whatsapp",
+        data={"enviado": "0"},
+        follow_redirects=True,
+    )
+    item = db.session.get(CentralClienteLink, item.id)
+    assert item.whatsapp_enviado_em is None
+    assert item.whatsapp_enviado_por_user_id is None
+    assert AuditLog.query.filter_by(action="central_whatsapp_desmarcado").count() == 1
+
+
+def test_marcar_whatsapp_preserva_a_busca(app, admin_client):
+    """Sem isso o usuário perde o lugar na lista a cada marcação."""
+    lote = _lote_com_itens("VILLEFORT TROPICAL", "RP TENNIS CLUB")
+    item = lote.itens[0]
+
+    resposta = admin_client.post(
+        f"/central-cliente/lote/{lote.id}/item/{item.id}/marcar-whatsapp",
+        data={"enviado": "1", "q": "villefort"},
+    )
+    assert resposta.status_code == 302
+    assert "q=villefort" in resposta.headers["Location"]
+
+
+def test_marcar_whatsapp_de_outro_lote_da_404(app, admin_client):
+    lote_a = _lote_com_itens("CLIENTE A")
+    lote_b = _lote_com_itens("CLIENTE B")
+    item_b = lote_b.itens[0]
+
+    resposta = admin_client.post(
+        f"/central-cliente/lote/{lote_a.id}/item/{item_b.id}/marcar-whatsapp",
+        data={"enviado": "1"},
+    )
+    assert resposta.status_code == 404
+
+
+def test_operador_nao_marca_whatsapp(app, operador_client):
+    lote = _lote_com_itens("VILLEFORT TROPICAL")
+    item = lote.itens[0]
+
+    resposta = operador_client.post(
+        f"/central-cliente/lote/{lote.id}/item/{item.id}/marcar-whatsapp",
+        data={"enviado": "1"},
+    )
+    assert resposta.status_code == 403
+
+
+def test_lote_detalhe_conta_quantos_ja_foram_enviados(app, admin_client):
+    lote = _lote_com_itens("CLIENTE A", "CLIENTE B", "CLIENTE C")
+    admin_client.post(
+        f"/central-cliente/lote/{lote.id}/item/{lote.itens[0].id}/marcar-whatsapp",
+        data={"enviado": "1"},
+    )
+
+    resposta = admin_client.get(f"/central-cliente/lote/{lote.id}")
+    assert resposta.status_code == 200
+    assert b"1/3" in resposta.data
+
+
 def test_exportar_gera_xlsx(app, admin_client):
     admin_client.post(
         "/central-cliente/executar",

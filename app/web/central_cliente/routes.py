@@ -217,7 +217,49 @@ def lote_detalhe(lote_id: int):
     lote = db.session.get(CentralClienteLote, lote_id)
     if lote is None:
         abort(404)
-    return render_template("central_cliente/lote.html", lote=lote)
+
+    # Busca por nome: a operação percorre a lista na ordem da PowerCentral
+    # e procura cliente por cliente aqui — num lote de 100+ itens, rolar a
+    # tabela inteira a cada um é inviável. Filtra em memória (os itens do
+    # lote já estão carregados; nem vale uma query nova).
+    busca = (request.args.get("q") or "").strip()
+    itens = lote.itens
+    if busca:
+        alvo = busca.lower()
+        itens = [item for item in itens if alvo in (item.nome or "").lower()]
+
+    return render_template(
+        "central_cliente/lote.html",
+        lote=lote,
+        itens=itens,
+        busca=busca,
+        total_enviados=sum(1 for item in lote.itens if item.whatsapp_enviado_em),
+    )
+
+
+@bp.route("/lote/<int:lote_id>/item/<int:item_id>/marcar-whatsapp", methods=["POST"])
+@login_required
+@roles_required("admin")
+def marcar_whatsapp(lote_id: int, item_id: int):
+    """Marca/desmarca "enviei o WhatsApp deste" — controle manual de onde
+    a operação parou. Volta pra mesma busca em que o usuário estava, senão
+    ele perde o lugar na lista a cada clique."""
+    item = db.session.get(CentralClienteLink, item_id)
+    if item is None or item.lote_id != lote_id:
+        abort(404)
+
+    enviado = request.form.get("enviado") == "1"
+    central_cliente_service.marcar_whatsapp_enviado(item, enviado=enviado, user=current_user)
+    db.session.commit()
+
+    return redirect(
+        url_for(
+            "central_cliente.lote_detalhe",
+            lote_id=lote_id,
+            q=request.form.get("q") or None,
+            _anchor=f"item-{item_id}",
+        )
+    )
 
 
 @bp.route("/lote/<int:lote_id>/item/<int:item_id>/whatsapp")
