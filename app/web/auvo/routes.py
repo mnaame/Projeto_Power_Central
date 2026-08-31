@@ -182,6 +182,7 @@ def _form_configuracao_preenchido() -> ConfiguracaoAuvoForm:
         responsavel_id=settings_service.get_auvo_responsavel_id(),
         atribuir_responsavel=settings_service.auvo_atribuir_responsavel(),
         task_type=settings_service.get_auvo_task_type(),
+        task_type_sem_comunicacao=settings_service.get_auvo_task_type_sem_comunicacao(),
         priority=str(settings_service.get_auvo_priority()),
         cooldown_horas=settings_service.get_auvo_cooldown_horas(),
         sem_comunicacao_horas_minimas=settings_service.get_auvo_sem_comunicacao_horas_minimas(),
@@ -241,6 +242,11 @@ def salvar_configuracao():
         updated_by_id=current_user.id,
     )
     settings_service.set("auvo_task_type", _opcional(form.task_type.data), updated_by_id=current_user.id)
+    settings_service.set(
+        "auvo_task_type_sem_comunicacao",
+        _opcional(form.task_type_sem_comunicacao.data),
+        updated_by_id=current_user.id,
+    )
     settings_service.set("auvo_priority", form.priority.data, updated_by_id=current_user.id)
     for campo in _CONFIG_KEYS:
         settings_service.set(
@@ -253,7 +259,11 @@ def salvar_configuracao():
         action="auvo_config_saved",
         result="success",
         user=current_user,
-        details={"criador_id": form.criador_id.data, "task_type": form.task_type.data},
+        details={
+            "criador_id": form.criador_id.data,
+            "task_type": form.task_type.data,
+            "task_type_sem_comunicacao": form.task_type_sem_comunicacao.data,
+        },
     )
     db.session.commit()
     flash("Configuração da Auvo salva.", "info")

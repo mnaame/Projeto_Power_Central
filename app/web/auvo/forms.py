@@ -24,7 +24,11 @@ class ConfiguracaoAuvoForm(FlaskForm):
     )
     atribuir_responsavel = BooleanField("Atribuir a tarefa ao responsável")
     task_type = IntegerField(
-        "Tipo de tarefa (taskType)", validators=[Optional(), NumberRange(min=1)]
+        "Tipo de tarefa padrão (taskType)", validators=[Optional(), NumberRange(min=1)]
+    )
+    task_type_sem_comunicacao = IntegerField(
+        "Tipo de tarefa — falha de comunicação (taskType)",
+        validators=[Optional(), NumberRange(min=1)],
     )
     priority = SelectField(
         "Prioridade",

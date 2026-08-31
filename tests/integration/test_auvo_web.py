@@ -83,6 +83,7 @@ def test_admin_salva_configuracao(app, admin_client):
             "responsavel_id": "159336",
             "atribuir_responsavel": "y",
             "task_type": "145696",
+            "task_type_sem_comunicacao": "145700",
             "priority": "3",
             "cooldown_horas": "24",
             "sem_comunicacao_horas_minimas": "4",
@@ -98,6 +99,7 @@ def test_admin_salva_configuracao(app, admin_client):
     assert resposta.status_code == 200
     assert settings_service.get_auvo_criador_id() == 238031
     assert settings_service.get_auvo_task_type() == 145696
+    assert settings_service.get_auvo_task_type_sem_comunicacao() == 145700
     assert settings_service.get_auvo_priority() == 3
     assert settings_service.get_auvo_cooldown_horas() == 24.0
     assert settings_service.get_auvo_disparos_minimos_tarefa() == 8

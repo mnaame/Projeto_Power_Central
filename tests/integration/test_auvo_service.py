@@ -196,6 +196,42 @@ def test_aberta_monta_payload_validado(app):
     assert "22/07/2026 03:00" in descricao
 
 
+def test_sem_comunicacao_usa_task_type_proprio_quando_configurado(app):
+    """Chamado de sem-comunicação deve abrir como "falha de comunicação",
+    não como alarme — pedido da operação."""
+    _depara()
+    _producao()
+    settings_service.set("auvo_task_type_sem_comunicacao", "145700")
+    fake = FakeAuvoClient()
+
+    _abrir(app, client=fake, gatilho="sem_comunicacao")
+
+    assert fake.payloads[0]["taskType"] == 145700
+
+
+def test_disparos_continua_no_task_type_padrao(app):
+    _depara()
+    _producao()
+    settings_service.set("auvo_task_type_sem_comunicacao", "145700")
+    fake = FakeAuvoClient()
+
+    _abrir(app, client=fake, gatilho="disparos")
+
+    assert fake.payloads[0]["taskType"] == 145696
+
+
+def test_task_type_sem_comunicacao_vazio_cai_no_padrao(app):
+    """Compatibilidade: quem não preencher o campo novo continua abrindo
+    tudo com o tipo único, como antes da separação."""
+    _depara()
+    _producao()
+    fake = FakeAuvoClient()
+
+    _abrir(app, client=fake, gatilho="sem_comunicacao")
+
+    assert fake.payloads[0]["taskType"] == 145696
+
+
 def test_atribuir_desligado_omite_iduserto(app):
     _depara()
     _producao(responsavel="159336", atribuir="false")

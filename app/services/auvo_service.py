@@ -67,15 +67,32 @@ def renderizar_template(gatilho: str, parte: str, contexto: dict) -> str:
     return template.format_map(_Contexto(contexto))
 
 
-def montar_payload(id_auvo: int, titulo: str, descricao: str) -> dict:
+def task_type_do_gatilho(gatilho: str | None) -> int | None:
+    """Tipo de tarefa a usar na Auvo. Sem-comunicação pode ter tipo próprio
+    (`auvo_task_type_sem_comunicacao`) para o chamado abrir como "falha de
+    comunicação" em vez de alarme — vazio cai no `auvo_task_type` geral,
+    que é o comportamento de antes de existir a separação. Serve também
+    para o BI: com tipos distintos dá pra contar só as visitas de alarme
+    (`bi_tipos_intervencao`)."""
+    if gatilho == GATILHO_SEM_COMUNICACAO:
+        especifico = settings_service.get_auvo_task_type_sem_comunicacao()
+        if especifico is not None:
+            return especifico
+    return settings_service.get_auvo_task_type()
+
+
+def montar_payload(
+    id_auvo: int, titulo: str, descricao: str, *, gatilho: str | None = None
+) -> dict:
     """O payload validado (§2): título na 1ª linha da orientation, sem
-    keyWords, prioridade numérica; idUserTo só quando atribuição ligada."""
+    keyWords, prioridade numérica; idUserTo só quando atribuição ligada.
+    `gatilho` escolhe o tipo de tarefa (ver `task_type_do_gatilho`)."""
     corpo: dict = {
         "customerId": int(id_auvo),
         "orientation": f"{titulo}\n{descricao}" if titulo else descricao,
         "priority": settings_service.get_auvo_priority(),
     }
-    task_type = settings_service.get_auvo_task_type()
+    task_type = task_type_do_gatilho(gatilho)
     if task_type is not None:
         corpo["taskType"] = task_type
     criador = settings_service.get_auvo_criador_id()
@@ -279,7 +296,7 @@ def abrir_chamado(
     contexto_completo.setdefault("nome", nome)
     titulo = renderizar_template(gatilho, "titulo", contexto_completo)
     descricao = renderizar_template(gatilho, "descricao", contexto_completo)
-    payload = montar_payload(linha.id_auvo, titulo, descricao)
+    payload = montar_payload(linha.id_auvo, titulo, descricao, gatilho=gatilho)
 
     if settings_service.auvo_simulacao():
         logger.info(

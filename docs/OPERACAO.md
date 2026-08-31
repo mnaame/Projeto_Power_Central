@@ -380,6 +380,13 @@ produção, cada chamado despacha um técnico de verdade.
    tarefa" e "clientes" listam os IDs direto da Auvo. Se não houver
    responsável apto, deixe "Atribuir ao responsável" desligado — a tarefa
    cai em "Tarefas sem agendamento" na Auvo, para distribuição manual.
+   > **Tipo de tarefa por gatilho**: o *Tipo de tarefa padrão* vale para
+   > os chamados de disparo (alarme). O campo *Tipo de tarefa — falha de
+   > comunicação* separa o outro gatilho: preenchido, os chamados de
+   > sem-comunicação abrem com esse tipo, e não mais como alarme. Vazio,
+   > tudo continua abrindo com o tipo padrão (comportamento de antes).
+   > Além de organizar a Auvo, isso é o que permite o BI de Eficácia do
+   > Técnico contar só as visitas de alarme — veja §5.2.4.
 3. **Réguas**: cooldown (não reabre a mesma conta antes de X horas — padrão
    12), horas mínimas de sem-comunicação (padrão 3) e mínimo de disparos
    (padrão 5).
@@ -501,7 +508,17 @@ qualquer um.
 **Configuração** (Eficácia do Técnico → Configuração, só admin): janela
 antes/depois, limiares de melhora/piora, tipos de tarefa que contam como
 intervenção (vazio = todos), visitas mínimas para virar crônico, período
-padrão de análise e amostra mínima por técnico. A tela também deixa
+padrão de análise e amostra mínima por técnico.
+
+> **"Tipos de tarefa que contam" é o filtro que separa alarme do resto.**
+> Vazio, **toda** ordem concluída na Auvo daquela loja vira intervenção —
+> CFTV, manutenção, o que for — e o número do técnico fica misturado.
+> Para contar só alarme, preencha aqui o(s) `taskType` de alarme (os IDs
+> aparecem em Chamados → Configuração, botão "tipos de tarefa"). Como os
+> chamados de sem-comunicação podem abrir com tipo próprio (§5.2.2), eles
+> ficam naturalmente de fora ao filtrar pelo tipo de alarme. Mudar o
+> filtro só vale para novos recálculos — clique em "Recalcular" para
+> aplicar ao período em análise. A tela também deixa
 ajustar janela e limiares por recálculo, em "avançado" — a configuração
 aqui é só o padrão.
 

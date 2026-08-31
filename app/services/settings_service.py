@@ -43,6 +43,9 @@ DEFAULTS: dict[str, str] = {
     "auvo_responsavel_id": "",
     "auvo_atribuir_responsavel": "true",
     "auvo_task_type": "",
+    # Vazio = usa `auvo_task_type`. Preenchido, o chamado de sem-comunicação
+    # abre com tipo próprio ("falha de comunicação"), separado do de alarme.
+    "auvo_task_type_sem_comunicacao": "",
     "auvo_priority": "2",
     "auvo_cooldown_horas": "12",
     "auvo_sem_comunicacao_horas_minimas": "3",
@@ -248,6 +251,10 @@ def auvo_atribuir_responsavel() -> bool:
 
 def get_auvo_task_type() -> int | None:
     return _int_ou_none("auvo_task_type")
+
+
+def get_auvo_task_type_sem_comunicacao() -> int | None:
+    return _int_ou_none("auvo_task_type_sem_comunicacao")
 
 
 def get_auvo_priority() -> int:

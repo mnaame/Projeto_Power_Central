@@ -100,7 +100,12 @@ mecanismo das credenciais do Telegram; nunca em código/repositório.
 Em claro: `auvo_simulacao` (**padrão true**), `auvo_criador_id`
 (idUserFrom), `auvo_responsavel_id` (idUserTo), `auvo_atribuir_responsavel`
 (bool — desligado ⇒ omite `idUserTo`, tarefa cai em "sem agendamento"),
-`auvo_task_type`, `auvo_priority` (1/2/3, padrão 2),
+`auvo_task_type` (tipo padrão — disparos/alarme e qualquer gatilho sem
+tipo próprio), `auvo_task_type_sem_comunicacao` (vazio = usa o padrão;
+preenchido, o chamado de sem-comunicação abre com tipo próprio, separando
+"falha de comunicação" de "alarme" na Auvo — e permitindo que o BI conte
+só as visitas de alarme via `bi_tipos_intervencao`; resolvido em
+`auvo_service.task_type_do_gatilho`), `auvo_priority` (1/2/3, padrão 2),
 `auvo_cooldown_horas` (12), `auvo_sem_comunicacao_horas_minimas` (3),
 `auvo_disparos_minimos_tarefa` (5), e os 4 templates (título/descrição ×
 sem-comunicação/disparos) com placeholders `{conta}`, `{nome}`,
@@ -148,6 +153,7 @@ Página protegida (operador vê; admin configura), link na sidebar após
 | **C2** ✓ | `auvo_service.py` completo + gatilhos plugados (coletor e disparos) | Integração: todos os resultados (`aberta`/`simulada`/`falha`/`repetida`/`sem_depara`), dedup, réguas, templates |
 | **C3** ✓ | Aba web completa (cards, toggle c/ confirmação, config, teste em níveis, de-para, histórico) | Integração web + screenshots claro/escuro (Playwright) |
 | **C4** ✓ | Retenção de `auvo_chamados` + docs (`OPERACAO.md` §5.2.2) | Suíte completa verde |
+| **C5** ✓ | Tipo de tarefa por gatilho (`auvo_task_type_sem_comunicacao`, `task_type_do_gatilho`) — sem-comunicação abre como "falha de comunicação", não como alarme; vazio mantém o tipo único de antes | Integração (gatilho sem-comunicação usa o tipo próprio, disparos segue no padrão, campo vazio cai no padrão) + web (campo novo salva e audita) + screenshot |
 
 O histórico de chamados entra na retenção diária junto com ciclos,
 auditoria e relatórios (mesma janela configurável, padrão 90 dias).

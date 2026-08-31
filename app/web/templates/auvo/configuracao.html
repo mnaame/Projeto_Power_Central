@@ -101,7 +101,29 @@
         em "Tarefas sem agendamento" na Auvo.
       </p>
 
-      {% for campo in [form.task_type, form.priority, form.cooldown_horas,
+      <div class="field">
+        {{ form.task_type.label }}
+        {{ form.task_type() }}
+        {% for mensagem in form.task_type.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      <p class="muted" style="margin-top: calc(-1 * var(--space-3)); font-size: var(--font-size-xs);">
+        Usado nos chamados de disparo (alarme) e em qualquer gatilho que não
+        tenha tipo próprio abaixo.
+      </p>
+
+      <div class="field">
+        {{ form.task_type_sem_comunicacao.label }}
+        {{ form.task_type_sem_comunicacao() }}
+        {% for mensagem in form.task_type_sem_comunicacao.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      <p class="muted" style="margin-top: calc(-1 * var(--space-3)); font-size: var(--font-size-xs);">
+        Deixe vazio para abrir igual ao padrão. Preenchido, os chamados de
+        <strong>sem comunicação</strong> abrem com esse tipo — separando
+        "falha de comunicação" de "alarme" na Auvo (e permitindo contar só
+        as visitas de alarme no BI de Eficácia do Técnico).
+      </p>
+
+      {% for campo in [form.priority, form.cooldown_horas,
                        form.sem_comunicacao_horas_minimas, form.disparos_minimos_tarefa,
                        form.disp_geral_minimos_tarefa] %}
       <div class="field">
