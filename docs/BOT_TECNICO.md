@@ -152,9 +152,13 @@ pedido.
 
 | Comando | O que faz |
 |---|---|
-| `/relatorio <conta> [dias]` | Histórico de eventos: arquivo `.xls` nativo (com as cores da plataforma) via `sendDocument` + resumo curto na legenda (conta, período, nº de eventos — contado do próprio arquivo, ver §4.1) |
-| `/zona <conta ou nome>` | Zoneamento completo, em texto monoespaçado |
+| `/relatorio <conta>[/partição] [dias]` | Histórico de eventos em **dois arquivos**: `.xls` nativo (cores da plataforma, abre no PC) e `.pdf` (abre no celular sem app de planilha) + resumo na legenda do primeiro |
+| `/zona <conta ou nome>[/partição]` | Zoneamento completo, em texto monoespaçado |
+| `/clientes [filtro]` | Lista a base com as partições; filtro por nome ou número |
 | `/ajuda` | Lista os comandos (não consome cooldown) |
+
+**Partições** (§4.2): conta dividida em setores (loja, tesouraria). O
+técnico escreve `95/2`; se não disser qual, o bot lista e pergunta.
 
 ### 4.1 O total de eventos sai do arquivo, não de `buscar_historico`
 
@@ -173,6 +177,40 @@ leitura do HTML já validadas em `montar_workbook_colorido`.
 Quando o export é **recusado por permissão** do usuário de integração, o
 bot diz isso em vez de "tente de novo": repetir não resolve, e o técnico
 precisa saber que o caminho é avisar o escritório.
+
+### 4.2 Partições
+
+Uma conta pode ser dividida em setores independentes. No portal cada um é
+uma linha própria de `CuentaByDealer`, com o mesmo `cue_ncuenta` e o seu
+**`cue_iid`** — e é o `cue_iid` que o zoneamento e o export usam. Escolher
+a partição é escolher qual `cue_iid` consultar.
+
+O resto do sistema filtra `cue_nparticion = 0` e nunca precisou disso; o
+bot é o primeiro, porque o técnico em campo trabalha no setor. Por isso
+`listar_todas_contas(incluir_particoes=True)` é **opt-in**: ligar por
+padrão duplicaria conta e trocaria o `cue_iid` em relatórios, BI e
+Relatório do Técnico.
+
+Sintaxe `conta/partição` (`95/2`). A barra não colide com nada — o hífen
+colidiria com o formato que o portal mostra ("MIL-0334") e o ponto
+pareceria decimal. O técnico não precisa decorar: a lista de partições
+imprime o comando pronto para copiar.
+
+Conta com mais de uma linha **sempre** pergunta, inclusive incluindo a
+partição 0 na lista. A partição 0 é o registro principal, não um setor —
+mas só quem conhece o local sabe se o evento procurado está nela ou num
+setor, então o bot não decide por ninguém (mesma disciplina do nome
+ambíguo).
+
+### 4.3 Os dois formatos do relatório
+
+`.xls` nativo e `.pdf`, do **mesmo** `linhas_do_export` — se um divergisse
+do outro, o técnico não saberia em qual acreditar. O `.xls` mantém as
+cores da plataforma e abre no PC; o PDF (reportlab, paisagem, cabeçalho
+repetido por página) abre no celular sem app de planilha. A legenda com o
+resumo vai só no primeiro, para não repetir no chat. O nome do arquivo
+carrega a partição (`P1`), senão dois setores da mesma conta gerariam
+arquivos de nome igual no mesmo chat.
 
 O zoneamento vai em `<pre>` para as colunas não desalinharem no celular;
 zoneamento grande é quebrado em várias mensagens (limite de 4096 do
@@ -200,13 +238,19 @@ bot/token já cifrado do Telegram — sem segredo novo.
 
 | **BT5** ✅ | Correções do primeiro dia em produção: `/relatorio` usava `buscar_historico` (sem filtro de conta) para o resumo, e a sessão reaproveitada nunca relogava — o portal responde 500, não 401, e o bot emudecia até reiniciar | Integração: `/relatorio` não chama `buscar_historico`, sessão vencida reloga e o comando passa, portal fora de verdade desiste depois de uma tentativa, falha registra o que foi pedido |
 
+| **BT6** ✅ | Partições (`domain/contas.py`, `/clientes`, `conta/partição` em `/zona` e `/relatorio`) + relatório em `.xls` **e** `.pdf` | Unit: leitura defensiva de `cue_nparticion`, agrupamento, escolha, listagem/filtro; integração: conta com partições pergunta em vez de chutar, `95/2` usa o `cue_iid` da partição, `/clientes` pede as partições ao portal, `/relatorio` manda os dois arquivos do mesmo conteúdo |
+
 ## 7. Em aberto
 
-- **Relatório em PDF** (`bot_saida_pdf` do complemento original) **não foi
-  implementado**: converter o HTML nativo em PDF exige uma dependência
-  nova (wkhtmltopdf/WeasyPrint), que no Windows é instalação à parte. O
-  `.xls` nativo — que é o padrão pedido no próprio complemento — está
-  entregue. Decidir a ferramenta antes de implementar; uma chave de config
-  que não faz nada seria pior que a ausência dela.
-- **`/zona <conta> completo`** (incluir as partições) fica como fase 2, já
-  previsto no complemento.
+- **A estrutura das partições NÃO foi validada contra o portal real.** O
+  código assume que, sem o recorte `cue_nparticion = 0`, o
+  `CuentaByDealer` devolve uma linha por partição com `cue_iid` próprio.
+  É a leitura mais natural do filtro que já existia, mas é leitura — não
+  HAR. Rodar `python scripts\debug_particoes.py` **antes de confiar**: ele
+  mostra quantas contas têm partições, se o `cue_iid` muda entre elas
+  (se não mudar, escolher a partição não muda o resultado) e as chaves
+  cruas da resposta. Mesmo processo que validou `finished`/`taskStatus` no
+  BI. O código é defensivo — partição ausente ou inválida vira 0, e pior
+  caso é o bot listar só as contas principais, nunca quebrar.
+- **Dependência nova**: `reportlab` (pura Python, instala com pip no
+  Windows) para o PDF. Requer `pip install -r requirements.txt` no deploy.

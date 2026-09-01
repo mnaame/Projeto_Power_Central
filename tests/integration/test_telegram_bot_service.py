@@ -6,9 +6,13 @@ from app.services import settings_service
 from app.services import telegram_bot_service as svc
 
 CONTAS = [
-    {"cue_ncuenta": "0095", "cue_iid": "9516", "cue_cnombre": "AUTO MECANICA CENTRO"},
-    {"cue_ncuenta": "0010", "cue_iid": "9530", "cue_cnombre": "VILLEFORT HM"},
-    {"cue_ncuenta": "0011", "cue_iid": "9531", "cue_cnombre": "VILLEFORT HM DEPOSITO"},
+    {"cue_ncuenta": "0095", "cue_nparticion": 0, "cue_iid": "9516", "cue_cnombre": "AUTO MECANICA CENTRO"},
+    {"cue_ncuenta": "0010", "cue_nparticion": 0, "cue_iid": "9530", "cue_cnombre": "VILLEFORT HM"},
+    {"cue_ncuenta": "0011", "cue_nparticion": 0, "cue_iid": "9531", "cue_cnombre": "VILLEFORT HM DEPOSITO"},
+    # conta com partições: loja e tesouraria do mesmo local
+    {"cue_ncuenta": "0043", "cue_nparticion": 0, "cue_iid": "9700", "cue_cnombre": "PET PARA PETS"},
+    {"cue_ncuenta": "0043", "cue_nparticion": 1, "cue_iid": "9701", "cue_cnombre": "PET PARA PETS - LOJA"},
+    {"cue_ncuenta": "0043", "cue_nparticion": 2, "cue_iid": "9702", "cue_cnombre": "PET PARA PETS - TESOURARIA"},
 ]
 
 # Formato do export nativo: cabeçalho + uma linha por evento.
@@ -85,10 +89,15 @@ class SessaoFake:
     def client(self):
         return self._client
 
-    def mapa_contas(self):
-        from app.domain import tecnico as dom_tecnico
+    def contas(self):
+        from app.domain import contas as dom_contas
 
-        return dom_tecnico.mapa_contas(CONTAS)
+        return dom_contas.contas_da_resposta(CONTAS)
+
+    def contas_por_numero(self):
+        from app.domain import contas as dom_contas
+
+        return dom_contas.agrupar_por_numero(self.contas())
 
     def invalidar(self):
         self.invalidada = True
@@ -446,7 +455,7 @@ def test_relatorio_tambem_reloga(app, autorizado):
     sessao = SessaoQueRenova(SoftGuardQueMorreUmaVez())
     telegram, _ = _processar(app, "/relatorio 95", sessao=sessao)
 
-    assert len(telegram.documentos) == 1
+    assert len(telegram.documentos) == 2  # .xls e .pdf
 
 
 def test_portal_fora_de_verdade_desiste_depois_de_uma_tentativa(app, autorizado):
@@ -466,3 +475,100 @@ def test_falha_registra_o_que_foi_pedido(app, autorizado):
 
     entrada = AuditLog.query.filter_by(action="bot_zona_pedido").one()
     assert entrada.details["pedido"] == "pet para pets"
+
+
+# ---------- partições, /clientes e os dois formatos ----------
+
+
+def test_relatorio_manda_xls_e_pdf(app, autorizado):
+    """Os dois do MESMO conteúdo: .xls abre no PC com as cores da
+    plataforma, PDF abre no celular sem app de planilha."""
+    telegram, sessao = _processar(app, "/relatorio 95")
+
+    assert sessao.client().exports == 1  # uma consulta só ao portal
+    nomes = [nome for _, nome, _, _ in telegram.documentos]
+    assert nomes == ["0095_AUTO MECANICA CENTRO.xls", "0095_AUTO MECANICA CENTRO.pdf"]
+
+    pdf = telegram.documentos[1][3]
+    assert pdf.startswith(b"%PDF-")
+
+
+def test_legenda_vai_so_no_primeiro_arquivo(app, autorizado):
+    """Repetir o resumo nos dois polui o chat."""
+    telegram, _ = _processar(app, "/relatorio 95")
+    assert telegram.documentos[0][2]
+    assert telegram.documentos[1][2] == ""
+
+
+def test_zona_de_conta_com_particoes_pergunta_qual(app, autorizado):
+    telegram, sessao = _processar(app, "/zona 43")
+
+    assert sessao.client().zonas_pedidas == []  # não chutou o setor
+    assert "tem 3 partições" in telegram.texto_completo
+    assert "/zona 43/2" in telegram.texto_completo
+
+
+def test_zona_com_particao_escolhida_usa_o_id_da_particao(app, autorizado):
+    telegram, sessao = _processar(app, "/zona 43/2")
+    assert sessao.client().zonas_pedidas == ["9702"]
+
+
+def test_relatorio_com_particao_e_dias(app, autorizado):
+    telegram, _ = _processar(app, "/relatorio 43/1 15")
+
+    assert "15 dia(s)" in telegram.documentos[0][2]
+    assert "43/1" in telegram.documentos[0][2]
+    # partição entra no nome do arquivo: senão dois setores da mesma conta
+    # gerariam arquivos de nome igual no mesmo chat
+    assert "P1" in telegram.documentos[0][1]
+
+
+def test_relatorio_de_conta_com_particoes_tambem_pergunta(app, autorizado):
+    telegram, sessao = _processar(app, "/relatorio 43")
+
+    assert telegram.documentos == []
+    assert "/relatorio 43/1" in telegram.texto_completo
+
+
+def test_clientes_lista_a_base_com_particoes(app, autorizado):
+    telegram, _ = _processar(app, "/clientes")
+
+    texto = telegram.texto_completo
+    assert "AUTO MECANICA CENTRO" in texto
+    assert "43/1 — PET PARA PETS - LOJA" in texto
+    assert AuditLog.query.filter_by(action="bot_clientes_pedido").one().result == "success"
+
+
+def test_clientes_aceita_filtro(app, autorizado):
+    telegram, _ = _processar(app, "/clientes villefort")
+
+    texto = telegram.texto_completo
+    assert "VILLEFORT HM" in texto
+    assert "AUTO MECANICA" not in texto
+
+
+def test_clientes_sem_resultado_avisa(app, autorizado):
+    telegram, _ = _processar(app, "/clientes padaria")
+    assert "Nenhum cliente encontrado" in telegram.texto_completo
+
+
+def test_clientes_pede_as_particoes_ao_portal(app, autorizado):
+    """Sem `incluir_particoes` o portal devolve só a partição 0 — a lista
+    sairia sem os setores, que é justamente o que o técnico precisa ver."""
+    chamadas = {}
+
+    class ClientQueRegistra(FakeSoftGuard):
+        def listar_todas_contas(self, **kwargs):
+            chamadas.update(kwargs)
+            return CONTAS
+
+    class SessaoReal(SessaoFake):
+        def contas(self):
+            from app.domain import contas as dom_contas
+
+            return dom_contas.contas_da_resposta(
+                self.client().listar_todas_contas(incluir_particoes=True)
+            )
+
+    _processar(app, "/clientes", sessao=SessaoReal(ClientQueRegistra()))
+    assert chamadas.get("incluir_particoes") is True

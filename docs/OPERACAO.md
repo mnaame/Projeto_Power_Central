@@ -707,12 +707,22 @@ outro nem outro token.
 
 Comandos (o técnico manda direto pro bot ou num grupo onde ele esteja):
 
-- **`/relatorio <conta> [dias]`** — histórico de eventos da conta. Volta o
-  arquivo do jeito nativo da plataforma (com as cores), mais um resumo na
+- **`/relatorio <conta> [dias]`** — histórico de eventos da conta. Volta
+  **dois arquivos**: o `.xls` nativo (com as cores, abre no PC) e o `.pdf`
+  (abre no celular sem precisar de app de planilha), mais um resumo na
   legenda. Ex.: `/relatorio 95` (usa os dias padrão) ou `/relatorio 95 15`.
 - **`/zona <conta ou nome>`** — zoneamento completo do cliente: número da
   zona, descrição e o alarme que ela gera.
+- **`/clientes [filtro]`** — lista os clientes da base, já com as
+  partições. Ex.: `/clientes` (tudo) ou `/clientes villefort`.
 - **`/ajuda`** — lista os comandos.
+
+**Contas com partição** (loja e tesouraria no mesmo local, por exemplo):
+se a conta tiver mais de uma, o bot **lista e pergunta qual** em vez de
+escolher — e já mostra o comando pronto para copiar
+(`/zona 43/2 — PET PARA PETS - TESOURARIA`). Para ir direto, use
+`conta/partição`: `/zona 43/2`, `/relatorio 43/1 15`. Vale nos dois
+comandos.
 
 A conta pode ser o **número** (`95`, `0095`) ou **parte do nome**
 (`/zona auto mecanica`). Se o nome casar com mais de um cliente, o bot

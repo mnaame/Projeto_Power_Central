@@ -14,6 +14,7 @@ from __future__ import annotations
 import html as _html
 import re
 import unicodedata
+from dataclasses import dataclass
 from typing import Mapping, Sequence
 
 from openpyxl import Workbook
@@ -152,22 +153,52 @@ def _texto_da_celula(conteudo: str) -> str:
     return _html.unescape(texto).replace("\xa0", " ").strip()
 
 
+@dataclass(frozen=True)
+class CelulaExport:
+    texto: str
+    cor_fundo: str | None
+    cor_texto: str | None
+
+
+def _para_texto(conteudo: bytes | str) -> str:
+    return conteudo.decode("utf-8", "replace") if isinstance(conteudo, bytes) else conteudo
+
+
+def linha_e_cabecalho(linha: Sequence[CelulaExport]) -> bool:
+    return _TEXTO_CABECALHO in " ".join(c.texto for c in linha).lower()
+
+
+def linhas_do_export(conteudo: bytes | str) -> list[list[CelulaExport]]:
+    """Linhas úteis do HTML nativo do export (sem as vazias), com as cores
+    de cada célula. Base única do `.xlsx`, do `.pdf` e da contagem — as
+    três precisam ler o arquivo exatamente do mesmo jeito."""
+    linhas: list[list[CelulaExport]] = []
+    for linha_html in _RE_LINHA.findall(_para_texto(conteudo)):
+        celulas = [
+            CelulaExport(
+                texto=_texto_da_celula(conteudo_cel),
+                cor_fundo=_cor_do_estilo(_estilo(atributos), "background-color"),
+                cor_texto=_cor_do_estilo(_estilo(atributos), "color"),
+            )
+            for atributos, conteudo_cel in _RE_CELULA.findall(linha_html)
+        ]
+        if any(c.texto for c in celulas):
+            linhas.append(celulas)
+    return linhas
+
+
 def contar_eventos_do_export(conteudo: bytes | str) -> int:
     """Quantos eventos o export tem, fora o cabeçalho e as linhas vazias.
 
     Conta a partir do próprio arquivo porque `buscar_historico` NÃO filtra
     por conta — usá-lo para o resumo de uma loja daria o número da base
     inteira (e uma consulta enorme por cima)."""
-    html = conteudo.decode("utf-8", "replace") if isinstance(conteudo, bytes) else conteudo
-    total = 0
-    for linha_html in _RE_LINHA.findall(html):
-        textos = [_texto_da_celula(c) for _, c in _RE_CELULA.findall(linha_html)]
-        if not any(textos):
-            continue
-        if _TEXTO_CABECALHO in " ".join(textos).lower():
-            continue
-        total += 1
-    return total
+    return sum(1 for linha in linhas_do_export(conteudo) if not linha_e_cabecalho(linha))
+
+
+def _estilo(atributos: str) -> str:
+    encontrado = re.search(r'style\s*=\s*"([^"]*)"', atributos or "")
+    return encontrado.group(1) if encontrado else ""
 
 
 def _cor_do_estilo(estilo: str, propriedade: str) -> str | None:
@@ -184,41 +215,121 @@ def montar_workbook_colorido(html: str) -> Workbook:
     planilha = workbook.active
     planilha.title = "Historico"
     cabecalho_marcado = False
-    linha_atual = 1
 
-    for linha_html in _RE_LINHA.findall(html):
-        celulas = _RE_CELULA.findall(linha_html)
-        dados: list[tuple[str, str | None, str | None]] = []
-        for atributos, conteudo_cel in celulas:
-            texto = _texto_da_celula(conteudo_cel)
-            estilo_bruto = re.search(r'style\s*=\s*"([^"]*)"', atributos)
-            estilo = estilo_bruto.group(1) if estilo_bruto else ""
-            dados.append(
-                (texto, _cor_do_estilo(estilo, "background-color"), _cor_do_estilo(estilo, "color"))
-            )
-
-        if not any(texto for texto, _, _ in dados):
-            continue
-
-        eh_cabecalho = _TEXTO_CABECALHO in " ".join(texto for texto, _, _ in dados).lower()
-        for coluna, (texto, cor_fundo, cor_texto) in enumerate(dados, start=1):
-            celula = planilha.cell(row=linha_atual, column=coluna, value=texto)
+    for numero, linha in enumerate(linhas_do_export(html), start=1):
+        eh_cabecalho = linha_e_cabecalho(linha)
+        for coluna, celula_export in enumerate(linha, start=1):
+            celula = planilha.cell(row=numero, column=coluna, value=celula_export.texto)
             if eh_cabecalho:
                 celula.font = Font(bold=True, color="FFFFFF")
                 celula.fill = PatternFill("solid", fgColor=COR_CABECALHO)
             else:
-                if cor_fundo and cor_fundo != "TRANSPARENT":
-                    celula.fill = PatternFill("solid", fgColor="FF" + cor_fundo)
-                if cor_texto:
-                    celula.font = Font(color="FF" + cor_texto)
+                if celula_export.cor_fundo and celula_export.cor_fundo != "TRANSPARENT":
+                    celula.fill = PatternFill("solid", fgColor="FF" + celula_export.cor_fundo)
+                if celula_export.cor_texto:
+                    celula.font = Font(color="FF" + celula_export.cor_texto)
             celula.alignment = Alignment(vertical="top", wrap_text=not eh_cabecalho)
 
         if eh_cabecalho and not cabecalho_marcado:
-            planilha.freeze_panes = f"A{linha_atual + 1}"
+            planilha.freeze_panes = f"A{numero + 1}"
             cabecalho_marcado = True
-            for coluna in range(1, len(dados) + 1):
+            for coluna in range(1, len(linha) + 1):
                 planilha.column_dimensions[get_column_letter(coluna)].width = _LARGURA_COLUNA_PADRAO
 
-        linha_atual += 1
-
     return workbook
+
+
+def montar_pdf_colorido(conteudo: bytes | str, *, titulo: str = "") -> bytes:
+    """Mesmo conteúdo do `.xlsx`, em PDF — abre no celular sem app de
+    planilha. Preserva as cores por tipo de evento, repete o cabeçalho em
+    toda página e usa paisagem (a tabela é larga).
+
+    Lê pelo `linhas_do_export`, então PDF e XLS mostram exatamente as
+    mesmas linhas: se um divergisse do outro, o técnico não saberia em
+    qual acreditar."""
+    from io import BytesIO
+
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    linhas = linhas_do_export(conteudo)
+    estilo_celula = ParagraphStyle("celula", fontName="Helvetica", fontSize=7, leading=9)
+    estilo_cabecalho = ParagraphStyle(
+        "cabecalho", fontName="Helvetica-Bold", fontSize=7, leading=9,
+        textColor=colors.white,
+    )
+
+    dados: list[list] = []
+    comandos: list[tuple] = [
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#B0B0B0")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+    ]
+    indice_cabecalho = None
+    for numero, linha in enumerate(linhas):
+        eh_cabecalho = linha_e_cabecalho(linha)
+        if eh_cabecalho and indice_cabecalho is None:
+            indice_cabecalho = numero
+        estilo = estilo_cabecalho if eh_cabecalho else estilo_celula
+        dados.append([Paragraph(_html.escape(c.texto), estilo) for c in linha])
+
+        if eh_cabecalho:
+            comandos.append(
+                ("BACKGROUND", (0, numero), (-1, numero), colors.HexColor("#" + COR_CABECALHO))
+            )
+            continue
+        for coluna, celula in enumerate(linha):
+            if celula.cor_fundo and celula.cor_fundo != "TRANSPARENT":
+                comandos.append(
+                    (
+                        "BACKGROUND",
+                        (coluna, numero),
+                        (coluna, numero),
+                        colors.HexColor("#" + celula.cor_fundo),
+                    )
+                )
+            if celula.cor_texto:
+                comandos.append(
+                    (
+                        "TEXTCOLOR",
+                        (coluna, numero),
+                        (coluna, numero),
+                        colors.HexColor("#" + celula.cor_texto),
+                    )
+                )
+
+    saida = BytesIO()
+    documento = SimpleDocTemplate(
+        saida,
+        pagesize=landscape(A4),
+        leftMargin=10 * mm, rightMargin=10 * mm,
+        topMargin=10 * mm, bottomMargin=10 * mm,
+        title=titulo or "Histórico",
+    )
+    elementos = []
+    if titulo:
+        elementos.append(
+            Paragraph(
+                _html.escape(titulo),
+                ParagraphStyle("titulo", fontName="Helvetica-Bold", fontSize=11, leading=14),
+            )
+        )
+        elementos.append(Spacer(1, 4 * mm))
+
+    if dados:
+        # `repeatRows` só faz sentido quando o cabeçalho é a 1ª linha —
+        # se vier depois (ou não vier), não repete nada em vez de repetir
+        # uma linha de evento no topo de cada página.
+        repetir = 1 if indice_cabecalho == 0 else 0
+        tabela = Table(dados, repeatRows=repetir, hAlign="LEFT")
+        tabela.setStyle(TableStyle(comandos))
+        elementos.append(tabela)
+    else:
+        elementos.append(Paragraph("Nenhum evento no período.", estilo_celula))
+
+    documento.build(elementos)
+    return saida.getvalue()

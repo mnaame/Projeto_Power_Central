@@ -28,6 +28,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from app.domain import bot_comandos as dom_bot
+from app.domain import contas as dom_contas
 from app.domain import tecnico as dom_tecnico
 from app.domain import zoneamento as dom_zona
 from app.domain.dates import FUSO_HORARIO
@@ -138,7 +139,7 @@ class _SessaoSoftGuard:
         self._config = config
         self._client: SoftGuardClient | None = None
         self._client_em: datetime | None = None
-        self._mapa: dict[str, tuple[str, str]] | None = None
+        self._mapa: list[dom_contas.Conta] | None = None
         self._mapa_em: datetime | None = None
 
     def client(self) -> SoftGuardClient:
@@ -158,16 +159,23 @@ class _SessaoSoftGuard:
         self._mapa = None
         self._mapa_em = None
 
-    def mapa_contas(self) -> dict[str, tuple[str, str]]:
+    def contas(self) -> list[dom_contas.Conta]:
+        """Todas as contas COM as partições — o bot é o único que precisa
+        delas (o técnico trabalha no setor, não na conta inteira)."""
         agora = datetime.now(timezone.utc)
         if (
             self._mapa is None
             or self._mapa_em is None
             or agora - self._mapa_em > self.VALIDADE_MAPA
         ):
-            self._mapa = dom_tecnico.mapa_contas(self.client().listar_todas_contas())
+            self._mapa = dom_contas.contas_da_resposta(
+                self.client().listar_todas_contas(incluir_particoes=True)
+            )
             self._mapa_em = agora
         return self._mapa
+
+    def contas_por_numero(self) -> dict[str, list[dom_contas.Conta]]:
+        return dom_contas.agrupar_por_numero(self.contas())
 
 
 # ----------------------------------------------------------------------
@@ -195,20 +203,25 @@ def _executar_renovando_sessao(funcao, *, sessao):
         return funcao()
 
 
-def _resolver_ou_avisar(termo: str, sessao, telegram, chat_id: str):
+def _resolver_ou_avisar(termo: str, sessao, telegram, chat_id: str, *, comando: str):
     """Devolve a conta resolvida, ou None depois de já ter respondido ao
-    técnico (não encontrada / ambígua). Nunca chuta uma conta."""
-    resolucao = dom_bot.resolver_conta(termo, sessao.mapa_contas())
+    técnico (não encontrada / ambígua / falta escolher a partição). Nunca
+    chuta — nem o cliente, nem o setor."""
+    resolucao = dom_bot.resolver_conta(termo, sessao.contas_por_numero())
     if resolucao.status == dom_bot.RESOLUCAO_OK:
         return resolucao.conta
     if resolucao.status == dom_bot.RESOLUCAO_AMBIGUA:
         _responder(telegram, chat_id, dom_bot.formatar_ambiguidade(resolucao.candidatas))
+    elif resolucao.status == dom_bot.RESOLUCAO_PARTICOES:
+        _responder(
+            telegram, chat_id, dom_bot.formatar_particoes(resolucao.candidatas, comando=comando)
+        )
     else:
         _responder(
             telegram,
             chat_id,
             f'Não achei nenhuma conta com "{termo}". '
-            "Tente o número da conta (ex.: /zona 95).",
+            "Tente o número da conta (ex.: /zona 95) ou veja /clientes.",
         )
     return None
 
@@ -219,18 +232,33 @@ def _comando_zona(argumentos, *, sessao, telegram, chat_id: str) -> str:
         _responder(telegram, chat_id, "Faltou a conta. Ex.: /zona 95")
         return ""
 
-    conta = _resolver_ou_avisar(termo, sessao, telegram, chat_id)
+    conta = _resolver_ou_avisar(
+        termo, sessao, telegram, chat_id, comando=dom_bot.COMANDO_ZONA
+    )
     if conta is None:
         return ""
 
     zonas = dom_zona.zonas_da_resposta(sessao.client().listar_zonas(conta.cue_iid))
     texto = dom_zona.formatar_zoneamento(
-        zonas, numero_conta=conta.numero, nome_cliente=conta.nome
+        zonas, numero_conta=conta.identificacao, nome_cliente=conta.nome
     )
     for mensagem in _mensagens_monoespacadas(texto):
         telegram.enviar_mensagem(mensagem, chat_id=chat_id)
     _responder(telegram, chat_id, dom_bot.aviso_uso_interno())
     return conta.numero
+
+
+def _comando_clientes(argumentos, *, sessao, telegram, chat_id: str) -> str:
+    """Lista a base com as partições. Monoespaçado e quebrado em várias
+    mensagens quando for grande (a base real passa de 100 linhas)."""
+    filtro = " ".join(argumentos).strip()
+    encontradas = dom_bot.filtrar_clientes(sessao.contas(), filtro)
+    texto = dom_bot.formatar_lista_clientes(encontradas, filtro=filtro)
+    for mensagem in _mensagens_monoespacadas(texto):
+        telegram.enviar_mensagem(mensagem, chat_id=chat_id)
+    if encontradas:
+        _responder(telegram, chat_id, dom_bot.aviso_uso_interno())
+    return ""
 
 
 def _comando_relatorio(argumentos, *, sessao, telegram, chat_id: str) -> str:
@@ -239,7 +267,9 @@ def _comando_relatorio(argumentos, *, sessao, telegram, chat_id: str) -> str:
         _responder(telegram, chat_id, "Faltou a conta. Ex.: /relatorio 95 7")
         return ""
 
-    conta = _resolver_ou_avisar(termo, sessao, telegram, chat_id)
+    conta = _resolver_ou_avisar(
+        termo, sessao, telegram, chat_id, comando=dom_bot.COMANDO_RELATORIO
+    )
     if conta is None:
         return ""
 
@@ -262,17 +292,29 @@ def _comando_relatorio(argumentos, *, sessao, telegram, chat_id: str) -> str:
         codigos_alarme=codigos,
     )
 
+    identificacao = conta.identificacao
     resumo = dom_bot.formatar_resumo_relatorio(
-        numero_conta=conta.numero,
+        numero_conta=identificacao,
         nome_cliente=conta.nome,
         dias=dias,
         total_eventos=dom_tecnico.contar_eventos_do_export(conteudo),
     )
+    legenda = html.escape(f"{resumo}\n{dom_bot.aviso_uso_interno()}")
+
+    # Os DOIS formatos, do mesmo conteúdo: o .xls nativo abre no PC com as
+    # cores da plataforma; o PDF abre no celular sem app de planilha. Os
+    # dois saem do mesmo `linhas_do_export`, então não há risco de um
+    # mostrar coisa diferente do outro.
+    base = dom_tecnico.nome_arquivo_loja(
+        conta.numero, f"{conta.nome}{conta.sufixo_arquivo}", extensao=""
+    )
     telegram.enviar_documento(
-        conteudo,
-        nome_arquivo=dom_tecnico.nome_arquivo_loja(conta.numero, conta.nome),
+        conteudo, nome_arquivo=f"{base}xls", chat_id=chat_id, legenda=legenda
+    )
+    telegram.enviar_documento(
+        dom_tecnico.montar_pdf_colorido(conteudo, titulo=f"{resumo.splitlines()[0]}"),
+        nome_arquivo=f"{base}pdf",
         chat_id=chat_id,
-        legenda=html.escape(f"{resumo}\n{dom_bot.aviso_uso_interno()}"),
     )
     return conta.numero
 
@@ -330,10 +372,17 @@ def processar_update(update: dict, *, config, sessao, telegram) -> None:
         _responder(telegram, chat_id, f"Calma aí — tente de novo em {espera}s.")
         return
 
-    acao = (
-        "bot_zona_pedido" if comando.nome == dom_bot.COMANDO_ZONA else "bot_relatorio_pedido"
-    )
-    executor = _comando_zona if comando.nome == dom_bot.COMANDO_ZONA else _comando_relatorio
+    acao = {
+        dom_bot.COMANDO_ZONA: "bot_zona_pedido",
+        dom_bot.COMANDO_CLIENTES: "bot_clientes_pedido",
+        dom_bot.COMANDO_RELATORIO: "bot_relatorio_pedido",
+    }[comando.nome]
+    executores = {
+        dom_bot.COMANDO_ZONA: _comando_zona,
+        dom_bot.COMANDO_CLIENTES: _comando_clientes,
+        dom_bot.COMANDO_RELATORIO: _comando_relatorio,
+    }
+    executor = executores[comando.nome]
     try:
         conta = _executar_renovando_sessao(
             lambda: executor(

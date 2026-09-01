@@ -200,16 +200,23 @@ class SoftGuardClient:
         )
 
     def listar_todas_contas(
-        self, *, page_size: int = DEFAULT_PAGE_SIZE
+        self, *, page_size: int = DEFAULT_PAGE_SIZE, incluir_particoes: bool = False
     ) -> list[dict[str, Any]]:
         """Todas as contas do dealer (sem filtro de falha) — usado para
         montar o mapa número -> id interno (cue_iid) do relatório do
         técnico. O portal não busca por número; a lista inteira é
         carregada e filtrada em memória (mesmo padrão do motor validado
-        em produção)."""
+        em produção).
+
+        `incluir_particoes=True` tira o recorte `cue_nparticion = 0` e
+        traz também as partições (cada uma é uma linha própria, com o seu
+        `cue_iid`). **Padrão desligado de propósito**: relatórios, BI e
+        Relatório do Técnico contam com uma linha por conta — trazer as
+        partições para eles duplicaria conta e trocaria o `cue_iid`."""
+        filtro = [] if incluir_particoes else FILTRO_TODAS_CONTAS
         return self._buscar_paginado(
             SEARCH_PATH,
-            {"filter": json.dumps(FILTRO_TODAS_CONTAS)},
+            {"filter": json.dumps(filtro)},
             page_size=page_size,
         )
 
