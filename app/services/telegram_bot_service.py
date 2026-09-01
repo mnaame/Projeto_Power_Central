@@ -119,23 +119,42 @@ def _responder(telegram, chat_id: str, texto: str) -> None:
 class _SessaoSoftGuard:
     """Mantém um `SoftGuardClient` logado entre comandos (relogar a cada
     pedido é lento e castiga o portal). O mapa de contas também é caro
-    (lista inteira do dealer), então fica em cache com validade curta."""
+    (lista inteira do dealer), então fica em cache com validade curta.
+
+    **Sessão tem prazo.** O `SoftGuardClient` faz login uma vez e nunca
+    reautentica sozinho (`_logged_in` só é setado na subida, e `_request`
+    repete a chamada sem relogar). No resto do sistema isso nunca apareceu
+    porque cada operação cria um client novo; aqui o client é
+    reaproveitado, então um token vencido faria o portal responder 500 e a
+    sessão morta ficaria em cache para sempre — foi exatamente o que
+    aconteceu em produção. Por isso o client é descartado por idade, e
+    quem chama ainda tem uma segunda linha de defesa em
+    `_executar_renovando_sessao`."""
 
     VALIDADE_MAPA = timedelta(minutes=30)
+    VALIDADE_SESSAO = timedelta(minutes=20)
 
     def __init__(self, config):
         self._config = config
         self._client: SoftGuardClient | None = None
+        self._client_em: datetime | None = None
         self._mapa: dict[str, tuple[str, str]] | None = None
         self._mapa_em: datetime | None = None
 
     def client(self) -> SoftGuardClient:
-        if self._client is None:
+        agora = datetime.now(timezone.utc)
+        if (
+            self._client is None
+            or self._client_em is None
+            or agora - self._client_em > self.VALIDADE_SESSAO
+        ):
             self._client = SoftGuardClient(collector.credenciais_softguard(self._config))
+            self._client_em = agora
         return self._client
 
     def invalidar(self) -> None:
         self._client = None
+        self._client_em = None
         self._mapa = None
         self._mapa_em = None
 
@@ -154,6 +173,26 @@ class _SessaoSoftGuard:
 # ----------------------------------------------------------------------
 # Comandos
 # ----------------------------------------------------------------------
+
+
+def _executar_renovando_sessao(funcao, *, sessao):
+    """Roda o comando; se o portal falhar, joga a sessão fora e tenta UMA
+    vez com login novo.
+
+    Existe porque a sessão do portal morre em silêncio: o token vence e o
+    SoftGuard passa a responder **500**, não 401 — e o `SoftGuardClient`
+    não relogá sozinho. Sem isto, a primeira expiração deixaria o bot
+    mudo até alguém reiniciar o serviço (visto em produção).
+
+    Seguro repetir: nada é enviado ao técnico antes das chamadas ao
+    portal — as respostas de "não achei"/"qual?" retornam sem exceção, e
+    o documento/zoneamento só sai depois que o portal respondeu."""
+    try:
+        return funcao()
+    except SoftGuardError:
+        logger.warning("Bot: portal falhou; renovando a sessão e tentando de novo.")
+        sessao.invalidar()
+        return funcao()
 
 
 def _resolver_ou_avisar(termo: str, sessao, telegram, chat_id: str):
@@ -263,7 +302,14 @@ def processar_update(update: dict, *, config, sessao, telegram) -> None:
     if not comando.nome:
         return  # conversa solta no grupo: o bot não responde
 
-    quem = {"telegram_user_id": user_id, "chat_id": chat_id, "comando": comando.nome}
+    quem = {
+        "telegram_user_id": user_id,
+        "chat_id": chat_id,
+        "comando": comando.nome,
+        # O que foi pedido entra também nas FALHAS: sem isso, um erro do
+        # portal não dizia sequer qual conta o técnico tinha pedido.
+        "pedido": " ".join(comando.argumentos)[:100] or None,
+    }
 
     if not autorizado(user_id):
         audit_service.registrar(
@@ -287,15 +333,14 @@ def processar_update(update: dict, *, config, sessao, telegram) -> None:
     acao = (
         "bot_zona_pedido" if comando.nome == dom_bot.COMANDO_ZONA else "bot_relatorio_pedido"
     )
+    executor = _comando_zona if comando.nome == dom_bot.COMANDO_ZONA else _comando_relatorio
     try:
-        if comando.nome == dom_bot.COMANDO_ZONA:
-            conta = _comando_zona(
+        conta = _executar_renovando_sessao(
+            lambda: executor(
                 comando.argumentos, sessao=sessao, telegram=telegram, chat_id=chat_id
-            )
-        else:
-            conta = _comando_relatorio(
-                comando.argumentos, sessao=sessao, telegram=telegram, chat_id=chat_id
-            )
+            ),
+            sessao=sessao,
+        )
     except SoftGuardAuthError:
         # Sessão do portal caiu: derruba o cache e pede pra tentar de novo
         # (relogar aqui no meio do comando esconderia o problema real).

@@ -103,6 +103,7 @@ Orquestra: loop, autorização, cooldown, despacho e auditoria.
 - `_SessaoSoftGuard`: mantém o `SoftGuardClient` **logado entre comandos**
   (relogar a cada pedido é lento e castiga o portal) e guarda o mapa de
   contas em cache de 30 min (é a lista inteira do dealer, consulta cara).
+  **Com prazo** — ver §3.6.
 - `processar_update(...)`: um update. Erro de negócio vira resposta ao
   técnico; `SoftGuardAuthError` derruba o cache da sessão e pede para
   repetir.
@@ -114,6 +115,38 @@ Orquestra: loop, autorização, cooldown, despacho e auditoria.
   disparariam todos de uma vez no instante em que alguém liga o bot.
 - Exceção tratando um update é registrada e o loop segue (mesma
   resiliência do coletor).
+
+### 3.6 A sessão reaproveitada precisa de prazo (bug real)
+
+Reaproveitar o login entre comandos é pedido do complemento — e foi o que
+quebrou o bot em produção no primeiro dia. O `SoftGuardClient` faz login
+**uma vez** (`_logged_in` só é setado na subida) e nunca reautentica:
+`_request` repete a chamada até 3 vezes, mas sempre com a mesma sessão. No
+resto do sistema isso nunca apareceu porque cada operação cria um client
+novo (`report_service`, `tecnico_service`, `bi_service`).
+
+Quando o token venceu, o portal passou a responder **500 — não 401**, em
+`/Rest/Zona/` e no export. Como o client ficava em cache, a sessão morta
+ficava morta para sempre: o bot respondia "a PowerCentral não respondeu" a
+tudo até alguém reiniciar o serviço. No log de auditoria dava para ver o
+corte exato: sucesso às 09:42, 500 em tudo a partir das 09:53.
+
+Duas defesas, porque uma só não basta:
+
+1. **Prazo de sessão** (`VALIDADE_SESSAO`, 20 min): o client é descartado
+   por idade, então no caminho normal a sessão nunca chega a vencer.
+2. **`_executar_renovando_sessao`**: se ainda assim o portal falhar, a
+   sessão é jogada fora e o comando é tentado **uma vez** com login novo.
+   Uma só — se o portal estiver fora de verdade, o técnico recebe o aviso
+   em vez de o bot ficar num laço.
+
+Repetir o comando é seguro porque nada é enviado ao técnico antes das
+chamadas ao portal: as respostas de "não achei"/"qual?" retornam sem
+exceção, e o documento/zoneamento só sai depois que o portal respondeu.
+
+A auditoria também passou a guardar **o que foi pedido** nas falhas —
+antes, um erro do portal não dizia sequer qual conta o técnico tinha
+pedido.
 
 ## 4. Comandos
 
@@ -164,6 +197,8 @@ bot/token já cifrado do Telegram — sem segredo novo.
 | **BT2** ✅ | `listar_zonas` + `buscar_updates`/`enviar_documento` | Unit dos clients contra respostas fake: filtro exato do HAR, offset/timeout do polling, chat_id específico não muda os alertas |
 | **BT3** ✅ | `telegram_bot_service.py` + worker no scheduler | Integração: autorização por remetente, negado é auditado, cooldown por usuário, portal fora do ar, sessão expirada, offset avança, fila descartada ao ligar, erro num comando não derruba o loop |
 | **BT4** ✅ | Config admin + docs | Integração web (salva, desliga, id inválido descartado, auditoria sem os IDs) + screenshots claro/escuro |
+
+| **BT5** ✅ | Correções do primeiro dia em produção: `/relatorio` usava `buscar_historico` (sem filtro de conta) para o resumo, e a sessão reaproveitada nunca relogava — o portal responde 500, não 401, e o bot emudecia até reiniciar | Integração: `/relatorio` não chama `buscar_historico`, sessão vencida reloga e o comando passa, portal fora de verdade desiste depois de uma tentativa, falha registra o que foi pedido |
 
 ## 7. Em aberto
 

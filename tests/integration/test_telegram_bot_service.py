@@ -400,3 +400,69 @@ def test_falha_do_telegram_nao_derruba_o_loop(app, monkeypatch):
     espera = svc._uma_volta(app, sessao_ref={"ativo": True, "softguard": None})
 
     assert espera == svc.PAUSA_ERRO_SEGUNDOS
+
+
+# ---------- renovação de sessão (caso real de produção) ----------
+
+
+class SoftGuardQueMorreUmaVez(FakeSoftGuard):
+    """Sessão vencida: o portal responde 500 até o client relogar. O
+    `SoftGuardClient` não reautentica sozinho, então a sessão morta ficava
+    em cache para sempre e o bot emudecia até reiniciar o serviço."""
+
+    def __init__(self):
+        super().__init__()
+        self.morta = True
+
+    def listar_zonas(self, cue_iid, **kwargs):
+        if self.morta:
+            raise SoftGuardError("500 Server Error for url: .../Rest/Zona/")
+        return super().listar_zonas(cue_iid, **kwargs)
+
+    def exportar_historico_html(self, **kwargs):
+        if self.morta:
+            raise SoftGuardError("500 Server Error for url: .../ExportReporteHistoricoExcel")
+        return super().exportar_historico_html(**kwargs)
+
+
+class SessaoQueRenova(SessaoFake):
+    """Ao invalidar, o próximo client sobe com sessão nova (relogado)."""
+
+    def invalidar(self):
+        super().invalidar()
+        self._client.morta = False
+
+
+def test_sessao_vencida_reloga_e_o_comando_passa(app, autorizado):
+    sessao = SessaoQueRenova(SoftGuardQueMorreUmaVez())
+    telegram, sessao = _processar(app, "/zona 95", sessao=sessao)
+
+    assert sessao.invalidada is True
+    assert "MAG PORTA SALA" in telegram.texto_completo  # respondeu na segunda tentativa
+    assert AuditLog.query.filter_by(action="bot_zona_pedido").one().result == "success"
+
+
+def test_relatorio_tambem_reloga(app, autorizado):
+    sessao = SessaoQueRenova(SoftGuardQueMorreUmaVez())
+    telegram, _ = _processar(app, "/relatorio 95", sessao=sessao)
+
+    assert len(telegram.documentos) == 1
+
+
+def test_portal_fora_de_verdade_desiste_depois_de_uma_tentativa(app, autorizado):
+    """Renovar sessão não pode virar retry infinito: se o portal está fora
+    mesmo, o técnico recebe o aviso."""
+    sessao = SessaoFake(FakeSoftGuard(erro=SoftGuardError("portal fora")))
+    telegram, _ = _processar(app, "/zona 95", sessao=sessao)
+
+    assert "não respondeu" in telegram.texto_completo
+    assert AuditLog.query.filter_by(action="bot_zona_pedido").one().result == "failure"
+
+
+def test_falha_registra_o_que_foi_pedido(app, autorizado):
+    """Sem isso, um erro do portal não dizia nem qual conta foi pedida."""
+    sessao = SessaoFake(FakeSoftGuard(erro=SoftGuardError("portal fora")))
+    _processar(app, "/zona pet para pets", sessao=sessao)
+
+    entrada = AuditLog.query.filter_by(action="bot_zona_pedido").one()
+    assert entrada.details["pedido"] == "pet para pets"
