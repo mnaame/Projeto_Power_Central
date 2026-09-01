@@ -153,7 +153,16 @@ def gerar_atendimentos(
             status="running",
         )
         db.session.add(run)
-        db.session.flush()
+        # Commit já aqui (não só flush): o flush abre uma transação de
+        # ESCRITA que ficaria aberta durante toda a parte de rede (busca do
+        # histórico + uma timeline por cliente, minutos em período grande).
+        # Com SQLite isso trava o banco inteiro pra escrita e derruba com
+        # "database is locked" quem tentar gravar no meio — o coletor (a
+        # cada 5 min) ou a própria conclusão deste relatório. Mesmo bug já
+        # visto em produção no BI e corrigido lá do mesmo jeito: solta o
+        # lock antes do trabalho lento; só o update final (rápido, sem
+        # rede) volta a pegar.
+        db.session.commit()
 
         try:
             client = softguard_client or _criar_cliente(config)
@@ -311,7 +320,16 @@ def gerar_disparos(
             status="running",
         )
         db.session.add(run)
-        db.session.flush()
+        # Commit já aqui (não só flush): o flush abre uma transação de
+        # ESCRITA que ficaria aberta durante toda a parte de rede (busca do
+        # histórico + uma timeline por cliente, minutos em período grande).
+        # Com SQLite isso trava o banco inteiro pra escrita e derruba com
+        # "database is locked" quem tentar gravar no meio — o coletor (a
+        # cada 5 min) ou a própria conclusão deste relatório. Mesmo bug já
+        # visto em produção no BI e corrigido lá do mesmo jeito: solta o
+        # lock antes do trabalho lento; só o update final (rápido, sem
+        # rede) volta a pegar.
+        db.session.commit()
 
         try:
             client = softguard_client or _criar_cliente(config)
@@ -398,7 +416,16 @@ def gerar_disparos_geral(
             status="running",
         )
         db.session.add(run)
-        db.session.flush()
+        # Commit já aqui (não só flush): o flush abre uma transação de
+        # ESCRITA que ficaria aberta durante toda a parte de rede (busca do
+        # histórico + uma timeline por cliente, minutos em período grande).
+        # Com SQLite isso trava o banco inteiro pra escrita e derruba com
+        # "database is locked" quem tentar gravar no meio — o coletor (a
+        # cada 5 min) ou a própria conclusão deste relatório. Mesmo bug já
+        # visto em produção no BI e corrigido lá do mesmo jeito: solta o
+        # lock antes do trabalho lento; só o update final (rápido, sem
+        # rede) volta a pegar.
+        db.session.commit()
 
         try:
             client = softguard_client or _criar_cliente(config)

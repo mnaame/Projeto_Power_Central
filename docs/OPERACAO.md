@@ -751,6 +751,16 @@ $env:FLASK_APP = "app:create_app"
 e reinicie o serviço. **`git pull` sozinho não basta** quando a versão traz
 migração — o aviso de "precisa de migração" vem junto com a entrega.
 
+**"Internal Server Error" ao gerar um relatório**
+Erro do portal SoftGuard não derruba a página — vira status "error" no
+histórico com a mensagem. Um 500 aqui aponta para falha ao **gravar no
+banco**: procure `database is locked` em `logs\power_central.log`. Causa
+típica é escrita concorrente no SQLite (o coletor roda a cada 5 min e o
+relatório grande demora). Se aparecer, confira se não há **duas
+instâncias** mexendo no mesmo banco — o serviço `PowerCentral` rodando e,
+ao mesmo tempo, alguém com `flask run` aberto na mesma pasta (o segundo
+sobe outro agendador). Pare uma das duas e tente de novo.
+
 **O serviço não inicia**
 Rode manualmente para ver o erro na tela:
 `\.venv\Scripts\waitress-serve.exe --call app:create_app` (dentro da pasta
