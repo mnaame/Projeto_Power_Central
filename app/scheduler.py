@@ -13,6 +13,7 @@ from app.services import (
     periodic_report,
     retention_service,
     settings_service,
+    telegram_bot_service,
     watchdog_service,
 )
 
@@ -112,12 +113,17 @@ def iniciar(app) -> BackgroundScheduler:
     )
     scheduler.start()
     _scheduler = scheduler
+    # Worker do bot do Telegram: long polling é um loop bloqueante, não um
+    # job periódico — vai em thread própria. Ela sobe sempre e checa
+    # `bot_ativado` a cada volta, para ligar/desligar na tela valer na hora.
+    telegram_bot_service.iniciar(app)
     logger.info("Scheduler iniciado (ciclo do coletor a cada %s min).", intervalo)
     return scheduler
 
 
 def parar() -> None:
     global _scheduler
+    telegram_bot_service.parar()
     if _scheduler is not None:
         _scheduler.shutdown(wait=False)
         _scheduler = None

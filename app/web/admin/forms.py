@@ -92,3 +92,21 @@ class ConfiguracoesForm(FlaskForm):
 class TelegramForm(FlaskForm):
     bot_token = StringField("Token do bot", validators=[Optional(), Length(max=200)])
     chat_id = StringField("Chat ID", validators=[Optional(), Length(max=64)])
+
+
+class BotTecnicoForm(FlaskForm):
+    ativado = BooleanField("Bot ligado (responde comandos no Telegram)")
+    tecnicos_ids = StringField(
+        "IDs de técnicos autorizados (separados por vírgula)",
+        validators=[Optional(), Length(max=500)],
+    )
+    relatorio_dias_padrao = IntegerField(
+        "Relatório: dias padrão", validators=[DataRequired(), NumberRange(min=1, max=365)]
+    )
+    relatorio_codigos = StringField(
+        "Relatório: códigos de evento", validators=[DataRequired(), Length(max=200)]
+    )
+    cooldown_segundos = IntegerField(
+        "Cooldown por técnico (segundos)",
+        validators=[DataRequired(), NumberRange(min=0, max=600)],
+    )

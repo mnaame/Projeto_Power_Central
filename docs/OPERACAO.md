@@ -699,6 +699,50 @@ usuário (não é possível desativar o próprio usuário logado).
 Em **Auditoria**: histórico de login/logout, atualizações manuais, e
 mudanças de configuração — com usuário, IP e data/hora, filtrável.
 
+### 5.2.8 Bot do Técnico no Telegram
+
+O técnico pergunta pelo Telegram e o bot responde na hora, sem ninguém do
+escritório no meio. Usa o **mesmo bot** dos alertas — não precisa criar
+outro nem outro token.
+
+Comandos (o técnico manda direto pro bot ou num grupo onde ele esteja):
+
+- **`/relatorio <conta> [dias]`** — histórico de eventos da conta. Volta o
+  arquivo do jeito nativo da plataforma (com as cores), mais um resumo na
+  legenda. Ex.: `/relatorio 95` (usa os dias padrão) ou `/relatorio 95 15`.
+- **`/zona <conta ou nome>`** — zoneamento completo do cliente: número da
+  zona, descrição e o alarme que ela gera.
+- **`/ajuda`** — lista os comandos.
+
+A conta pode ser o **número** (`95`, `0095`) ou **parte do nome**
+(`/zona auto mecanica`). Se o nome casar com mais de um cliente, o bot
+responde a lista e pede o número — **ele nunca escolhe sozinho**, porque
+mandar o zoneamento da loja errada entrega o mapa de sensores de um
+cliente para outro.
+
+**Ligar e autorizar** (Configurações → Bot do Técnico, só admin):
+
+1. Marque **"Bot ligado"** (vale na hora, não precisa reiniciar).
+2. Preencha os **IDs de técnicos autorizados**. É o ID do **usuário** do
+   Telegram, não o do grupo: quem não está na lista é recusado mesmo
+   dentro de um grupo autorizado.
+   > **Como descobrir o ID de um técnico**: peça para ele mandar `/ajuda`
+   > ao bot. A tentativa aparece na **Auditoria** como `bot_pedido_negado`
+   > com o `telegram_user_id` — é só copiar de lá para a lista.
+3. Ajuste, se quiser, os dias padrão do relatório, os códigos de evento e
+   o cooldown (segundos que um mesmo técnico espera entre dois pedidos —
+   evita abrir dezenas de consultas pesadas de uma vez).
+
+**O bot entrega dado sensível** — o histórico mostra a rotina do cliente e
+o zoneamento é o mapa dos sensores dele. Por isso: lista fechada (com
+ninguém autorizado, ninguém é atendido), todo pedido fica na auditoria
+(inclusive os negados), e toda resposta leva o aviso de uso interno. A
+recomendação é um grupo dedicado só de técnicos.
+
+Se o bot parar de responder: confira se está marcado como ligado, se o
+Telegram está configurado (seção Telegram, logo abaixo) e se o serviço
+está no ar — o bot roda junto com o coletor.
+
 ## 6. Backup
 
 O banco de dados inteiro é **um único arquivo**:

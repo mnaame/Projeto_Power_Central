@@ -153,6 +153,58 @@
 </div>
 
 <div class="section">
+  <div class="section-title"><h2>Bot do Técnico (Telegram)</h2></div>
+  <div class="card" style="max-width: 560px;">
+    <p class="muted" style="margin-top: 0;">
+      Responde <code>/relatorio</code> e <code>/zona</code> no Telegram. Entrega
+      <strong>dado sensível</strong> (histórico e mapa de sensores do cliente):
+      só os IDs listados aqui são atendidos, e todo pedido fica na auditoria.
+      Usa o mesmo bot configurado abaixo.
+    </p>
+    <form method="post" action="{{ url_for('admin.salvar_bot') }}" novalidate>
+      {{ bot_form.csrf_token }}
+
+      <div class="field" style="display: flex; align-items: center; gap: var(--space-2);">
+        {{ bot_form.ativado() }}
+        {{ bot_form.ativado.label }}
+      </div>
+
+      <div class="field">
+        {{ bot_form.tecnicos_ids.label }}
+        {{ bot_form.tecnicos_ids(placeholder="ex.: 123456789, 987654321") }}
+        {% for mensagem in bot_form.tecnicos_ids.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      <p class="muted" style="margin-top: calc(-1 * var(--space-3)); font-size: var(--font-size-xs);">
+        É o ID do <strong>usuário</strong> do Telegram, não o do grupo — quem não
+        estiver na lista é recusado mesmo dentro de um grupo autorizado. Para
+        descobrir o ID: peça ao técnico para mandar <code>/ajuda</code> ao bot e
+        veja a tentativa negada na Auditoria.
+      </p>
+
+      <div class="field">
+        {{ bot_form.relatorio_dias_padrao.label }}
+        {{ bot_form.relatorio_dias_padrao() }}
+        {% for mensagem in bot_form.relatorio_dias_padrao.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ bot_form.relatorio_codigos.label }}
+        {{ bot_form.relatorio_codigos() }}
+        {% for mensagem in bot_form.relatorio_codigos.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        {{ bot_form.cooldown_segundos.label }}
+        {{ bot_form.cooldown_segundos() }}
+        {% for mensagem in bot_form.cooldown_segundos.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+
+      <button type="submit" class="btn btn-primary">Salvar bot</button>
+    </form>
+  </div>
+</div>
+
+<div class="section">
   <div class="section-title"><h2>Telegram</h2></div>
   <div class="card" style="max-width: 560px;">
     <p class="muted">

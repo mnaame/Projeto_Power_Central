@@ -33,6 +33,7 @@ para cada um está em `docs/OPERACAO.md` §5.
 | **Cofre de Senhas** | Credenciais de sistemas da empresa (câmera, roteador, plataformas) cifradas em repouso, por papel, com reautenticação pra revelar | [`COFRE_SENHAS.md`](docs/COFRE_SENHAS.md) |
 | **Central do Cliente** | Cria link de acesso sem login/senha pro portal do cliente na Auvo (endpoint interno, cookie de sessão) — admin-only, simulação por padrão, cada telefone cadastrado vira um botão de WhatsApp assistido | [`CENTRAL_CLIENTE.md`](docs/CENTRAL_CLIENTE.md) |
 | **Minhas Tarefas** | Tarefas pessoais do usuário logado em três horizontes (Dia/Semana/Fixas); atrasada não some, fica marcada até decisão humana | [`TAREFAS.md`](docs/TAREFAS.md) |
+| **Bot do Técnico (Telegram)** | O técnico pede pelo Telegram e recebe na hora o histórico de eventos ou o zoneamento da conta; lista fechada de IDs autorizados, cooldown e auditoria de cada pedido | [`BOT_TECNICO.md`](docs/BOT_TECNICO.md) |
 
 ## Status
 

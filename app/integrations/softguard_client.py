@@ -19,6 +19,14 @@ SEARCH_PATH = "/Rest/Search/CuentaByDealer"
 HISTORICO_PATH = "/Rest/Search/ReporteHistorico"
 TIMELINE_PATH = "/Rest/search/EventoTimeLineFull"
 EXPORT_HISTORICO_PATH = "/handler/ExportReporteHistoricoExcel"
+ZONA_PATH = "/Rest/Zona/"
+
+# A tela de zoneamento pede 400 por página; a conta com mais zonas na base
+# real não chega perto disso, mas o paginador cobre se passar.
+PAGE_SIZE_ZONAS = 400
+# Ordenação da própria tela — o portal já devolve na ordem certa, então o
+# domínio não reordena (SP1/SP2 vêm depois das numéricas, como na tela).
+ORDENACAO_ZONAS = [{"property": "orderCodigo", "direction": "ASC"}]
 
 # Formato de data exigido por FechaDesde/FechaHasta do ReporteHistorico.
 FORMATO_DATA_HISTORICO = "%m-%d-%Y %H:%M:%S"
@@ -202,6 +210,27 @@ class SoftGuardClient:
         return self._buscar_paginado(
             SEARCH_PATH,
             {"filter": json.dumps(FILTRO_TODAS_CONTAS)},
+            page_size=page_size,
+        )
+
+    def listar_zonas(
+        self, cue_iid: str | int, *, page_size: int = PAGE_SIZE_ZONAS
+    ) -> list[dict[str, Any]]:
+        """Zoneamento da conta (tela "Zonas" do portal). `cue_iid` é o mesmo
+        id interno usado no export do histórico e no CuentaByDealer — aqui
+        ele entra como `zon_iidcuenta`.
+
+        Os dois primeiros filtros são os da própria tela: `LIKENOT PAR`
+        tira as partições e `ISNOTNULLOREMPTYTRIM` tira as zonas vazias —
+        juntos dão exatamente o "zoneamento completo" que o técnico vê."""
+        filtro = [
+            {"property": "zon_ccodigo:LIKENOT", "value": "PAR"},
+            {"property": "zon_ccodigo:ISNOTNULLOREMPTYTRIM", "value": ""},
+            {"property": "zon_iidcuenta", "value": cue_iid},
+        ]
+        return self._buscar_paginado(
+            ZONA_PATH,
+            {"filter": json.dumps(filtro), "sort": json.dumps(ORDENACAO_ZONAS)},
             page_size=page_size,
         )
 

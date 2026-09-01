@@ -98,3 +98,61 @@ def test_testar_telegram_sem_configuracao_avisa(admin_client):
     resposta = admin_client.post("/admin/configuracoes/telegram/testar", follow_redirects=True)
     assert resposta.status_code == 200
     assert "não está configurado".encode() in resposta.data
+
+
+# ---------- Bot do técnico (Telegram) ----------
+
+
+def _dados_bot(**overrides):
+    dados = {
+        "ativado": "y",
+        "tecnicos_ids": "111, 222",
+        "relatorio_dias_padrao": "7",
+        "relatorio_codigos": "CLO, OPN",
+        "cooldown_segundos": "10",
+    }
+    dados.update(overrides)
+    return dados
+
+
+def test_operador_nao_salva_config_do_bot(operador_client):
+    resposta = operador_client.post("/admin/configuracoes/bot", data=_dados_bot())
+    assert resposta.status_code == 403
+
+
+def test_admin_salva_config_do_bot(app, admin_client):
+    resposta = admin_client.post(
+        "/admin/configuracoes/bot", data=_dados_bot(), follow_redirects=True
+    )
+    assert resposta.status_code == 200
+    assert settings_service.bot_ativado() is True
+    assert settings_service.get_bot_tecnicos_ids() == (111, 222)
+    assert settings_service.get_bot_relatorio_codigos() == ("CLO", "OPN")
+    assert settings_service.get_bot_cooldown_segundos() == 10
+
+
+def test_bot_desliga_quando_checkbox_ausente(app, admin_client):
+    settings_service.set("bot_ativado", "true")
+    admin_client.post(
+        "/admin/configuracoes/bot", data=_dados_bot(ativado=""), follow_redirects=True
+    )
+    assert settings_service.bot_ativado() is False
+
+
+def test_auditoria_do_bot_nao_guarda_os_ids(app, admin_client):
+    from app.models.audit import AuditLog
+
+    admin_client.post("/admin/configuracoes/bot", data=_dados_bot(), follow_redirects=True)
+    entrada = AuditLog.query.filter_by(action="bot_config_saved").one()
+    assert entrada.details["tecnicos_autorizados"] == 2
+    assert "111" not in str(entrada.details)
+
+
+def test_id_invalido_na_lista_e_descartado(app, admin_client):
+    """Vírgula sobrando não pode virar um id que autoriza alguém."""
+    admin_client.post(
+        "/admin/configuracoes/bot",
+        data=_dados_bot(tecnicos_ids="111, , abc, 222"),
+        follow_redirects=True,
+    )
+    assert settings_service.get_bot_tecnicos_ids() == (111, 222)

@@ -10,12 +10,28 @@ from app.models.user import User
 from app.security import hash_password
 from app.services import audit_service, settings_service
 from app.services.collector import criar_cliente_telegram
-from app.web.admin.forms import ConfiguracoesForm, NovoUsuarioForm, TelegramForm, TrocarSenhaForm
+from app.web.admin.forms import (
+    BotTecnicoForm,
+    ConfiguracoesForm,
+    NovoUsuarioForm,
+    TelegramForm,
+    TrocarSenhaForm,
+)
 from app.web.auth.decorators import roles_required
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 AUDITORIA_POR_PAGINA = 30
+
+
+def _lista_normalizada(bruto: str, *, maiusculas: bool = False) -> str:
+    """Normaliza uma lista digitada com vírgula: tira espaços e itens
+    vazios. No nível do módulo porque tanto as configurações gerais quanto
+    a do bot gravam listas assim."""
+    itens = [item.strip() for item in (bruto or "").split(",") if item.strip()]
+    if maiusculas:
+        itens = [item.upper() for item in itens]
+    return ",".join(itens)
 
 
 @bp.route("/usuarios", methods=["GET", "POST"])
@@ -135,6 +151,13 @@ def configuracoes():
         "admin/configuracoes.html",
         form=form,
         telegram_form=TelegramForm(),
+        bot_form=BotTecnicoForm(
+            ativado=settings_service.bot_ativado(),
+            tecnicos_ids=settings_service.get("bot_tecnicos_ids"),
+            relatorio_dias_padrao=settings_service.get_bot_relatorio_dias_padrao(),
+            relatorio_codigos=settings_service.get("bot_relatorio_codigos"),
+            cooldown_segundos=settings_service.get_bot_cooldown_segundos(),
+        ),
         telegram_configurado=telegram_configurado,
     )
 
@@ -186,12 +209,6 @@ def salvar_configuracoes():
             str(form.periodic_report_interval_minutes.data),
             updated_by_id=current_user.id,
         )
-
-        def _lista_normalizada(bruto: str, *, maiusculas: bool = False) -> str:
-            itens = [item.strip() for item in bruto.split(",") if item.strip()]
-            if maiusculas:
-                itens = [item.upper() for item in itens]
-            return ",".join(itens)
 
         settings_service.set(
             "atend_codigos_evento",
@@ -310,6 +327,54 @@ def salvar_telegram():
         flash("Configuração do Telegram salva.", "info")
     else:
         flash("Informe o token do bot e o chat ID.", "warning")
+    return redirect(url_for("admin.configuracoes"))
+
+
+@bp.route("/configuracoes/bot", methods=["POST"])
+@login_required
+@roles_required("admin")
+def salvar_bot():
+    """Config do bot do técnico. Os IDs autorizados são o controle de
+    acesso do módulo (o bot entrega zoneamento e histórico), por isso a
+    mudança fica auditada com a quantidade — nunca com os IDs em si."""
+    form = BotTecnicoForm()
+    if not form.validate_on_submit():
+        flash("Confira os campos do bot.", "warning")
+        return redirect(url_for("admin.configuracoes"))
+
+    settings_service.set(
+        "bot_ativado", "true" if form.ativado.data else "false",
+        updated_by_id=current_user.id,
+    )
+    settings_service.set(
+        "bot_tecnicos_ids",
+        _lista_normalizada(form.tecnicos_ids.data),
+        updated_by_id=current_user.id,
+    )
+    settings_service.set(
+        "bot_relatorio_dias_padrao", str(form.relatorio_dias_padrao.data),
+        updated_by_id=current_user.id,
+    )
+    settings_service.set(
+        "bot_relatorio_codigos",
+        _lista_normalizada(form.relatorio_codigos.data),
+        updated_by_id=current_user.id,
+    )
+    settings_service.set(
+        "bot_cooldown_segundos", str(form.cooldown_segundos.data),
+        updated_by_id=current_user.id,
+    )
+    audit_service.registrar(
+        action="bot_config_saved",
+        result="success",
+        user=current_user,
+        details={
+            "ativado": bool(form.ativado.data),
+            "tecnicos_autorizados": len(settings_service.get_bot_tecnicos_ids()),
+        },
+    )
+    db.session.commit()
+    flash("Configuração do bot salva.", "info")
     return redirect(url_for("admin.configuracoes"))
 
 

@@ -75,3 +75,64 @@ def test_dividir_mensagem_corta_mesmo_sem_quebra_de_linha():
 
     assert all(len(p) <= 2000 for p in partes)
     assert sum(len(p) for p in partes) == 5000
+
+
+UPDATES_URL = f"https://api.telegram.org/bot{CREDS.bot_token}/getUpdates"
+DOCUMENT_URL = f"https://api.telegram.org/bot{CREDS.bot_token}/sendDocument"
+
+
+def test_buscar_updates_manda_offset_e_timeout(requests_mock):
+    from urllib.parse import parse_qs, urlparse
+
+    requests_mock.get(
+        UPDATES_URL, json={"ok": True, "result": [{"update_id": 7, "message": {"text": "/ajuda"}}]}
+    )
+
+    updates = TelegramClient(CREDS).buscar_updates(offset=5, timeout=25)
+
+    assert [u["update_id"] for u in updates] == [7]
+    query = parse_qs(urlparse(requests_mock.request_history[-1].url).query)
+    assert query["offset"] == ["5"]
+    assert query["timeout"] == ["25"]
+
+
+def test_buscar_updates_sem_offset_omite_o_parametro(requests_mock):
+    from urllib.parse import parse_qs, urlparse
+
+    requests_mock.get(UPDATES_URL, json={"ok": True, "result": []})
+    TelegramClient(CREDS).buscar_updates()
+    assert "offset" not in parse_qs(urlparse(requests_mock.request_history[-1].url).query)
+
+
+def test_buscar_updates_recusado_levanta(requests_mock):
+    requests_mock.get(UPDATES_URL, json={"ok": False, "description": "unauthorized"})
+    with pytest.raises(TelegramError):
+        TelegramClient(CREDS).buscar_updates()
+
+
+def test_enviar_documento(requests_mock):
+    requests_mock.post(DOCUMENT_URL, json={"ok": True, "result": {"message_id": 9}})
+
+    id_mensagem = TelegramClient(CREDS).enviar_documento(
+        b"conteudo", nome_arquivo="0095_LOJA.xls", chat_id="-1", legenda="resumo"
+    )
+
+    assert id_mensagem == "9"
+    assert "0095_LOJA.xls" in requests_mock.request_history[-1].text
+
+
+def test_enviar_mensagem_para_chat_especifico(requests_mock):
+    requests_mock.post(SEND_URL, json={"ok": True, "result": {"message_id": 1}})
+
+    TelegramClient(CREDS).enviar_mensagem("oi", chat_id="-999")
+
+    assert "chat_id=-999" in requests_mock.request_history[-1].text
+
+
+def test_enviar_mensagem_sem_chat_usa_o_configurado(requests_mock):
+    """Os alertas do coletor continuam indo para o chat configurado."""
+    requests_mock.post(SEND_URL, json={"ok": True, "result": {"message_id": 1}})
+
+    TelegramClient(CREDS).enviar_mensagem("oi")
+
+    assert "chat_id=-100200300" in requests_mock.request_history[-1].text

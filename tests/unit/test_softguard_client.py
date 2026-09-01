@@ -261,3 +261,35 @@ def test_buscar_timeline_retorna_passos(requests_mock):
     query = parse_qs(urlparse(requests_mock.request_history[-1].url).query)
     assert query["IdEvento"] == ["9385"]
     assert query["limit"] == ["500"]
+
+
+def test_listar_zonas_usa_o_filtro_da_tela(requests_mock):
+    """Aceite §5: /Rest/Zona/ filtrado por zon_iidcuenta, com os dois
+    filtros da própria tela (tira partições e zonas vazias)."""
+    import json
+    from urllib.parse import parse_qs, urlparse
+
+    _mock_login_ok(requests_mock)
+    requests_mock.get(
+        f"{CREDS.base_url}/Rest/Zona/",
+        json={
+            "success": True,
+            "total": 2,
+            "rows": [
+                {"zon_ccodigo": "1  ", "zon_cdescripcion": "MAG PORTA SALA", "zon_cAlarmaAGenerar": "NYR"},
+                {"zon_ccodigo": "SP1", "zon_cdescripcion": "SENTINELLA: SOS", "zon_cAlarmaAGenerar": ""},
+            ],
+        },
+    )
+
+    zonas = _client().listar_zonas("9516")
+
+    assert [z["zon_cdescripcion"] for z in zonas] == ["MAG PORTA SALA", "SENTINELLA: SOS"]
+
+    query = parse_qs(urlparse(requests_mock.request_history[-1].url).query)
+    filtro = json.loads(query["filter"][0])
+    assert {"property": "zon_iidcuenta", "value": "9516"} in filtro
+    assert {"property": "zon_ccodigo:LIKENOT", "value": "PAR"} in filtro
+    assert {"property": "zon_ccodigo:ISNOTNULLOREMPTYTRIM", "value": ""} in filtro
+    assert json.loads(query["sort"][0])[0]["property"] == "orderCodigo"
+    assert query["limit"] == ["400"]

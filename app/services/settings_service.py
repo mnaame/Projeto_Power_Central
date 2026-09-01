@@ -75,6 +75,15 @@ DEFAULTS: dict[str, str] = {
     "bi_visitas_para_cronico": "3",
     "bi_periodo_padrao_dias": "90",
     "bi_amostra_minima_tecnico": "5",
+    # --- Bot do técnico no Telegram ---
+    "bot_ativado": "false",
+    "bot_tecnicos_ids": "",  # ids de usuário do Telegram, separados por vírgula
+    "bot_relatorio_dias_padrao": "7",
+    "bot_relatorio_codigos": "CLO,OPN,BUR,BYP,ROP,RCL",
+    "bot_cooldown_segundos": "10",
+    # Confirmação do long polling: último update já processado. Evita
+    # reprocessar comando antigo quando o serviço reinicia.
+    "bot_update_offset": "",
     # Módulo Links da Central do Cliente (Auvo) — simulação LIGADA por
     # padrão: módulo de maior risco do sistema (escreve contatos reais com
     # link de acesso sem login/senha na Auvo). Só desligar depois de
@@ -405,6 +414,46 @@ def get_bi_periodo_padrao_dias() -> int:
 
 def get_bi_amostra_minima_tecnico() -> int:
     return int(get("bi_amostra_minima_tecnico"))
+
+
+# --- Bot do técnico no Telegram ---
+
+
+def bot_ativado() -> bool:
+    return get("bot_ativado").strip().lower() == "true"
+
+
+def get_bot_tecnicos_ids() -> tuple[int, ...]:
+    """IDs de usuário do Telegram autorizados. Entrada inválida é
+    descartada em silêncio: uma vírgula sobrando na configuração não pode
+    virar um id que autoriza alguém por engano."""
+    ids = []
+    for bruto in _lista("bot_tecnicos_ids"):
+        try:
+            ids.append(int(bruto))
+        except ValueError:
+            continue
+    return tuple(ids)
+
+
+def get_bot_relatorio_dias_padrao() -> int:
+    return int(get("bot_relatorio_dias_padrao"))
+
+
+def get_bot_relatorio_codigos() -> tuple[str, ...]:
+    return _lista("bot_relatorio_codigos")
+
+
+def get_bot_cooldown_segundos() -> int:
+    return int(get("bot_cooldown_segundos"))
+
+
+def get_bot_update_offset() -> int | None:
+    return _int_ou_none("bot_update_offset")
+
+
+def set_bot_update_offset(offset: int) -> None:
+    set("bot_update_offset", str(offset))
 
 
 # --- Módulo Links da Central do Cliente (Auvo) ---
