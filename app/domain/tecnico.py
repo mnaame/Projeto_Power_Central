@@ -140,6 +140,36 @@ def exportacao_recusada(conteudo: bytes) -> bool:
     return _MARCADOR_ERRO_1 in texto or _MARCADOR_ERRO_2 in texto
 
 
+# Extração das linhas do HTML nativo do export — compartilhada entre a
+# conversão colorida e a contagem de eventos, para as duas lerem o
+# arquivo do mesmo jeito.
+_RE_LINHA = re.compile(r"<tr[^>]*>(.*?)</tr>", re.S | re.I)
+_RE_CELULA = re.compile(r"<t[dh]([^>]*)>(.*?)</t[dh]>", re.S | re.I)
+
+
+def _texto_da_celula(conteudo: str) -> str:
+    texto = re.sub(r"<[^>]+>", "", conteudo)
+    return _html.unescape(texto).replace("\xa0", " ").strip()
+
+
+def contar_eventos_do_export(conteudo: bytes | str) -> int:
+    """Quantos eventos o export tem, fora o cabeçalho e as linhas vazias.
+
+    Conta a partir do próprio arquivo porque `buscar_historico` NÃO filtra
+    por conta — usá-lo para o resumo de uma loja daria o número da base
+    inteira (e uma consulta enorme por cima)."""
+    html = conteudo.decode("utf-8", "replace") if isinstance(conteudo, bytes) else conteudo
+    total = 0
+    for linha_html in _RE_LINHA.findall(html):
+        textos = [_texto_da_celula(c) for _, c in _RE_CELULA.findall(linha_html)]
+        if not any(textos):
+            continue
+        if _TEXTO_CABECALHO in " ".join(textos).lower():
+            continue
+        total += 1
+    return total
+
+
 def _cor_do_estilo(estilo: str, propriedade: str) -> str | None:
     encontrado = re.search(propriedade + r"\s*:\s*#([0-9a-fA-F]{6})", estilo or "")
     return encontrado.group(1).upper() if encontrado else None
@@ -156,12 +186,11 @@ def montar_workbook_colorido(html: str) -> Workbook:
     cabecalho_marcado = False
     linha_atual = 1
 
-    for linha_html in re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.S | re.I):
-        celulas = re.findall(r"<t[dh]([^>]*)>(.*?)</t[dh]>", linha_html, re.S | re.I)
+    for linha_html in _RE_LINHA.findall(html):
+        celulas = _RE_CELULA.findall(linha_html)
         dados: list[tuple[str, str | None, str | None]] = []
         for atributos, conteudo_cel in celulas:
-            texto = re.sub(r"<[^>]+>", "", conteudo_cel)
-            texto = _html.unescape(texto).replace("\xa0", " ").strip()
+            texto = _texto_da_celula(conteudo_cel)
             estilo_bruto = re.search(r'style\s*=\s*"([^"]*)"', atributos)
             estilo = estilo_bruto.group(1) if estilo_bruto else ""
             dados.append(

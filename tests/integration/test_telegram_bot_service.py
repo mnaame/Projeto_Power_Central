@@ -11,6 +11,16 @@ CONTAS = [
     {"cue_ncuenta": "0011", "cue_iid": "9531", "cue_cnombre": "VILLEFORT HM DEPOSITO"},
 ]
 
+# Formato do export nativo: cabeçalho + uma linha por evento.
+EXPORT_HTML = (
+    b"<table>"
+    b"<tr><th>Data e hora do evento</th><th>Evento</th></tr>"
+    b"<tr><td>01/09 08:22:01</td><td>CLO - Alarme Armado</td></tr>"
+    b"<tr><td>01/09 07:05:55</td><td>OPN - Alarme Desarmado</td></tr>"
+    b"<tr><td>&nbsp;</td><td></td></tr>"
+    b"</table>"
+)
+
 ZONAS = [
     {"zon_ccodigo": "1  ", "zon_cdescripcion": "MAG PORTA SALA", "zon_cAlarmaAGenerar": "NYR"},
     {"zon_ccodigo": "SP1", "zon_cdescripcion": "SENTINELLA: SOS", "zon_cAlarmaAGenerar": ""},
@@ -52,14 +62,17 @@ class FakeSoftGuard:
         return ZONAS
 
     def buscar_historico(self, **kwargs):
+        # Não deve ser usado pelo /relatorio: não filtra por conta.
         if self.erro:
             raise self.erro
         self.historicos += 1
         return [{"rec_iid": "1"}, {"rec_iid": "2"}]
 
     def exportar_historico_html(self, **kwargs):
+        if self.erro:
+            raise self.erro
         self.exports += 1
-        return b"<html>relatorio</html>"
+        return EXPORT_HTML
 
 
 class SessaoFake:
@@ -205,9 +218,27 @@ def test_relatorio_envia_documento_com_resumo(app, autorizado):
     assert sessao.client().exports == 1
     chat_id, nome_arquivo, legenda, conteudo = telegram.documentos[0]
     assert nome_arquivo.startswith("0095_")
-    assert "2 evento(s)" in legenda
-    assert conteudo == b"<html>relatorio</html>"
+    assert "2 evento(s)" in legenda  # do próprio arquivo, sem contar cabeçalho/vazias
+    assert conteudo == EXPORT_HTML
     assert AuditLog.query.filter_by(action="bot_relatorio_pedido").one().result == "success"
+
+
+def test_relatorio_nao_usa_buscar_historico(app, autorizado):
+    """Regressão: `buscar_historico` não filtra por conta — usá-lo aqui
+    puxava o histórico da base inteira só para contar os eventos de uma
+    loja (lento a ponto de estourar, e com o número errado)."""
+    telegram, sessao = _processar(app, "/relatorio 95")
+    assert sessao.client().historicos == 0
+
+
+def test_export_recusado_avisa_que_e_permissao(app, autorizado):
+    """Repetir não resolve: o técnico precisa saber que é permissão."""
+    erro = SoftGuardError("A PowerCentral recusou o export do histórico (...)")
+    sessao = SessaoFake(FakeSoftGuard(erro=erro))
+    telegram, _ = _processar(app, "/relatorio 95", sessao=sessao)
+
+    assert "permissão" in telegram.texto_completo
+    assert "Tente de novo" not in telegram.texto_completo
 
 
 def test_relatorio_aceita_dias(app, autorizado):

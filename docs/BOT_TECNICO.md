@@ -119,9 +119,27 @@ Orquestra: loop, autorização, cooldown, despacho e auditoria.
 
 | Comando | O que faz |
 |---|---|
-| `/relatorio <conta> [dias]` | Histórico de eventos: arquivo `.xls` nativo (com as cores da plataforma) via `sendDocument` + resumo curto na legenda (conta, período, nº de eventos) |
+| `/relatorio <conta> [dias]` | Histórico de eventos: arquivo `.xls` nativo (com as cores da plataforma) via `sendDocument` + resumo curto na legenda (conta, período, nº de eventos — contado do próprio arquivo, ver §4.1) |
 | `/zona <conta ou nome>` | Zoneamento completo, em texto monoespaçado |
 | `/ajuda` | Lista os comandos (não consome cooldown) |
+
+### 4.1 O total de eventos sai do arquivo, não de `buscar_historico`
+
+A primeira versão contava os eventos com `buscar_historico` — **errado, e
+quebrou no primeiro teste real** ("A PowerCentral não respondeu"). Motivo:
+`buscar_historico` **não tem filtro de conta**. Chamá-lo aqui puxava o
+histórico da base inteira (todas as contas do dealer, em blocos de 100)
+só para contar os eventos de uma loja: lento a ponto de estourar, e o
+número que sairia seria o da base toda, não o da conta pedida.
+
+Agora o comando faz **uma** chamada — o próprio export, que já é filtrado
+pela conta — e conta as linhas do arquivo com
+`dom_tecnico.contar_eventos_do_export`, que reusa as mesmas expressões de
+leitura do HTML já validadas em `montar_workbook_colorido`.
+
+Quando o export é **recusado por permissão** do usuário de integração, o
+bot diz isso em vez de "tente de novo": repetir não resolve, e o técnico
+precisa saber que o caminho é avisar o escritório.
 
 O zoneamento vai em `<pre>` para as colunas não desalinharem no celular;
 zoneamento grande é quebrado em várias mensagens (limite de 4096 do

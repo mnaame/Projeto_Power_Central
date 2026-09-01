@@ -139,3 +139,25 @@ def test_montar_workbook_ignora_linhas_vazias():
     wb = montar_workbook_colorido(html)
     valores = [c.value for row in wb.active.iter_rows() for c in row if c.value]
     assert valores == ["Real"]
+
+
+# ---------- contar_eventos_do_export ----------
+
+
+def test_conta_eventos_ignorando_cabecalho_e_linhas_vazias():
+    from app.domain.tecnico import contar_eventos_do_export
+
+    assert contar_eventos_do_export(HTML_EXEMPLO) == 2
+
+
+def test_conta_eventos_aceita_bytes():
+    from app.domain.tecnico import contar_eventos_do_export
+
+    assert contar_eventos_do_export(HTML_EXEMPLO.encode()) == 2
+
+
+def test_conta_eventos_export_vazio():
+    from app.domain.tecnico import contar_eventos_do_export
+
+    html = "<table><tr><th>Data e hora do evento</th></tr></table>"
+    assert contar_eventos_do_export(html) == 0

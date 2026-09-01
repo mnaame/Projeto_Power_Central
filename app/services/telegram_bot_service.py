@@ -209,9 +209,12 @@ def _comando_relatorio(argumentos, *, sessao, telegram, chat_id: str) -> str:
     hasta = datetime.now(FUSO_HORARIO)
     desde = hasta - timedelta(days=dias)
 
-    client = sessao.client()
-    eventos = client.buscar_historico(codigos_alarme=codigos, desde=desde, hasta=hasta)
-    conteudo = client.exportar_historico_html(
+    # UMA chamada só, e já filtrada pela conta. `buscar_historico` NÃO tem
+    # filtro de conta: usá-lo aqui puxaria o histórico da base inteira
+    # (todas as contas do dealer, em blocos de 100) só para contar os
+    # eventos de uma loja — lento a ponto de estourar, e com o número
+    # errado. O total sai do próprio arquivo que já vai para o técnico.
+    conteudo = sessao.client().exportar_historico_html(
         cue_iid=conta.cue_iid,
         numero_conta=conta.numero,
         nome_cliente=conta.nome,
@@ -224,7 +227,7 @@ def _comando_relatorio(argumentos, *, sessao, telegram, chat_id: str) -> str:
         numero_conta=conta.numero,
         nome_cliente=conta.nome,
         dias=dias,
-        total_eventos=len(eventos),
+        total_eventos=dom_tecnico.contar_eventos_do_export(conteudo),
     )
     telegram.enviar_documento(
         conteudo,
@@ -308,7 +311,20 @@ def processar_update(update: dict, *, config, sessao, telegram) -> None:
             action=acao, result="failure", details={**quem, "erro": str(exc)[:200]}
         )
         db.session.commit()
-        _responder(telegram, chat_id, "A PowerCentral não respondeu. Tente de novo em instantes.")
+        # Export recusado é permissão do usuário de integração, não
+        # indisponibilidade: mandar "tente de novo" faria o técnico
+        # insistir num erro que nunca vai passar sozinho.
+        if "recusou o export" in str(exc):
+            _responder(
+                telegram,
+                chat_id,
+                "A PowerCentral recusou o export deste histórico (permissão do "
+                "usuário de integração). Avise o escritório — repetir não resolve.",
+            )
+        else:
+            _responder(
+                telegram, chat_id, "A PowerCentral não respondeu. Tente de novo em instantes."
+            )
         return
 
     # `conta` vazia = pedido incompleto/ambíguo, já respondido ao técnico.
