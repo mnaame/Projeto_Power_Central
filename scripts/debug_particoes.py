@@ -29,7 +29,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app import create_app  # noqa: E402
 from app.domain import contas as dom_contas  # noqa: E402
 from app.services import collector  # noqa: E402
-from app.integrations.softguard_client import SoftGuardClient  # noqa: E402
+from app.integrations.softguard_client import (  # noqa: E402
+    SoftGuardAuthError,
+    SoftGuardClient,
+)
 
 CAMPOS_INTERESSANTES = ("cue_ncuenta", "cue_nparticion", "cue_iid", "cue_cnombre")
 
@@ -41,8 +44,25 @@ def main() -> None:
     with app.app_context():
         client = SoftGuardClient(collector.credenciais_softguard(app.config))
 
-        so_principais = client.listar_todas_contas()
-        com_particoes = client.listar_todas_contas(incluir_particoes=True)
+        try:
+            so_principais = client.listar_todas_contas()
+            com_particoes = client.listar_todas_contas(incluir_particoes=True)
+        except SoftGuardAuthError as exc:
+            print(
+                f"\n>>> O LOGIN falhou (não chegou nas partições): {exc}\n\n"
+                "    'Invalid Token' logo depois de um login que deu certo\n"
+                "    normalmente é DISPUTA DE SESSÃO: o portal aceita uma\n"
+                "    sessão por usuário, e o serviço PowerCentral (ou uma aba\n"
+                "    do portal aberta no navegador) já está usando a mesma\n"
+                "    conta de integração.\n\n"
+                "    Tente assim, nesta ordem:\n"
+                "      1. Stop-Service PowerCentral\n"
+                "      2. feche o portal no navegador (se estiver aberto com\n"
+                "         o mesmo usuário de integração)\n"
+                "      3. rode este script de novo\n"
+                "      4. Start-Service PowerCentral\n"
+            )
+            raise SystemExit(1)
 
         print(f"Linhas com o filtro atual (cue_nparticion=0): {len(so_principais)}")
         print(f"Linhas sem o filtro (deve incluir partições):  {len(com_particoes)}")
