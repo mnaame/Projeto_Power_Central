@@ -186,22 +186,56 @@ def filtrar_clientes(contas: Sequence[Conta], filtro: str) -> list[Conta]:
     return [c for c in contas if alvo in normalizar(c.nome) or alvo in c.numero]
 
 
-def formatar_ajuda() -> str:
-    return (
-        "Comandos:\n"
-        "/relatorio <conta> [dias] — histórico de eventos, em .xls e .pdf "
-        "(ex.: /relatorio 95 ou /relatorio 95 15)\n"
-        "/zona <conta ou nome> — zoneamento do cliente "
-        "(ex.: /zona 95 ou /zona auto mecanica)\n"
-        "/clientes [filtro] — lista os clientes e as partições "
-        "(ex.: /clientes ou /clientes villefort)\n"
-        "/ajuda — esta lista\n\n"
-        "A conta pode ser o número ou parte do nome. Se o nome casar com "
-        "mais de um cliente, eu peço o número.\n"
-        "Local com partição (tesouraria, depósito): cada uma tem número "
-        "próprio. Se você pedir a conta principal, eu listo as partições "
-        "para escolher."
-    )
+def aviso_uso_interno() -> str:
+    return "Uso interno — não repassar ao cliente."
+
+
+def formatar_ajuda(*, dias_padrao: int, cooldown_segundos: int = 0) -> str:
+    """Referência completa, escrita para ser lida no celular: um bloco por
+    comando, exemplo em toda linha. `dias_padrao` vem da configuração —
+    escrever "7" fixo aqui viraria mentira no dia em que mudarem."""
+    linhas = [
+        "COMANDOS DO BOT",
+        "",
+        "/relatorio <conta> [dias]",
+        "  Histórico de eventos da conta, em .xls (abre no PC, com as",
+        "  cores da plataforma) e .pdf (abre no celular).",
+        f"  Sem informar os dias, usa {dias_padrao}.",
+        "  Ex.: /relatorio 95        /relatorio 95 15",
+        "",
+        "/zona <conta ou nome>",
+        "  Zoneamento do cliente: número da zona, descrição e o alarme",
+        "  que ela gera.",
+        "  Ex.: /zona 95        /zona auto mecanica",
+        "",
+        "/clientes [filtro]",
+        "  Lista os clientes, já com as partições. O filtro vale para",
+        "  nome ou número.",
+        "  Ex.: /clientes        /clientes villefort",
+        "",
+        "/ajuda",
+        "  Esta lista.",
+        "",
+        "COMO INFORMAR A CONTA",
+        "  Pelo número (95, 0095) ou por parte do nome (auto mecanica).",
+        "  Se o nome casar com mais de um cliente, eu mostro a lista e",
+        "  peço o número — nunca escolho por você.",
+        "",
+        "LOCAL COM PARTIÇÃO (tesouraria, depósito)",
+        "  Cada setor é uma conta com número próprio, então é só pedir",
+        "  pelo número dele. Se você pedir a conta principal, eu listo",
+        "  os setores para escolher.",
+        "  Use /clientes para ver quais são: a partição aparece com",
+        "  [part. de <conta>] do lado.",
+    ]
+    if cooldown_segundos > 0:
+        linhas += [
+            "",
+            f"RITMO: {cooldown_segundos}s entre um pedido e outro, por pessoa —",
+            "  cada consulta puxa dado da PowerCentral.",
+        ]
+    linhas += ["", aviso_uso_interno()]
+    return "\n".join(linhas)
 
 
 def formatar_resumo_relatorio(
@@ -213,5 +247,3 @@ def formatar_resumo_relatorio(
     ).rstrip()
 
 
-def aviso_uso_interno() -> str:
-    return "Uso interno — não repassar ao cliente."

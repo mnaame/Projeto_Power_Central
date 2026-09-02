@@ -572,3 +572,16 @@ def test_clientes_pede_as_particoes_ao_portal(app, autorizado):
 
     _processar(app, "/clientes", sessao=SessaoReal(ClientQueRegistra()))
     assert chamadas.get("incluir_particoes") is True
+
+
+def test_ajuda_reflete_a_configuracao_do_bot(app, autorizado):
+    """A ajuda tem que dizer o prazo real, não um número escrito fixo."""
+    settings_service.set("bot_relatorio_dias_padrao", "3")
+    settings_service.set("bot_cooldown_segundos", "30")
+
+    telegram, _ = _processar(app, "/ajuda")
+
+    texto = telegram.texto_completo
+    assert "usa 3." in texto
+    assert "30s entre um pedido e outro" in texto
+    assert "/clientes" in texto

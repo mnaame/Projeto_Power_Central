@@ -157,7 +157,7 @@ pedido.
 | `/relatorio <conta> [dias]` | Histórico de eventos em **dois arquivos**: `.xls` nativo (cores da plataforma, abre no PC) e `.pdf` (abre no celular sem app de planilha) + resumo na legenda do primeiro |
 | `/zona <conta ou nome>` | Zoneamento completo, em texto monoespaçado |
 | `/clientes [filtro]` | Lista a base com as partições; filtro por nome ou número |
-| `/ajuda` | Lista os comandos (não consome cooldown) |
+| `/ajuda` | Referência completa: todos os comandos com exemplo, como informar a conta, como funcionam as partições e o prazo do cooldown. Lê os números da configuração (dias padrão, cooldown) em vez de escrevê-los fixos — senão a ajuda vira mentira quando a config muda. Não consome cooldown |
 
 **Partições** (§4.2): cada setor (tesouraria, depósito) é uma conta com
 número próprio, então o número já basta. Pedir a conta **mãe** faz o bot

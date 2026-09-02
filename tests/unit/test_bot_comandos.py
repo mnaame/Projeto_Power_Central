@@ -151,10 +151,10 @@ def test_resumo_do_relatorio():
     assert "42 evento(s)" in texto
 
 
-def test_ajuda_cita_os_comandos():
-    texto = formatar_ajuda()
-    assert "/relatorio" in texto
-    assert "/zona" in texto
+def test_ajuda_cita_todos_os_comandos():
+    texto = formatar_ajuda(dias_padrao=7)
+    for comando in ("/relatorio", "/zona", "/clientes", "/ajuda"):
+        assert comando in texto
 
 
 # ---------- partições ----------
@@ -242,7 +242,21 @@ def test_sem_filtro_devolve_tudo():
     assert len(filtrar_clientes(CONTAS, "")) == len(CONTAS)
 
 
-def test_ajuda_cita_clientes_e_particao():
-    texto = formatar_ajuda()
-    assert "/clientes" in texto
-    assert "partição" in texto
+def test_ajuda_explica_particao_e_ambiguidade():
+    texto = formatar_ajuda(dias_padrao=7)
+    assert "PARTIÇÃO" in texto
+    assert "nunca escolho por você" in texto
+
+
+def test_ajuda_usa_os_dias_padrao_configurados():
+    """Escrever "7" fixo viraria mentira no dia em que mudarem a config."""
+    assert "usa 3." in formatar_ajuda(dias_padrao=3)
+
+
+def test_ajuda_so_cita_o_cooldown_quando_existe():
+    assert "RITMO" in formatar_ajuda(dias_padrao=7, cooldown_segundos=10)
+    assert "RITMO" not in formatar_ajuda(dias_padrao=7, cooldown_segundos=0)
+
+
+def test_ajuda_avisa_que_e_uso_interno():
+    assert "Uso interno" in formatar_ajuda(dias_padrao=7)

@@ -361,7 +361,14 @@ def processar_update(update: dict, *, config, sessao, telegram) -> None:
         return
 
     if comando.nome == dom_bot.COMANDO_AJUDA:
-        _responder(telegram, chat_id, dom_bot.formatar_ajuda())
+        _responder(
+            telegram,
+            chat_id,
+            dom_bot.formatar_ajuda(
+                dias_padrao=settings_service.get_bot_relatorio_dias_padrao(),
+                cooldown_segundos=settings_service.get_bot_cooldown_segundos(),
+            ),
+        )
         return
 
     espera = _segundos_restantes_de_cooldown(
