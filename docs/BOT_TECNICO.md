@@ -51,13 +51,15 @@ rotina dele — a que horas arma, a que horas desarma.
 - `separar_conta_e_dias(argumentos)`: `/relatorio <conta> [dias]`. O último
   argumento só vira "dias" se for número **e** houver mais de um argumento
   — assim `/relatorio 9516` continua sendo a conta 9516.
-- `resolver_conta(termo, mapa_contas)`: aceita número (`95`, `0095` — mesma
+- `resolver_conta(termo, contas)`: aceita número (`95`, `0095` — mesma
   normalização de conta do resto do sistema) ou parte do nome (sem acento,
   sem caixa). **Ambiguidade nunca vira chute**: com mais de um cliente
   casando, devolve `RESOLUCAO_AMBIGUA` com as candidatas e o bot pede o
   número. Mandar o zoneamento da loja errada é vazar o mapa de segurança de
   um cliente para outro. Nome idêntico resolve a ambiguidade ("VILLEFORT
-  HM" não fica preso porque existe "VILLEFORT HM DEPOSITO").
+  HM" não fica preso porque existe "VILLEFORT HM DEPOSITO"). Quando o
+  termo cai na conta **mãe** de um local com setores separados, devolve
+  `RESOLUCAO_PARTICOES` com a família (§4.2).
 
 ### 3.2 `app/domain/zoneamento.py` (puro)
 
@@ -152,13 +154,14 @@ pedido.
 
 | Comando | O que faz |
 |---|---|
-| `/relatorio <conta>[/partição] [dias]` | Histórico de eventos em **dois arquivos**: `.xls` nativo (cores da plataforma, abre no PC) e `.pdf` (abre no celular sem app de planilha) + resumo na legenda do primeiro |
-| `/zona <conta ou nome>[/partição]` | Zoneamento completo, em texto monoespaçado |
+| `/relatorio <conta> [dias]` | Histórico de eventos em **dois arquivos**: `.xls` nativo (cores da plataforma, abre no PC) e `.pdf` (abre no celular sem app de planilha) + resumo na legenda do primeiro |
+| `/zona <conta ou nome>` | Zoneamento completo, em texto monoespaçado |
 | `/clientes [filtro]` | Lista a base com as partições; filtro por nome ou número |
 | `/ajuda` | Lista os comandos (não consome cooldown) |
 
-**Partições** (§4.2): conta dividida em setores (loja, tesouraria). O
-técnico escreve `95/2`; se não disser qual, o bot lista e pergunta.
+**Partições** (§4.2): cada setor (tesouraria, depósito) é uma conta com
+número próprio, então o número já basta. Pedir a conta **mãe** faz o bot
+listar os setores e perguntar.
 
 ### 4.1 O total de eventos sai do arquivo, não de `buscar_historico`
 
@@ -180,27 +183,35 @@ precisa saber que o caminho é avisar o escritório.
 
 ### 4.2 Partições
 
-Uma conta pode ser dividida em setores independentes. No portal cada um é
-uma linha própria de `CuentaByDealer`, com o mesmo `cue_ncuenta` e o seu
-**`cue_iid`** — e é o `cue_iid` que o zoneamento e o export usam. Escolher
-a partição é escolher qual `cue_iid` consultar.
+**Validado em produção** com `scripts/debug_particoes.py` — e o resultado
+derrubou a suposição inicial deste módulo, que era ler o filtro
+`cue_nparticion = 0` como "número da partição". O que a base real mostra:
 
-O resto do sistema filtra `cue_nparticion = 0` e nunca precisou disso; o
-bot é o primeiro, porque o técnico em campo trabalha no setor. Por isso
+- **cada partição é uma conta própria**, com o seu `cue_ncuenta` e o seu
+  `cue_iid`. A tesouraria da VILLEFORT TROPICAL (conta 0004) é a conta
+  **0005**, "VILLEFORT ATACADISTA TROPICAL - TESOURARIA";
+- **`cue_nparticion` não é o número da partição** — é o `cue_iid` da conta
+  MÃE (0 quando a conta não é partição de ninguém). É por isso que o
+  filtro `cue_nparticion = 0` do resto do sistema devolve exatamente as
+  contas principais;
+- o vínculo legível com a mãe vem em `madre_ncuenta` / `madre_cnombre`.
+
+Consequência boa: **não existe sintaxe especial**. Como a partição é conta
+de verdade, `/zona 5` já entrega a tesouraria. A primeira versão inventou
+um `95/2` que não corresponde a nada na base — foi removido.
+
+O que exige pergunta é o contrário: pedir a conta **mãe** de um local com
+setores separados. "O histórico da VILLEFORT TROPICAL" pode ser a loja ou
+a tesouraria, então o bot lista a família (mãe + partições, cada uma com o
+comando pronto) e deixa o técnico escolher — mesma disciplina do nome
+ambíguo. Entregar o setor errado é entregar a informação errada.
+
+Na produção real: 138 contas principais, 188 com as partições — 50 setores
+que antes não apareciam em lugar nenhum.
+
 `listar_todas_contas(incluir_particoes=True)` é **opt-in**: ligar por
 padrão duplicaria conta e trocaria o `cue_iid` em relatórios, BI e
-Relatório do Técnico.
-
-Sintaxe `conta/partição` (`95/2`). A barra não colide com nada — o hífen
-colidiria com o formato que o portal mostra ("MIL-0334") e o ponto
-pareceria decimal. O técnico não precisa decorar: a lista de partições
-imprime o comando pronto para copiar.
-
-Conta com mais de uma linha **sempre** pergunta, inclusive incluindo a
-partição 0 na lista. A partição 0 é o registro principal, não um setor —
-mas só quem conhece o local sabe se o evento procurado está nela ou num
-setor, então o bot não decide por ninguém (mesma disciplina do nome
-ambíguo).
+Relatório do Técnico, que contam com uma linha por local.
 
 ### 4.3 Os dois formatos do relatório
 
@@ -208,9 +219,9 @@ ambíguo).
 do outro, o técnico não saberia em qual acreditar. O `.xls` mantém as
 cores da plataforma e abre no PC; o PDF (reportlab, paisagem, cabeçalho
 repetido por página) abre no celular sem app de planilha. A legenda com o
-resumo vai só no primeiro, para não repetir no chat. O nome do arquivo
-carrega a partição (`P1`), senão dois setores da mesma conta gerariam
-arquivos de nome igual no mesmo chat.
+resumo vai só no primeiro, para não repetir no chat. O nome do arquivo sai do
+número da conta — como a partição tem número próprio, dois setores do
+mesmo local já geram arquivos distintos.
 
 O zoneamento vai em `<pre>` para as colunas não desalinharem no celular;
 zoneamento grande é quebrado em várias mensagens (limite de 4096 do
@@ -240,17 +251,12 @@ bot/token já cifrado do Telegram — sem segredo novo.
 
 | **BT6** ✅ | Partições (`domain/contas.py`, `/clientes`, `conta/partição` em `/zona` e `/relatorio`) + relatório em `.xls` **e** `.pdf` | Unit: leitura defensiva de `cue_nparticion`, agrupamento, escolha, listagem/filtro; integração: conta com partições pergunta em vez de chutar, `95/2` usa o `cue_iid` da partição, `/clientes` pede as partições ao portal, `/relatorio` manda os dois arquivos do mesmo conteúdo |
 
+| **BT7** ✅ | Modelo de partição corrigido contra a base real (`debug_particoes.py`): partição é conta própria, `cue_nparticion` é o `cue_iid` da mãe, vínculo por `madre_ncuenta` — a sintaxe `95/2` inventada na BT6 foi removida | Unit com o formato real do portal (número próprio, vínculo com a mãe, `cue_nparticion=0` é principal, mãe apontando pra si é ignorada) + integração (pedir a mãe pergunta, pedir a partição resolve direto) |
+
 ## 7. Em aberto
 
-- **A estrutura das partições NÃO foi validada contra o portal real.** O
-  código assume que, sem o recorte `cue_nparticion = 0`, o
-  `CuentaByDealer` devolve uma linha por partição com `cue_iid` próprio.
-  É a leitura mais natural do filtro que já existia, mas é leitura — não
-  HAR. Rodar `python scripts\debug_particoes.py` **antes de confiar**: ele
-  mostra quantas contas têm partições, se o `cue_iid` muda entre elas
-  (se não mudar, escolher a partição não muda o resultado) e as chaves
-  cruas da resposta. Mesmo processo que validou `finished`/`taskStatus` no
-  BI. O código é defensivo — partição ausente ou inválida vira 0, e pior
-  caso é o bot listar só as contas principais, nunca quebrar.
 - **Dependência nova**: `reportlab` (pura Python, instala com pip no
   Windows) para o PDF. Requer `pip install -r requirements.txt` no deploy.
+- `scripts/debug_particoes.py` fica no repositório: se a base ganhar um
+  arranjo de partição diferente do observado, ele mostra os campos crus
+  sem supor formato nenhum.

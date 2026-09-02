@@ -717,12 +717,16 @@ Comandos (o técnico manda direto pro bot ou num grupo onde ele esteja):
   partições. Ex.: `/clientes` (tudo) ou `/clientes villefort`.
 - **`/ajuda`** — lista os comandos.
 
-**Contas com partição** (loja e tesouraria no mesmo local, por exemplo):
-se a conta tiver mais de uma, o bot **lista e pergunta qual** em vez de
-escolher — e já mostra o comando pronto para copiar
-(`/zona 43/2 — PET PARA PETS - TESOURARIA`). Para ir direto, use
-`conta/partição`: `/zona 43/2`, `/relatorio 43/1 15`. Vale nos dois
-comandos.
+**Locais com partição** (tesouraria, depósito): na PowerCentral cada setor
+é uma **conta com número próprio** — a tesouraria da VILLEFORT TROPICAL
+(conta 4) é a conta 5. Então basta pedir pelo número do setor:
+`/zona 5`, `/relatorio 5 15`.
+
+Se você pedir a conta **principal** de um local que tem setores, o bot
+lista e pergunta de qual você precisa, já com o comando pronto para
+copiar — porque "o histórico da VILLEFORT TROPICAL" pode ser a loja ou a
+tesouraria. Use `/clientes` para ver todos: as partições aparecem com
+`[part. de <conta>]` do lado, para saber de qual local fazem parte.
 
 A conta pode ser o **número** (`95`, `0095`) ou **parte do nome**
 (`/zona auto mecanica`). Se o nome casar com mais de um cliente, o bot

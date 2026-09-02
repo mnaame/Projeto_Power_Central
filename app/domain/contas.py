@@ -1,14 +1,21 @@
 """Contas e partições da PowerCentral. Camada pura — sem I/O.
 
-Uma conta pode ser dividida em **partições** (setores independentes do
-mesmo local: loja, tesouraria, depósito). No portal cada partição é uma
-linha própria em `CuentaByDealer`, com o mesmo `cue_ncuenta` e o seu
-próprio `cue_iid` — e é o `cue_iid` que o zoneamento e o export usam. Por
-isso escolher a partição é escolher qual `cue_iid` consultar.
+Como partição funciona de verdade no portal (validado em produção com
+`scripts/debug_particoes.py`, contra a base real):
 
-O resto do sistema (relatórios, BI, técnico) só olha `cue_nparticion = 0`
-e por isso nunca precisou disto; o bot é o primeiro a precisar, porque o
-técnico em campo trabalha no setor, não na conta inteira.
+- **cada partição é uma conta própria**, com o seu `cue_ncuenta` e o seu
+  `cue_iid`. A tesouraria da VILLEFORT TROPICAL (conta 0004) é a conta
+  0005, "VILLEFORT ATACADISTA TROPICAL - TESOURARIA";
+- `cue_nparticion` **não é o número da partição** — é o `cue_iid` da conta
+  MÃE (0 quando a conta não é partição de ninguém). Por isso o filtro
+  `cue_nparticion = 0` do resto do sistema devolve só as contas
+  principais;
+- o vínculo legível com a mãe vem em `madre_ncuenta` / `madre_cnombre`.
+
+Consequência prática: o técnico não precisa de sintaxe especial — ele pede
+`/zona 5` e pronto, porque 5 é uma conta de verdade. O que o bot faz é,
+quando pedem a conta MÃE, listar as partições dela para escolher, em vez
+de assumir que a pergunta era sobre o local inteiro.
 """
 
 from __future__ import annotations
@@ -16,40 +23,32 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping, Sequence
 
-# Partição 0 é a conta "inteira" no portal — não é um setor, é o registro
-# principal. Fica na lista de escolha mesmo assim: só quem conhece o local
-# sabe se o evento procurado está nela ou num setor.
-PARTICAO_PRINCIPAL = 0
-
 
 @dataclass(frozen=True)
 class Conta:
     numero: str  # normalizado (sem zeros à esquerda)
-    particao: int
     cue_iid: str
     nome: str
+    # Número normalizado da conta mãe; vazio quando não é partição.
+    conta_mae: str = ""
+
+    @property
+    def e_particao(self) -> bool:
+        return bool(self.conta_mae)
 
     @property
     def identificacao(self) -> str:
-        """Como o técnico se refere a esta conta num comando: `95` ou
-        `95/2`. É o mesmo texto que ele copia da lista de partições."""
-        if self.particao == PARTICAO_PRINCIPAL:
-            return self.numero
-        return f"{self.numero}/{self.particao}"
+        """Como o técnico se refere a esta conta num comando. É só o
+        número: partição é conta de verdade, não precisa de sufixo."""
+        return self.numero
 
     @property
     def rotulo(self) -> str:
-        """Como a conta aparece nas listagens."""
-        return f"{self.identificacao} — {self.nome}"
-
-    @property
-    def sufixo_arquivo(self) -> str:
-        """Partição entra no nome do arquivo: sem isso, duas partições da
-        mesma conta gerariam arquivos de nome igual no mesmo chat."""
-        return "" if self.particao == PARTICAO_PRINCIPAL else f" P{self.particao}"
+        return f"{self.numero} — {self.nome}"
 
 
 def _texto(valor: object) -> str:
+    # Os campos de conta vêm preenchidos com espaços à direita no portal.
     return str(valor).strip() if valor is not None else ""
 
 
@@ -58,14 +57,12 @@ def normalizar_numero(numero: str) -> str:
     return _texto(numero).lstrip("0") or "0"
 
 
-def _particao(valor: object) -> int:
-    """Defensivo: o campo pode vir int, str ou ausente. Qualquer coisa
-    que não seja número vira 0 (a conta principal) em vez de quebrar —
-    pior caso o técnico vê uma opção a mais, nunca um erro."""
-    try:
-        return int(_texto(valor) or 0)
-    except ValueError:
-        return PARTICAO_PRINCIPAL
+def _e_particao(linha: Mapping[str, object]) -> bool:
+    """`cue_nparticion` guarda o `cue_iid` da mãe — qualquer valor não-zero
+    significa "sou partição de alguém". É o mesmo critério do filtro que o
+    resto do sistema usa para pegar só as principais."""
+    bruto = _texto(linha.get("cue_nparticion"))
+    return bool(bruto) and bruto not in {"0", "0.0"}
 
 
 def contas_da_resposta(linhas: Sequence[Mapping[str, object]]) -> list[Conta]:
@@ -76,34 +73,43 @@ def contas_da_resposta(linhas: Sequence[Mapping[str, object]]) -> list[Conta]:
         cue_iid = linha.get("cue_iid") or linha.get("Id")
         if cue_iid is None:
             continue
+        numero = normalizar_numero(_texto(linha.get("cue_ncuenta")))
+        mae = normalizar_numero(_texto(linha.get("madre_ncuenta")))
+        # Só vale como mãe se a linha É partição e a mãe não é ela mesma.
+        conta_mae = mae if _e_particao(linha) and mae != numero else ""
         contas.append(
             Conta(
-                numero=normalizar_numero(_texto(linha.get("cue_ncuenta"))),
-                particao=_particao(linha.get("cue_nparticion")),
+                numero=numero,
                 cue_iid=str(cue_iid),
                 nome=_texto(linha.get("cue_cnombre")),
+                conta_mae=conta_mae,
             )
         )
     return contas
 
 
-def agrupar_por_numero(contas: Sequence[Conta]) -> dict[str, list[Conta]]:
-    """Número da conta -> suas partições, em ordem de partição. Uma conta
-    sem partições vira uma lista de um item só."""
-    agrupado: dict[str, list[Conta]] = {}
-    for conta in contas:
-        agrupado.setdefault(conta.numero, []).append(conta)
-    for particoes in agrupado.values():
-        particoes.sort(key=lambda c: c.particao)
-    return agrupado
+def particoes_de(contas: Sequence[Conta], numero: str) -> list[Conta]:
+    """Partições de uma conta, na ordem do número. Lista vazia quando a
+    conta não tem partição (ou quando a própria conta É uma partição —
+    partição de partição não existe na base)."""
+    filhas = [c for c in contas if c.conta_mae == numero]
+    return sorted(filhas, key=_ordem)
 
 
-def tem_particoes(particoes: Sequence[Conta]) -> bool:
-    return len(particoes) > 1
+def familia(contas: Sequence[Conta], conta: Conta) -> list[Conta]:
+    """A conta mãe seguida das partições dela — a lista que o técnico vê
+    para escolher. Para uma conta sem partição, é só ela mesma."""
+    filhas = particoes_de(contas, conta.numero)
+    return [conta, *filhas] if filhas else [conta]
 
 
-def escolher_particao(particoes: Sequence[Conta], numero_particao: int) -> Conta | None:
-    for conta in particoes:
-        if conta.particao == numero_particao:
-            return conta
-    return None
+def _ordem(conta: Conta):
+    try:
+        return (0, int(conta.numero), conta.nome)
+    except ValueError:
+        return (1, 0, conta.nome)
+
+
+def ordenar(contas: Sequence[Conta]) -> list[Conta]:
+    """Por número — é como a operação enxerga a base."""
+    return sorted(contas, key=_ordem)

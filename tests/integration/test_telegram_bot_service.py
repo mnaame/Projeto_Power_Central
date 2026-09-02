@@ -5,14 +5,19 @@ from app.models.audit import AuditLog
 from app.services import settings_service
 from app.services import telegram_bot_service as svc
 
+# Formato real do portal: partição é conta própria; cue_nparticion guarda
+# o cue_iid da MÃE, e o vínculo legível vem em madre_ncuenta.
 CONTAS = [
-    {"cue_ncuenta": "0095", "cue_nparticion": 0, "cue_iid": "9516", "cue_cnombre": "AUTO MECANICA CENTRO"},
-    {"cue_ncuenta": "0010", "cue_nparticion": 0, "cue_iid": "9530", "cue_cnombre": "VILLEFORT HM"},
-    {"cue_ncuenta": "0011", "cue_nparticion": 0, "cue_iid": "9531", "cue_cnombre": "VILLEFORT HM DEPOSITO"},
-    # conta com partições: loja e tesouraria do mesmo local
-    {"cue_ncuenta": "0043", "cue_nparticion": 0, "cue_iid": "9700", "cue_cnombre": "PET PARA PETS"},
-    {"cue_ncuenta": "0043", "cue_nparticion": 1, "cue_iid": "9701", "cue_cnombre": "PET PARA PETS - LOJA"},
-    {"cue_ncuenta": "0043", "cue_nparticion": 2, "cue_iid": "9702", "cue_cnombre": "PET PARA PETS - TESOURARIA"},
+    {"cue_ncuenta": "0095", "cue_nparticion": "0", "cue_iid": "9516", "cue_cnombre": "AUTO MECANICA CENTRO"},
+    {"cue_ncuenta": "0010", "cue_nparticion": "0", "cue_iid": "9530", "cue_cnombre": "VILLEFORT HM"},
+    {"cue_ncuenta": "0011", "cue_nparticion": "0", "cue_iid": "9531", "cue_cnombre": "VILLEFORT HM DEPOSITO"},
+    # local com tesouraria separada (caso real VILLEFORT TROPICAL 4 -> 5)
+    {"cue_ncuenta": "0004", "cue_nparticion": "0", "cue_iid": "9385", "cue_cnombre": "VILLEFORT TROPICAL"},
+    {
+        "cue_ncuenta": "0005", "cue_nparticion": "9385", "cue_iid": "9386",
+        "cue_cnombre": "VILLEFORT ATACADISTA TROPICAL - TESOURARIA",
+        "madre_ncuenta": "0004", "madre_cnombre": "VILLEFORT TROPICAL",
+    },
 ]
 
 # Formato do export nativo: cabeçalho + uma linha por evento.
@@ -93,11 +98,6 @@ class SessaoFake:
         from app.domain import contas as dom_contas
 
         return dom_contas.contas_da_resposta(CONTAS)
-
-    def contas_por_numero(self):
-        from app.domain import contas as dom_contas
-
-        return dom_contas.agrupar_por_numero(self.contas())
 
     def invalidar(self):
         self.invalidada = True
@@ -500,34 +500,33 @@ def test_legenda_vai_so_no_primeiro_arquivo(app, autorizado):
     assert telegram.documentos[1][2] == ""
 
 
-def test_zona_de_conta_com_particoes_pergunta_qual(app, autorizado):
-    telegram, sessao = _processar(app, "/zona 43")
+def test_zona_da_conta_mae_pergunta_de_qual_setor(app, autorizado):
+    telegram, sessao = _processar(app, "/zona 4")
 
     assert sessao.client().zonas_pedidas == []  # não chutou o setor
-    assert "tem 3 partições" in telegram.texto_completo
-    assert "/zona 43/2" in telegram.texto_completo
+    assert "partição(ões)" in telegram.texto_completo
+    assert "/zona 5 — VILLEFORT ATACADISTA TROPICAL - TESOURARIA" in telegram.texto_completo
 
 
-def test_zona_com_particao_escolhida_usa_o_id_da_particao(app, autorizado):
-    telegram, sessao = _processar(app, "/zona 43/2")
-    assert sessao.client().zonas_pedidas == ["9702"]
+def test_zona_da_particao_resolve_direto(app, autorizado):
+    """Partição tem número próprio: /zona 5 já é a tesouraria."""
+    telegram, sessao = _processar(app, "/zona 5")
+    assert sessao.client().zonas_pedidas == ["9386"]
 
 
-def test_relatorio_com_particao_e_dias(app, autorizado):
-    telegram, _ = _processar(app, "/relatorio 43/1 15")
+def test_relatorio_de_particao_com_dias(app, autorizado):
+    telegram, _ = _processar(app, "/relatorio 5 15")
 
     assert "15 dia(s)" in telegram.documentos[0][2]
-    assert "43/1" in telegram.documentos[0][2]
-    # partição entra no nome do arquivo: senão dois setores da mesma conta
-    # gerariam arquivos de nome igual no mesmo chat
-    assert "P1" in telegram.documentos[0][1]
+    # o número da partição já distingue o arquivo, sem sufixo extra
+    assert telegram.documentos[0][1].startswith("0005_")
 
 
-def test_relatorio_de_conta_com_particoes_tambem_pergunta(app, autorizado):
-    telegram, sessao = _processar(app, "/relatorio 43")
+def test_relatorio_da_conta_mae_tambem_pergunta(app, autorizado):
+    telegram, _ = _processar(app, "/relatorio 4")
 
     assert telegram.documentos == []
-    assert "/relatorio 43/1" in telegram.texto_completo
+    assert "/relatorio 5" in telegram.texto_completo
 
 
 def test_clientes_lista_a_base_com_particoes(app, autorizado):
@@ -535,7 +534,8 @@ def test_clientes_lista_a_base_com_particoes(app, autorizado):
 
     texto = telegram.texto_completo
     assert "AUTO MECANICA CENTRO" in texto
-    assert "43/1 — PET PARA PETS - LOJA" in texto
+    assert "5 — VILLEFORT ATACADISTA TROPICAL - TESOURARIA" in texto
+    assert "[part. de 4]" in texto
     assert AuditLog.query.filter_by(action="bot_clientes_pedido").one().result == "success"
 
 

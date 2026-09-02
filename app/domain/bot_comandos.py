@@ -13,7 +13,8 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Mapping, Sequence
 
-from app.domain.contas import Conta, escolher_particao, tem_particoes
+from app.domain import contas as dom_contas
+from app.domain.contas import Conta
 
 COMANDO_RELATORIO = "relatorio"
 COMANDO_ZONA = "zona"
@@ -26,11 +27,6 @@ COMANDOS_CONHECIDOS = (
     COMANDO_CLIENTES,
 )
 
-# Separador de partição no comando: `95/2` = conta 95, partição 2. A
-# barra não colide com nada — o hífen colidiria com o formato que o
-# portal mostra na tela ("MIL-0334") e o ponto pareceria decimal.
-SEPARADOR_PARTICAO = "/"
-
 # Quantos clientes listar quando o nome é ambíguo — a resposta tem que
 # caber numa mensagem e continuar legível no celular.
 MAX_SUGESTOES = 10
@@ -38,7 +34,8 @@ MAX_SUGESTOES = 10
 RESOLUCAO_OK = "ok"
 RESOLUCAO_AMBIGUA = "ambigua"
 RESOLUCAO_NAO_ENCONTRADA = "nao_encontrada"
-# A conta tem partições e o técnico não disse qual: lista e pergunta.
+# A conta pedida é a MÃE de outras (tesouraria, depósito): lista a
+# família e pergunta, em vez de assumir que era sobre o local inteiro.
 RESOLUCAO_PARTICOES = "particoes"
 
 
@@ -101,76 +98,44 @@ def separar_conta_e_dias(argumentos: Sequence[str]) -> tuple[str, int | None]:
     return " ".join(itens), None
 
 
-def separar_conta_e_particao(termo: str) -> tuple[str, int | None]:
-    """`95/2` -> ("95", 2). Sem barra, a partição fica indefinida (None) —
-    diferente de 0, que é uma escolha explícita pela conta principal."""
+def resolver_conta(termo: str, contas: Sequence[Conta]) -> Resolucao:
+    """Aceita número (`5`, `0005`) ou parte do nome.
+
+    Partição é conta de verdade, com número próprio — então `/zona 5` já
+    resolve direto, sem sintaxe especial. O que exige pergunta é o
+    contrário: pedir a conta MÃE de um local que tem setores separados.
+    Aí o bot lista a família (mãe + partições) e deixa o técnico escolher,
+    porque "o histórico da VILLEFORT TROPICAL" pode significar a loja ou a
+    tesouraria — e entregar o setor errado é entregar a informação errada.
+    """
     termo = (termo or "").strip()
-    if SEPARADOR_PARTICAO not in termo:
-        return termo, None
-    base, _, sufixo = termo.rpartition(SEPARADOR_PARTICAO)
-    sufixo = sufixo.strip()
-    if not sufixo.isdigit():
-        return termo, None
-    return base.strip(), int(sufixo)
-
-
-def resolver_conta(
-    termo: str, contas_por_numero: Mapping[str, Sequence[Conta]]
-) -> Resolucao:
-    """Aceita número (`95`, `0095`), nome (`auto mecanica`) e partição
-    (`95/2`).
-
-    `contas_por_numero` é o de `app.domain.contas.agrupar_por_numero`:
-    número normalizado -> partições daquela conta.
-
-    Três perguntas em ordem, e nenhuma delas é chutada:
-    1. qual cliente? (número ou nome; nome ambíguo pede o número)
-    2. qual partição? (só quando a conta tem mais de uma e o técnico não
-       disse qual — a partição errada é o setor errado do mesmo local)
-    3. a partição pedida existe?"""
-    termo, particao_pedida = separar_conta_e_particao(termo)
     if not termo:
         return Resolucao(RESOLUCAO_NAO_ENCONTRADA, None, ())
 
     if termo.isdigit():
-        particoes = list(contas_por_numero.get(normalizar_conta(termo), ()))
+        alvo_numero = dom_contas.normalizar_numero(termo)
+        encontradas = [c for c in contas if c.numero == alvo_numero]
     else:
         alvo = normalizar(termo)
-        casadas = [
-            (numero, list(particoes))
-            for numero, particoes in contas_por_numero.items()
-            if any(alvo in normalizar(c.nome) for c in particoes)
-        ]
-        if not casadas:
-            return Resolucao(RESOLUCAO_NAO_ENCONTRADA, None, ())
-
+        encontradas = [c for c in contas if alvo in normalizar(c.nome)]
         # Nome idêntico (não só contido) resolve a ambiguidade: "VILLEFORT
         # HM" não pode ficar preso porque existe "VILLEFORT HM DEPOSITO".
-        exatas = [
-            (numero, particoes)
-            for numero, particoes in casadas
-            if any(normalizar(c.nome) == alvo for c in particoes)
-        ]
+        exatas = [c for c in encontradas if normalizar(c.nome) == alvo]
         if len(exatas) == 1:
-            casadas = exatas
-        if len(casadas) > 1:
-            candidatas = [particoes[0] for _, particoes in casadas]
-            candidatas.sort(key=lambda c: normalizar(c.nome))
-            return Resolucao(RESOLUCAO_AMBIGUA, None, tuple(candidatas))
-        particoes = casadas[0][1]
+            encontradas = exatas
 
-    if not particoes:
+    if not encontradas:
         return Resolucao(RESOLUCAO_NAO_ENCONTRADA, None, ())
+    if len(encontradas) > 1:
+        return Resolucao(
+            RESOLUCAO_AMBIGUA, None, tuple(dom_contas.ordenar(encontradas))
+        )
 
-    if particao_pedida is not None:
-        escolhida = escolher_particao(particoes, particao_pedida)
-        if escolhida is None:
-            return Resolucao(RESOLUCAO_PARTICOES, None, tuple(particoes))
-        return Resolucao(RESOLUCAO_OK, escolhida, ())
-
-    if tem_particoes(particoes):
-        return Resolucao(RESOLUCAO_PARTICOES, None, tuple(particoes))
-    return Resolucao(RESOLUCAO_OK, particoes[0], ())
+    conta = encontradas[0]
+    familia = dom_contas.familia(contas, conta)
+    if len(familia) > 1:
+        return Resolucao(RESOLUCAO_PARTICOES, None, tuple(familia))
+    return Resolucao(RESOLUCAO_OK, conta, ())
 
 
 def formatar_ambiguidade(candidatas: Sequence[Conta]) -> str:
@@ -178,41 +143,39 @@ def formatar_ambiguidade(candidatas: Sequence[Conta]) -> str:
     nunca escolhe por ele."""
     linhas = [f"Achei {len(candidatas)} clientes com esse nome. Repita com o número:"]
     for candidata in candidatas[:MAX_SUGESTOES]:
-        linhas.append(f"{candidata.numero} — {candidata.nome}")
+        linhas.append(candidata.rotulo)
     if len(candidatas) > MAX_SUGESTOES:
         linhas.append(f"(+{len(candidatas) - MAX_SUGESTOES} — refine o nome)")
     return "\n".join(linhas)
 
 
-def formatar_particoes(candidatas: Sequence[Conta], *, comando: str) -> str:
-    """Mostra o comando pronto para copiar — o técnico não precisa
-    decorar a sintaxe da partição."""
-    nome = candidatas[0].nome if candidatas else ""
+def formatar_particoes(familia: Sequence[Conta], *, comando: str) -> str:
+    """Mãe + partições, cada uma com o comando pronto para copiar. Cada
+    linha é uma conta de verdade, então o número já é o comando."""
+    mae = familia[0]
     linhas = [
-        f"{candidatas[0].numero} {nome} tem {len(candidatas)} partições. "
-        "Escolha qual:"
+        f"{mae.numero} {mae.nome} tem {len(familia) - 1} partição(ões). "
+        "Escolha de qual você precisa:"
     ]
-    for candidata in candidatas:
-        alvo = f"{candidata.numero}{SEPARADOR_PARTICAO}{candidata.particao}"
-        linhas.append(f"/{comando} {alvo} — {candidata.nome}")
+    for conta in familia:
+        sufixo = "" if conta is mae else "  (partição)"
+        linhas.append(f"/{comando} {conta.numero} — {conta.nome}{sufixo}")
     return "\n".join(linhas)
 
 
 def formatar_lista_clientes(contas: Sequence[Conta], *, filtro: str = "") -> str:
-    """Lista de clientes com as partições. Ordena por número (é como a
-    operação enxerga a base) e mostra a partição quando existe."""
+    """Lista de clientes. Partição aparece com a mãe ao lado, senão o
+    técnico não sabe de qual local aquele número faz parte."""
     if not contas:
         alvo = f' com "{filtro}"' if filtro else ""
         return f"Nenhum cliente encontrado{alvo}."
 
-    def _chave(conta: Conta):
-        try:
-            return (0, int(conta.numero), conta.particao)
-        except ValueError:
-            return (1, 0, conta.particao)
-
     titulo = f'Clientes{f" — filtro: {filtro}" if filtro else ""} ({len(contas)})'
-    return "\n".join([titulo, ""] + [c.rotulo for c in sorted(contas, key=_chave)])
+    linhas = [titulo, ""]
+    for conta in dom_contas.ordenar(contas):
+        vinculo = f"  [part. de {conta.conta_mae}]" if conta.e_particao else ""
+        linhas.append(f"{conta.rotulo}{vinculo}")
+    return "\n".join(linhas)
 
 
 def filtrar_clientes(contas: Sequence[Conta], filtro: str) -> list[Conta]:
@@ -235,8 +198,9 @@ def formatar_ajuda() -> str:
         "/ajuda — esta lista\n\n"
         "A conta pode ser o número ou parte do nome. Se o nome casar com "
         "mais de um cliente, eu peço o número.\n"
-        "Conta com partições: use conta/partição — ex.: /zona 95/2. "
-        "Se não disser qual, eu listo as partições."
+        "Local com partição (tesouraria, depósito): cada uma tem número "
+        "próprio. Se você pedir a conta principal, eu listo as partições "
+        "para escolher."
     )
 
 

@@ -1,33 +1,32 @@
-from app.domain.contas import Conta, agrupar_por_numero
+from app.domain.contas import Conta
 from app.domain.bot_comandos import (
     RESOLUCAO_AMBIGUA,
     RESOLUCAO_NAO_ENCONTRADA,
     RESOLUCAO_OK,
     RESOLUCAO_PARTICOES,
     filtrar_clientes,
-    formatar_lista_clientes,
-    formatar_particoes,
-    separar_conta_e_particao,
     formatar_ajuda,
     formatar_ambiguidade,
+    formatar_lista_clientes,
+    formatar_particoes,
     formatar_resumo_relatorio,
     interpretar,
     resolver_conta,
     separar_conta_e_dias,
 )
 
+# Espelha a base real: partição é conta própria, ligada à mãe por número.
 CONTAS = [
-    Conta("95", 0, "9516", "AUTO MECANICA CENTRO"),
-    Conta("141", 0, "9520", "VILLEFORT FONTE GRANDE"),
-    Conta("10", 0, "9530", "VILLEFORT HM"),
-    Conta("11", 0, "9531", "VILLEFORT HM DEPOSITO"),
-    Conta("18", 0, "9540", "CONDOMINIO EDIFÍCIO VAN GOGH"),
-    # conta com partições (loja + tesouraria no mesmo local)
-    Conta("43", 0, "9700", "PET PARA PETS"),
-    Conta("43", 1, "9701", "PET PARA PETS - LOJA"),
-    Conta("43", 2, "9702", "PET PARA PETS - TESOURARIA"),
+    Conta("95", "9516", "AUTO MECANICA CENTRO"),
+    Conta("141", "9520", "VILLEFORT FONTE GRANDE"),
+    Conta("10", "9530", "VILLEFORT HM"),
+    Conta("11", "9531", "VILLEFORT HM DEPOSITO"),
+    Conta("18", "9540", "CONDOMINIO EDIFÍCIO VAN GOGH"),
+    # local com tesouraria separada (caso real VILLEFORT TROPICAL 4 -> 5)
+    Conta("4", "9385", "VILLEFORT TROPICAL"),
+    Conta("5", "9386", "VILLEFORT ATACADISTA TROPICAL - TESOURARIA", conta_mae="4"),
 ]
-MAPA = agrupar_por_numero(CONTAS)
+MAPA = CONTAS
 
 
 # ---------- interpretar ----------
@@ -116,7 +115,7 @@ def test_nome_ambiguo_nao_chuta():
     resolucao = resolver_conta("villefort", MAPA)
     assert resolucao.status == RESOLUCAO_AMBIGUA
     assert resolucao.conta is None
-    assert len(resolucao.candidatas) == 3
+    assert len(resolucao.candidatas) == 5
 
 
 def test_nome_exato_resolve_mesmo_sendo_prefixo_de_outro():
@@ -161,84 +160,77 @@ def test_ajuda_cita_os_comandos():
 # ---------- partições ----------
 
 
-def test_separa_conta_e_particao():
-    assert separar_conta_e_particao("43/2") == ("43", 2)
-
-
-def test_sem_barra_particao_fica_indefinida():
-    """None é diferente de 0: 0 é escolha explícita pela conta principal."""
-    assert separar_conta_e_particao("43") == ("43", None)
-
-
-def test_barra_com_lixo_nao_vira_particao():
-    assert separar_conta_e_particao("43/x") == ("43/x", None)
-
-
-def test_conta_sem_particoes_resolve_direto():
+def test_conta_sem_particao_resolve_direto():
     resolucao = resolver_conta("95", MAPA)
     assert resolucao.status == RESOLUCAO_OK
     assert resolucao.conta.cue_iid == "9516"
 
 
-def test_conta_com_particoes_pergunta_qual(app=None):
-    """A partição errada é o setor errado do mesmo local — não se chuta."""
-    resolucao = resolver_conta("43", MAPA)
+def test_particao_resolve_direto_pelo_numero_dela():
+    """Partição tem número próprio — não precisa de sintaxe especial."""
+    resolucao = resolver_conta("5", MAPA)
+    assert resolucao.status == RESOLUCAO_OK
+    assert resolucao.conta.cue_iid == "9386"
+    assert resolucao.conta.e_particao is True
+
+
+def test_pedir_a_conta_mae_pergunta_de_qual_setor():
+    """"O histórico da VILLEFORT TROPICAL" pode ser a loja ou a
+    tesouraria — entregar o setor errado é entregar a informação errada."""
+    resolucao = resolver_conta("4", MAPA)
     assert resolucao.status == RESOLUCAO_PARTICOES
     assert resolucao.conta is None
-    assert [c.particao for c in resolucao.candidatas] == [0, 1, 2]
+    assert [c.numero for c in resolucao.candidatas] == ["4", "5"]
 
 
-def test_particao_escolhida_resolve():
-    resolucao = resolver_conta("43/2", MAPA)
+def test_nome_da_conta_mae_tambem_pergunta():
+    assert resolver_conta("villefort tropical", MAPA).status == RESOLUCAO_PARTICOES
+
+
+def test_nome_da_particao_resolve_direto():
+    resolucao = resolver_conta("tesouraria", MAPA)
     assert resolucao.status == RESOLUCAO_OK
-    assert resolucao.conta.cue_iid == "9702"
-    assert resolucao.conta.identificacao == "43/2"
-
-
-def test_particao_inexistente_lista_as_que_existem():
-    resolucao = resolver_conta("43/9", MAPA)
-    assert resolucao.status == RESOLUCAO_PARTICOES
-    assert len(resolucao.candidatas) == 3
-
-
-def test_nome_de_conta_com_particoes_tambem_pergunta():
-    resolucao = resolver_conta("pet para pets", MAPA)
-    assert resolucao.status == RESOLUCAO_PARTICOES
+    assert resolucao.conta.numero == "5"
 
 
 def test_lista_de_particoes_traz_o_comando_pronto():
-    texto = formatar_particoes(resolver_conta("43", MAPA).candidatas, comando="zona")
-    assert "/zona 43/1 — PET PARA PETS - LOJA" in texto
-    assert "/zona 43/2 — PET PARA PETS - TESOURARIA" in texto
+    texto = formatar_particoes(resolver_conta("4", MAPA).candidatas, comando="zona")
+    assert "/zona 4 — VILLEFORT TROPICAL" in texto
+    assert "/zona 5 — VILLEFORT ATACADISTA TROPICAL - TESOURARIA  (partição)" in texto
 
 
-def test_relatorio_com_particao_e_dias():
-    termo, dias = separar_conta_e_dias(["43/2", "15"])
-    assert (termo, dias) == ("43/2", 15)
-    assert resolver_conta(termo, MAPA).conta.cue_iid == "9702"
+def test_relatorio_de_particao_com_dias():
+    termo, dias = separar_conta_e_dias(["5", "15"])
+    assert (termo, dias) == ("5", 15)
+    assert resolver_conta(termo, MAPA).conta.cue_iid == "9386"
 
 
 # ---------- /clientes ----------
 
 
-def test_lista_clientes_mostra_particoes_e_ordena_por_numero():
+def test_lista_clientes_ordena_por_numero():
     texto = formatar_lista_clientes(CONTAS)
     linhas = [linha for linha in texto.split("\n") if linha and not linha.startswith("Clientes")]
-    assert linhas[0] == "10 — VILLEFORT HM"
-    assert "43/1 — PET PARA PETS - LOJA" in linhas
-    assert "43 — PET PARA PETS" in linhas
+    assert linhas[0] == "4 — VILLEFORT TROPICAL"
+
+
+def test_lista_clientes_mostra_de_quem_a_particao_e():
+    """Sem isso o técnico não sabe de qual local aquele número faz parte."""
+    texto = formatar_lista_clientes(CONTAS)
+    linha = [linha for linha in texto.split("\n") if linha.startswith("5 —")][0]
+    assert "[part. de 4]" in linha
 
 
 def test_lista_clientes_conta_o_total():
-    assert "(8)" in formatar_lista_clientes(CONTAS)
+    assert "(7)" in formatar_lista_clientes(CONTAS)
 
 
 def test_filtro_por_nome():
-    assert len(filtrar_clientes(CONTAS, "villefort")) == 3
+    assert len(filtrar_clientes(CONTAS, "villefort")) == 5
 
 
 def test_filtro_por_numero():
-    assert [c.numero for c in filtrar_clientes(CONTAS, "43")] == ["43", "43", "43"]
+    assert [c.numero for c in filtrar_clientes(CONTAS, "141")] == ["141"]
 
 
 def test_filtro_sem_resultado_avisa():
@@ -253,4 +245,4 @@ def test_sem_filtro_devolve_tudo():
 def test_ajuda_cita_clientes_e_particao():
     texto = formatar_ajuda()
     assert "/clientes" in texto
-    assert "95/2" in texto
+    assert "partição" in texto

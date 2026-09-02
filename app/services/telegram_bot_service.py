@@ -161,7 +161,7 @@ class _SessaoSoftGuard:
 
     def contas(self) -> list[dom_contas.Conta]:
         """Todas as contas COM as partições — o bot é o único que precisa
-        delas (o técnico trabalha no setor, não na conta inteira)."""
+        delas (o técnico trabalha no setor, não no local inteiro)."""
         agora = datetime.now(timezone.utc)
         if (
             self._mapa is None
@@ -174,8 +174,7 @@ class _SessaoSoftGuard:
             self._mapa_em = agora
         return self._mapa
 
-    def contas_por_numero(self) -> dict[str, list[dom_contas.Conta]]:
-        return dom_contas.agrupar_por_numero(self.contas())
+
 
 
 # ----------------------------------------------------------------------
@@ -207,7 +206,7 @@ def _resolver_ou_avisar(termo: str, sessao, telegram, chat_id: str, *, comando: 
     """Devolve a conta resolvida, ou None depois de já ter respondido ao
     técnico (não encontrada / ambígua / falta escolher a partição). Nunca
     chuta — nem o cliente, nem o setor."""
-    resolucao = dom_bot.resolver_conta(termo, sessao.contas_por_numero())
+    resolucao = dom_bot.resolver_conta(termo, sessao.contas())
     if resolucao.status == dom_bot.RESOLUCAO_OK:
         return resolucao.conta
     if resolucao.status == dom_bot.RESOLUCAO_AMBIGUA:
@@ -305,9 +304,9 @@ def _comando_relatorio(argumentos, *, sessao, telegram, chat_id: str) -> str:
     # cores da plataforma; o PDF abre no celular sem app de planilha. Os
     # dois saem do mesmo `linhas_do_export`, então não há risco de um
     # mostrar coisa diferente do outro.
-    base = dom_tecnico.nome_arquivo_loja(
-        conta.numero, f"{conta.nome}{conta.sufixo_arquivo}", extensao=""
-    )
+    # Partição tem número de conta próprio, então o nome do arquivo já
+    # sai distinto sem precisar de sufixo.
+    base = dom_tecnico.nome_arquivo_loja(conta.numero, conta.nome, extensao="")
     telegram.enviar_documento(
         conteudo, nome_arquivo=f"{base}xls", chat_id=chat_id, legenda=legenda
     )
