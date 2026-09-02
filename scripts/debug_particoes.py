@@ -10,14 +10,19 @@ Uso (CMD, venv ativado, na pasta do projeto):
 
   [conta] = opcional, número da conta para detalhar (ex.: 43)
 
+Ele compara as duas consultas (com e sem o filtro) e despeja **cru** o
+que só aparece sem o filtro — sem supor nada sobre o formato. A primeira
+execução em produção mostrou que a suposição original estava errada: as
+188 linhas viraram 188 contas distintas, ou seja, as partições NÃO
+compartilham o `cue_ncuenta` da conta principal.
+
 O que olhar na saída:
-  1. "com partições" > 0  -> a consulta sem filtro está trazendo os setores;
-     se vier 0, o portal ignora o filtro vazio e precisamos de outro
-     (ajustar `listar_todas_contas(incluir_particoes=True)`).
-  2. Nos campos crus, confirmar que `cue_iid` MUDA entre as partições da
-     mesma conta — é ele que o zoneamento e o export usam.
-  3. Se o campo de partição tiver outro nome, ajustar `_particao` em
-     `app/domain/contas.py`.
+  1. "O QUE SÃO ESSAS LINHAS A MAIS" -> os campos das linhas que o filtro
+     escondia. É o que define como o bot deve identificar uma partição.
+  2. "TODAS AS CHAVES" -> se o campo que liga a partição à conta mãe tiver
+     outro nome, é aqui que ele aparece.
+  3. A contagem final diz se dá para agrupar por `cue_ncuenta` ou se
+     precisamos de outro vínculo.
 """
 
 import os
@@ -65,55 +70,58 @@ def main() -> None:
             raise SystemExit(1)
 
         print(f"Linhas com o filtro atual (cue_nparticion=0): {len(so_principais)}")
-        print(f"Linhas sem o filtro (deve incluir partições):  {len(com_particoes)}")
+        print(f"Linhas sem o filtro:                           {len(com_particoes)}")
 
-        if len(com_particoes) <= len(so_principais):
+        # Diferença por cue_iid: são exatamente as linhas que o filtro
+        # `cue_nparticion = 0` escondia. Sem supor nada sobre o formato —
+        # é isso que precisa ser olhado.
+        ids_principais = {str(linha.get("cue_iid") or linha.get("Id")) for linha in so_principais}
+        extras = [
+            linha
+            for linha in com_particoes
+            if str(linha.get("cue_iid") or linha.get("Id")) not in ids_principais
+        ]
+        print(f"Linhas que só aparecem SEM o filtro:           {len(extras)}")
+
+        if not extras:
             print(
-                "\n>>> ATENÇÃO: a consulta sem filtro não trouxe linhas a mais.\n"
-                "    O portal deve estar ignorando o filtro vazio — o bot vai\n"
-                "    listar só as contas principais. Ajustar o filtro em\n"
-                "    `listar_todas_contas(incluir_particoes=True)`."
+                "\n>>> O filtro vazio não trouxe nada a mais. O portal deve\n"
+                "    estar ignorando `filter=[]` — precisamos de outro filtro."
             )
-
-        contas = dom_contas.contas_da_resposta(com_particoes)
-        agrupado = dom_contas.agrupar_por_numero(contas)
-        multiplas = {n: p for n, p in agrupado.items() if dom_contas.tem_particoes(p)}
-
-        print(f"\nContas distintas: {len(agrupado)}")
-        print(f"Com partições:    {len(multiplas)}")
-        print("Distribuição de partições por conta:",
-              dict(Counter(len(p) for p in agrupado.values())))
-
-        exemplos = list(multiplas.items())[:3]
-        if alvo and alvo in agrupado:
-            exemplos = [(alvo, agrupado[alvo])]
-
-        if not exemplos:
-            print("\nNenhuma conta com mais de uma linha — nada a detalhar.")
             return
 
-        for numero, particoes in exemplos:
-            print(f"\n--- Conta {numero} ({len(particoes)} linha(s)) ---")
-            for conta in particoes:
-                print(f"  particao={conta.particao}  cue_iid={conta.cue_iid}  {conta.nome}")
-            ids = {c.cue_iid for c in particoes}
-            if len(ids) < len(particoes):
-                print(
-                    "  >>> ATENÇÃO: cue_iid REPETIDO entre partições. O bot usa\n"
-                    "      o cue_iid para consultar zoneamento/histórico, então\n"
-                    "      escolher a partição não mudaria o resultado."
-                )
+        print("\n=== O QUE SÃO ESSAS LINHAS A MAIS (amostra de 5) ===")
+        for linha in extras[:5]:
+            print({campo: linha.get(campo) for campo in CAMPOS_INTERESSANTES})
 
-        print("\n--- Campos crus da primeira conta com partições ---")
-        numero = exemplos[0][0]
-        for linha in com_particoes:
-            if str(linha.get("cue_ncuenta", "")).strip().lstrip("0") == numero:
-                print({campo: linha.get(campo) for campo in CAMPOS_INTERESSANTES})
-        print("\nChaves disponíveis na linha:")
-        for linha in com_particoes:
-            if str(linha.get("cue_ncuenta", "")).strip().lstrip("0") == numero:
-                print(sorted(linha.keys()))
-                break
+        print("\n=== TODAS AS CHAVES de uma dessas linhas ===")
+        print(sorted(extras[0].keys()))
+
+        print("\n=== LINHA CRUA COMPLETA (a primeira) ===")
+        for chave, valor in sorted(extras[0].items()):
+            print(f"  {chave} = {valor!r}")
+
+        # A pergunta que decide o desenho: dá para ligar a partição à conta
+        # "mãe"? Se o número da partição for diferente do da principal, o
+        # agrupamento por número não serve.
+        numeros_principais = {
+            str(linha.get("cue_ncuenta", "")).strip().lstrip("0") for linha in so_principais
+        }
+        extras_com_numero_conhecido = [
+            linha
+            for linha in extras
+            if str(linha.get("cue_ncuenta", "")).strip().lstrip("0") in numeros_principais
+        ]
+        print(
+            f"\nDessas {len(extras)} linhas, {len(extras_com_numero_conhecido)} têm o mesmo\n"
+            "cue_ncuenta de uma conta principal (ou seja: dá para agrupar por número)."
+        )
+
+        if alvo:
+            print(f"\n=== TODAS as linhas com cue_ncuenta {alvo} ===")
+            for linha in com_particoes:
+                if str(linha.get("cue_ncuenta", "")).strip().lstrip("0") == alvo:
+                    print({campo: linha.get(campo) for campo in CAMPOS_INTERESSANTES})
 
 
 if __name__ == "__main__":
