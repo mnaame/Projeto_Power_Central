@@ -136,10 +136,12 @@ def test_termo_vazio():
 # ---------- formatação ----------
 
 
-def test_ambiguidade_lista_numero_e_nome():
-    texto = formatar_ambiguidade(resolver_conta("villefort", MAPA).candidatas)
-    assert "Repita com o número" in texto
-    assert "141 — VILLEFORT FONTE GRANDE" in texto
+def test_ambiguidade_lista_com_comando_copiavel():
+    texto = formatar_ambiguidade(
+        resolver_conta("villefort", MAPA).candidatas, comando="zona"
+    )
+    assert "VILLEFORT FONTE GRANDE" in texto
+    assert "/zona 141" in texto
 
 
 def test_resumo_do_relatorio():
@@ -174,17 +176,22 @@ def test_particao_resolve_direto_pelo_numero_dela():
     assert resolucao.conta.e_particao is True
 
 
-def test_pedir_a_conta_mae_pergunta_de_qual_setor():
-    """"O histórico da VILLEFORT TROPICAL" pode ser a loja ou a
-    tesouraria — entregar o setor errado é entregar a informação errada."""
+def test_numero_da_conta_mae_resolve_direto():
+    """Regressão: a mãe SEMPRE tem partição, então perguntar de novo aqui
+    deixava /relatorio 154 num laço infinito — não havia como pedir o
+    relatório da própria conta principal (visto em produção)."""
     resolucao = resolver_conta("4", MAPA)
+    assert resolucao.status == RESOLUCAO_OK
+    assert resolucao.conta.cue_iid == "9385"
+
+
+def test_nome_da_conta_mae_pergunta_de_qual_setor():
+    """Buscando por nome o técnico pode nem saber que há setores — aí sim
+    vale listar, porque entregar o setor errado é entregar dado errado."""
+    resolucao = resolver_conta("villefort tropical", MAPA)
     assert resolucao.status == RESOLUCAO_PARTICOES
     assert resolucao.conta is None
     assert [c.numero for c in resolucao.candidatas] == ["4", "5"]
-
-
-def test_nome_da_conta_mae_tambem_pergunta():
-    assert resolver_conta("villefort tropical", MAPA).status == RESOLUCAO_PARTICOES
 
 
 def test_nome_da_particao_resolve_direto():
@@ -193,10 +200,29 @@ def test_nome_da_particao_resolve_direto():
     assert resolucao.conta.numero == "5"
 
 
-def test_lista_de_particoes_traz_o_comando_pronto():
-    texto = formatar_particoes(resolver_conta("4", MAPA).candidatas, comando="zona")
-    assert "/zona 4 — VILLEFORT TROPICAL" in texto
-    assert "/zona 5 — VILLEFORT ATACADISTA TROPICAL - TESOURARIA  (partição)" in texto
+def test_lista_de_particoes_traz_o_comando_sozinho_na_linha():
+    """O comando não pode dividir a linha com o nome: no Telegram o
+    técnico copia a linha inteira e chegaria
+    "/zona 4 — VILLEFORT TROPICAL", que o bot lê como nome de cliente."""
+    texto = formatar_particoes(
+        resolver_conta("villefort tropical", MAPA).candidatas, comando="zona"
+    )
+    linhas = texto.split("\n")
+    assert "/zona 4" in linhas
+    assert "/zona 5" in linhas
+    assert not any(linha.startswith("/zona ") and "—" in linha for linha in linhas)
+
+
+def test_comando_copiado_da_lista_funciona():
+    """Fecha o ciclo: o que o bot imprime é exatamente o que ele aceita."""
+    texto = formatar_particoes(
+        resolver_conta("villefort tropical", MAPA).candidatas, comando="relatorio"
+    )
+    linha = [linha for linha in texto.split("\n") if linha.startswith("/relatorio ")][1]
+
+    comando = interpretar(linha)
+    termo, _ = separar_conta_e_dias(comando.argumentos)
+    assert resolver_conta(termo, MAPA).status == RESOLUCAO_OK
 
 
 def test_relatorio_de_particao_com_dias():

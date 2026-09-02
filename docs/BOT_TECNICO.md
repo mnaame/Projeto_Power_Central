@@ -200,11 +200,29 @@ Consequência boa: **não existe sintaxe especial**. Como a partição é conta
 de verdade, `/zona 5` já entrega a tesouraria. A primeira versão inventou
 um `95/2` que não corresponde a nada na base — foi removido.
 
-O que exige pergunta é o contrário: pedir a conta **mãe** de um local com
-setores separados. "O histórico da VILLEFORT TROPICAL" pode ser a loja ou
-a tesouraria, então o bot lista a família (mãe + partições, cada uma com o
-comando pronto) e deixa o técnico escolher — mesma disciplina do nome
-ambíguo. Entregar o setor errado é entregar a informação errada.
+Quando perguntar, e quando não (corrigido depois de quebrar em produção):
+
+- **Número explícito resolve direto.** `/relatorio 154` entrega a 154. A
+  primeira versão perguntava aqui também — e como a conta mãe **sempre**
+  tem partição, `/relatorio 154` caía na mesma pergunta para sempre: não
+  havia caminho nenhum para o relatório da conta principal.
+- **Busca por nome pergunta**, se o local tiver setores. Aí o técnico pode
+  nem saber que existe uma tesouraria separada, e entregar o setor errado
+  é entregar dado errado — mesma disciplina do nome ambíguo.
+
+**As linhas sugeridas trazem o comando sozinho**, com o nome do cliente na
+linha de cima:
+
+```
+APOIO TIROL TESOURARIA FILIAL 503  (partição)
+/relatorio 155
+```
+
+Na primeira versão era `/relatorio 155 — APOIO TIROL TESOURARIA...` numa
+linha só. No Telegram o técnico copia a linha inteira, e chegava
+`/relatorio 155 — APOIO TIROL TESOURARIA FILIAL 503` — que o bot lê como
+nome de cliente e não acha. O que o bot imprime tem que ser exatamente o
+que ele aceita; há teste fechando esse ciclo ponta a ponta.
 
 Na produção real: 138 contas principais, 188 com as partições — 50 setores
 que antes não apareciam em lugar nenhum.
@@ -252,6 +270,8 @@ bot/token já cifrado do Telegram — sem segredo novo.
 | **BT6** ✅ | Partições (`domain/contas.py`, `/clientes`, `conta/partição` em `/zona` e `/relatorio`) + relatório em `.xls` **e** `.pdf` | Unit: leitura defensiva de `cue_nparticion`, agrupamento, escolha, listagem/filtro; integração: conta com partições pergunta em vez de chutar, `95/2` usa o `cue_iid` da partição, `/clientes` pede as partições ao portal, `/relatorio` manda os dois arquivos do mesmo conteúdo |
 
 | **BT7** ✅ | Modelo de partição corrigido contra a base real (`debug_particoes.py`): partição é conta própria, `cue_nparticion` é o `cue_iid` da mãe, vínculo por `madre_ncuenta` — a sintaxe `95/2` inventada na BT6 foi removida | Unit com o formato real do portal (número próprio, vínculo com a mãe, `cue_nparticion=0` é principal, mãe apontando pra si é ignorada) + integração (pedir a mãe pergunta, pedir a partição resolve direto) |
+
+| **BT8** ✅ | Corrige o laço da conta mãe (número explícito resolve direto; só a busca por nome pergunta) e as linhas sugeridas, que quebravam ao serem copiadas inteiras | Regressão unit + integração: `/relatorio 154` gera em vez de perguntar, nome da mãe ainda pergunta, e a linha impressa pelo bot é reprocessada e resolve |
 
 ## 7. Em aberto
 

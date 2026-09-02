@@ -204,7 +204,8 @@ def test_zona_por_nome(app, autorizado):
 def test_zona_com_nome_ambiguo_pede_o_numero(app, autorizado):
     telegram, sessao = _processar(app, "/zona villefort")
     assert sessao.client().zonas_pedidas == []  # não chutou nenhuma conta
-    assert "Repita com o número" in telegram.texto_completo
+    assert "Escolha um" in telegram.texto_completo
+    assert "/zona 10" in telegram.texto_completo
 
 
 def test_zona_sem_argumento_avisa(app, autorizado):
@@ -500,12 +501,19 @@ def test_legenda_vai_so_no_primeiro_arquivo(app, autorizado):
     assert telegram.documentos[1][2] == ""
 
 
-def test_zona_da_conta_mae_pergunta_de_qual_setor(app, autorizado):
-    telegram, sessao = _processar(app, "/zona 4")
+def test_zona_pelo_nome_da_conta_mae_pergunta_de_qual_setor(app, autorizado):
+    telegram, sessao = _processar(app, "/zona villefort tropical")
 
     assert sessao.client().zonas_pedidas == []  # não chutou o setor
-    assert "partição(ões)" in telegram.texto_completo
-    assert "/zona 5 — VILLEFORT ATACADISTA TROPICAL - TESOURARIA" in telegram.texto_completo
+    assert "partição separada" in telegram.texto_completo
+    assert "/zona 5" in telegram.texto_completo
+
+
+def test_zona_pelo_numero_da_conta_mae_resolve_direto(app, autorizado):
+    """Regressão do laço infinito: a mãe sempre tem partição, então pedir
+    pelo número dela caía na mesma pergunta pra sempre."""
+    telegram, sessao = _processar(app, "/zona 4")
+    assert sessao.client().zonas_pedidas == ["9385"]
 
 
 def test_zona_da_particao_resolve_direto(app, autorizado):
@@ -522,11 +530,30 @@ def test_relatorio_de_particao_com_dias(app, autorizado):
     assert telegram.documentos[0][1].startswith("0005_")
 
 
-def test_relatorio_da_conta_mae_tambem_pergunta(app, autorizado):
+def test_relatorio_da_conta_mae_pelo_numero_gera(app, autorizado):
     telegram, _ = _processar(app, "/relatorio 4")
+    assert len(telegram.documentos) == 2
+
+
+def test_relatorio_pelo_nome_da_mae_pergunta(app, autorizado):
+    telegram, _ = _processar(app, "/relatorio villefort tropical")
 
     assert telegram.documentos == []
     assert "/relatorio 5" in telegram.texto_completo
+
+
+def test_linha_sugerida_e_copiavel_de_ponta_a_ponta(app, autorizado):
+    """O ciclo que quebrou em produção: o técnico copia a linha inteira
+    que o bot imprimiu e ela tem que funcionar."""
+    telegram, sessao = _processar(app, "/zona villefort tropical")
+    sugestao = [
+        linha
+        for linha in telegram.texto_completo.split("\n")
+        if linha.startswith("/zona ")
+    ][1]
+
+    telegram2, sessao2 = _processar(app, sugestao)
+    assert sessao2.client().zonas_pedidas == ["9386"]
 
 
 def test_clientes_lista_a_base_com_particoes(app, autorizado):

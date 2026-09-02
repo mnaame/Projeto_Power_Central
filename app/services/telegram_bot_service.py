@@ -210,7 +210,11 @@ def _resolver_ou_avisar(termo: str, sessao, telegram, chat_id: str, *, comando: 
     if resolucao.status == dom_bot.RESOLUCAO_OK:
         return resolucao.conta
     if resolucao.status == dom_bot.RESOLUCAO_AMBIGUA:
-        _responder(telegram, chat_id, dom_bot.formatar_ambiguidade(resolucao.candidatas))
+        _responder(
+            telegram,
+            chat_id,
+            dom_bot.formatar_ambiguidade(resolucao.candidatas, comando=comando),
+        )
     elif resolucao.status == dom_bot.RESOLUCAO_PARTICOES:
         _responder(
             telegram, chat_id, dom_bot.formatar_particoes(resolucao.candidatas, comando=comando)

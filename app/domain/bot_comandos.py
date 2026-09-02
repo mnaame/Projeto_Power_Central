@@ -112,7 +112,8 @@ def resolver_conta(termo: str, contas: Sequence[Conta]) -> Resolucao:
     if not termo:
         return Resolucao(RESOLUCAO_NAO_ENCONTRADA, None, ())
 
-    if termo.isdigit():
+    pediu_pelo_numero = termo.isdigit()
+    if pediu_pelo_numero:
         alvo_numero = dom_contas.normalizar_numero(termo)
         encontradas = [c for c in contas if c.numero == alvo_numero]
     else:
@@ -132,35 +133,56 @@ def resolver_conta(termo: str, contas: Sequence[Conta]) -> Resolucao:
         )
 
     conta = encontradas[0]
+    # Número explícito é resposta, não pergunta. Perguntar de novo aqui
+    # deixava a conta MÃE inalcançável: ela sempre tem partição, então
+    # /relatorio 154 caía na mesma pergunta pra sempre (visto em produção).
+    if pediu_pelo_numero:
+        return Resolucao(RESOLUCAO_OK, conta, ())
+
     familia = dom_contas.familia(contas, conta)
     if len(familia) > 1:
         return Resolucao(RESOLUCAO_PARTICOES, None, tuple(familia))
     return Resolucao(RESOLUCAO_OK, conta, ())
 
 
-def formatar_ambiguidade(candidatas: Sequence[Conta]) -> str:
-    """Lista curta para o técnico repetir o comando com o número — o bot
-    nunca escolhe por ele."""
-    linhas = [f"Achei {len(candidatas)} clientes com esse nome. Repita com o número:"]
-    for candidata in candidatas[:MAX_SUGESTOES]:
-        linhas.append(candidata.rotulo)
+def _opcoes(contas: Sequence[Conta], *, comando: str, marcar_particao: bool) -> list[str]:
+    """Nome numa linha, comando SOZINHO na seguinte.
+
+    O comando não pode dividir a linha com o nome do cliente: no Telegram
+    o técnico copia (ou toca) a linha inteira, e aí chega
+    `/relatorio 154 — APOIO TIROL FILIAL 503`, que o bot lê como um nome
+    de cliente e não acha nada. Aconteceu em produção."""
+    linhas = []
+    for conta in contas:
+        marca = "  (partição)" if marcar_particao and conta.e_particao else ""
+        linhas.append(f"{conta.nome}{marca}")
+        linhas.append(f"/{comando} {conta.numero}")
+        linhas.append("")
+    return linhas
+
+
+def formatar_ambiguidade(candidatas: Sequence[Conta], *, comando: str) -> str:
+    """Lista curta para o técnico escolher — o bot nunca escolhe por ele."""
+    mostradas = list(candidatas[:MAX_SUGESTOES])
+    linhas = [f"Achei {len(candidatas)} clientes com esse nome. Escolha um:", ""]
+    linhas += _opcoes(mostradas, comando=comando, marcar_particao=True)
     if len(candidatas) > MAX_SUGESTOES:
         linhas.append(f"(+{len(candidatas) - MAX_SUGESTOES} — refine o nome)")
-    return "\n".join(linhas)
+    return "\n".join(linhas).rstrip()
 
 
 def formatar_particoes(familia: Sequence[Conta], *, comando: str) -> str:
-    """Mãe + partições, cada uma com o comando pronto para copiar. Cada
-    linha é uma conta de verdade, então o número já é o comando."""
+    """Mãe + partições, cada uma com o comando pronto para copiar."""
     mae = familia[0]
+    quantas = len(familia) - 1
+    plural = "partição separada" if quantas == 1 else f"{quantas} partições separadas"
     linhas = [
-        f"{mae.numero} {mae.nome} tem {len(familia) - 1} partição(ões). "
-        "Escolha de qual você precisa:"
+        f"{mae.nome} tem {plural if quantas != 1 else '1 ' + plural}. "
+        "Escolha de qual você precisa:",
+        "",
     ]
-    for conta in familia:
-        sufixo = "" if conta is mae else "  (partição)"
-        linhas.append(f"/{comando} {conta.numero} — {conta.nome}{sufixo}")
-    return "\n".join(linhas)
+    linhas += _opcoes(familia, comando=comando, marcar_particao=True)
+    return "\n".join(linhas).rstrip()
 
 
 def formatar_lista_clientes(contas: Sequence[Conta], *, filtro: str = "") -> str:
@@ -222,9 +244,9 @@ def formatar_ajuda(*, dias_padrao: int, cooldown_segundos: int = 0) -> str:
         "  peço o número — nunca escolho por você.",
         "",
         "LOCAL COM PARTIÇÃO (tesouraria, depósito)",
-        "  Cada setor é uma conta com número próprio, então é só pedir",
-        "  pelo número dele. Se você pedir a conta principal, eu listo",
-        "  os setores para escolher.",
+        "  Cada setor é uma conta com número próprio. Pedindo pelo",
+        "  NÚMERO, eu vou direto nele. Buscando pelo NOME, se o local",
+        "  tiver setores eu listo todos para você escolher.",
         "  Use /clientes para ver quais são: a partição aparece com",
         "  [part. de <conta>] do lado.",
     ]
