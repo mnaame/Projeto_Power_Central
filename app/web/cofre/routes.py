@@ -160,6 +160,18 @@ def editar(segredo_id: int):
     if request.method == "GET":
         form = SegredoForm(obj=segredo)
         form.senha.data = ""  # nunca preenche o campo de senha ao editar
+        # `obj=` preenche por NOME do atributo, e no modelo a coluna é
+        # `notas_cifradas` — então `notas` chegava vazia à tela. Pior que o
+        # campo em branco: salvar de novo gravava vazio por cima e a nota
+        # sumia de vez (relatado em produção).
+        try:
+            form.notas.data = cofre_service.notas_em_claro(
+                segredo, config=current_app.config
+            )
+        except cofre_service.CofreDecifraError as exc:
+            # Chave trocada: melhor avisar do que abrir o formulário em
+            # branco e deixar o usuário apagar a nota sem perceber.
+            flash(f"{exc} As notas não puderam ser carregadas.", "warning")
     else:
         form = SegredoForm()
 

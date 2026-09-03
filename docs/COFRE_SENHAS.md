@@ -50,6 +50,18 @@ constraint explicitamente em `nivel`.
 - `cifrar`/`decifrar` — Fernet com `config["VAULT_ENCRYPTION_KEY"]`;
   decifra que falha (chave errada/trocada) vira `CofreDecifraError` com
   mensagem amigável, nunca derruba a tela.
+- `notas_em_claro(segredo, *, config)` — devolve as notas decifradas para
+  o formulário de edição. **Diferente da senha, não exige
+  reautenticação**: as notas são contexto do item (por onde entrar, com
+  quem falar), e quem chegou na tela de edição já passou pelo controle de
+  nível de `obter_ou_negar`.
+  > Isso não é conforto, é correção de um bug real: `SegredoForm(obj=segredo)`
+  > preenche por **nome do atributo** e a coluna é `notas_cifradas`, então
+  > o campo chegava vazio à tela. O sintoma visível era "a nota some"; o
+  > invisível era pior — salvar qualquer outro campo gravava vazio por
+  > cima e **destruía a nota**, porque `atualizar` grava o que veio do
+  > formulário. Na listagem aparece só o selo "com notas"
+  > (`notas_cifradas is not None`); o conteúdo não é decifrado ali.
 - `criar`/`atualizar`/`excluir` — campo senha vazio no formulário de edição
   = "não trocar" (mesma UX de qualquer formulário de credencial).
 - `listar(*, usuario, busca, categoria)` — filtra `nivel='equipe'` para

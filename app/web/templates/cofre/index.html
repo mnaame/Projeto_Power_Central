@@ -67,6 +67,9 @@
               <span class="chip chip-warning" title="Vence em {{ segredo.expira_em|data_curta }}">vence em breve</span>
               {% endif %}
             {% endif %}
+            {% if segredo.notas_cifradas %}
+            <span class="chip chip-neutral" title="Este item tem notas — abra em 'editar' para ler">com notas</span>
+            {% endif %}
           </td>
           <td>{{ segredo.categoria }}</td>
           <td>{{ segredo.login or '—' }}</td>

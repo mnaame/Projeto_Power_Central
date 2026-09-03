@@ -553,6 +553,11 @@ auditoria de todo acesso à senha.
   forte (não precisa digitar); deixar o campo de senha em branco ao editar
   mantém a senha atual. O campo opcional "Lembrete de troca" destaca o
   item na lista quando a data se aproxima ou já passou.
+- **Notas**: use para o contexto que não é credencial — por onde entrar,
+  com quem falar, qual o IP fixo. Ficam cifradas junto com a senha e
+  **aparecem preenchidas quando você abre o item em "editar"**. Na lista
+  aparece só o selo **"com notas"**, sem o conteúdo — para ler, abra a
+  edição. Apagar o campo e salvar remove a nota, como esperado.
 - **Configuração** (só admin): mostra se a `VAULT_ENCRYPTION_KEY` está
   configurada e repete o aviso de backup separado — ver §3.1 e §6.
 

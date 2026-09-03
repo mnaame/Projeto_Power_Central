@@ -4,14 +4,16 @@ from app.models.cofre import Segredo
 from app.services import cofre_service
 
 
-def _criar_segredo(app, *, titulo="DVR Loja Centro", nivel="equipe", senha="senha-atual-123"):
+def _criar_segredo(
+    app, *, titulo="DVR Loja Centro", nivel="equipe", senha="senha-atual-123", notas=None
+):
     segredo = cofre_service.criar(
         titulo=titulo,
         categoria="camera",
         login="admin",
         senha=senha,
         url="http://192.168.0.10",
-        notas=None,
+        notas=notas,
         nivel=nivel,
         user_id=None,
         config=app.config,
@@ -252,3 +254,100 @@ def test_senha_nunca_aparece_na_listagem(app, operador_client):
     _criar_segredo(app, senha="segredo-nao-pode-vazar-000")
     resposta = operador_client.get("/cofre")
     assert b"segredo-nao-pode-vazar-000" not in resposta.data
+
+
+# ---------- notas (bug real: sumiam ao editar) ----------
+
+
+def test_editar_carrega_as_notas_no_formulario(app, operador_client):
+    """`SegredoForm(obj=segredo)` preenche por NOME do atributo, e a coluna
+    é `notas_cifradas` — então o campo chegava vazio à tela."""
+    segredo_id = _criar_segredo(app, notas="Acesso pela porta dos fundos")
+
+    resposta = operador_client.get(f"/cofre/{segredo_id}/editar")
+
+    assert resposta.status_code == 200
+    assert "Acesso pela porta dos fundos".encode("utf-8") in resposta.data
+
+
+def test_editar_outro_campo_nao_apaga_as_notas(app, operador_client):
+    """O pior sintoma: o formulário vinha vazio e salvar gravava vazio por
+    cima — a nota era destruída sem ninguém pedir."""
+    segredo_id = _criar_segredo(app, notas="Chave reserva com o zelador")
+
+    operador_client.post(
+        f"/cofre/{segredo_id}/editar",
+        data={
+            "titulo": "DVR Loja Centro (renomeado)",
+            "categoria": "camera",
+            "login": "admin",
+            "senha": "",
+            "url": "http://192.168.0.10",
+            "notas": "Chave reserva com o zelador",
+            "nivel": "equipe",
+            "expira_em": "",
+        },
+        follow_redirects=True,
+    )
+
+    segredo = db.session.get(Segredo, segredo_id)
+    assert segredo.titulo == "DVR Loja Centro (renomeado)"
+    assert cofre_service.notas_em_claro(segredo, config=app.config) == (
+        "Chave reserva com o zelador"
+    )
+
+
+def test_notas_salvas_na_criacao_ficam_legiveis(app, operador_client):
+    operador_client.post(
+        "/cofre/novo",
+        data={
+            "titulo": "Roteador matriz",
+            "categoria": "roteador",
+            "login": "admin",
+            "senha": "senha-forte-123",
+            "url": "",
+            "notas": "IP fixo 10.0.0.1, senha do wifi na etiqueta",
+            "nivel": "equipe",
+            "expira_em": "",
+        },
+        follow_redirects=True,
+    )
+
+    segredo = Segredo.query.filter_by(titulo="Roteador matriz").one()
+    assert cofre_service.notas_em_claro(segredo, config=app.config) == (
+        "IP fixo 10.0.0.1, senha do wifi na etiqueta"
+    )
+
+
+def test_apagar_as_notas_de_proposito_continua_funcionando(app, operador_client):
+    segredo_id = _criar_segredo(app, notas="nota velha")
+
+    operador_client.post(
+        f"/cofre/{segredo_id}/editar",
+        data={
+            "titulo": "DVR Loja Centro",
+            "categoria": "camera",
+            "login": "admin",
+            "senha": "",
+            "url": "http://192.168.0.10",
+            "notas": "",
+            "nivel": "equipe",
+            "expira_em": "",
+        },
+        follow_redirects=True,
+    )
+
+    segredo = db.session.get(Segredo, segredo_id)
+    assert segredo.notas_cifradas is None
+
+
+def test_lista_marca_quem_tem_notas(app, operador_client):
+    """Sem nenhum sinal na lista, a nota parecia não ter sido salva."""
+    _criar_segredo(app, titulo="COM NOTA", notas="tem nota aqui")
+    _criar_segredo(app, titulo="SEM NOTA")
+
+    resposta = operador_client.get("/cofre")
+
+    assert "com notas".encode("utf-8") in resposta.data
+    # o conteúdo da nota NÃO é decifrado na listagem
+    assert "tem nota aqui".encode("utf-8") not in resposta.data

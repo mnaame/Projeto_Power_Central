@@ -162,6 +162,20 @@ def excluir(segredo: Segredo) -> None:
     db.session.delete(segredo)
 
 
+def notas_em_claro(segredo: Segredo, *, config) -> str:
+    """Notas decifradas, para preencher o formulário de edição.
+
+    Ao contrário da senha, as notas **não** exigem reautenticação: elas são
+    contexto do item (por onde entrar, com quem falar), e quem chegou na
+    tela de edição já passou pelo controle de nível em `obter_ou_negar`.
+    Precisam voltar ao formulário porque, sem isso, editar qualquer outro
+    campo apagava a nota — o `atualizar` grava o que veio do formulário, e
+    o formulário vinha vazio."""
+    if not segredo.notas_cifradas:
+        return ""
+    return decifrar(segredo.notas_cifradas, config=config)
+
+
 def revelar(segredo: Segredo, *, usuario, senha_reautenticacao: str, config) -> str:
     """Confere a senha do PRÓPRIO usuário de novo (reautenticação), decifra
     e audita — sempre, mesmo em falha de reautenticação. A senha nunca
