@@ -1,21 +1,23 @@
-"""Diagnóstico: por que o ReporteHistorico devolve 500 num período grande.
+"""Diagnóstico: por que o ReporteHistorico devolve 500.
 
-Sintoma em produção (08/09/2026): o relatório de Disparos Geral falhou em
-dois períodos de 3 e 4 dias com `500 Server Error` vindo do próprio portal
-— inclusive na janela padrão de fim de semana (sexta 18h → segunda 08h).
-O de Atendimentos, no mesmo horário, passou; ele consulta códigos de
-volume muito menor.
+Histórico deste script: a primeira versão testou se o problema era o
+TAMANHO da janela. Rodou em produção (08/09/2026) e **descartou volume** —
+falhou igual em 96h e em 3h, sempre na primeira página. Então não é
+paginação nem `Mostrar=5000`.
 
-A suspeita é VOLUME, e este script mede em vez de supor. Ele:
+O que sobra: a própria consulta. E há uma pista forte — o relatório de
+Atendimentos passou no mesmo dia, usando a MESMA função, com os MESMOS
+parâmetros fixos (`table`, `OrdenarFecha`, `Mostrar`, formato de data).
+A única diferença é a lista de `CodigosAlarma`.
 
-  1. pede a MESMA janela que falhou e mostra o erro;
-  2. vai reduzindo a janela (4d, 3d, 2d, 1d, 12h, 6h, 3h) e diz onde
-     começa a passar;
-  3. em cada tentativa mostra o `total` que o portal declara e quantas
-     linhas realmente vieram — é isso que testa a outra hipótese: o
-     `Mostrar=5000` que o client envia. Se o portal declara total acima
-     de 5000 e quebra ao paginar além disso, o conserto é fatiar a busca
-     por tempo, não mexer no tamanho da página.
+Este script isola isso: mesma janela curta para todos os testes, mudando
+só os códigos.
+
+  1. controle com os códigos do Atendimentos (deve PASSAR);
+  2. os 7 códigos do Disparos juntos (deve FALHAR);
+  3. um código por vez — se um deles quebra sozinho, achamos o culpado;
+  4. se todos passarem sozinhos, vai somando até quebrar (aí o problema é
+     a combinação ou o tamanho da lista, não um código específico).
 
 Uso (PowerShell, na pasta do projeto — PARE o serviço antes, o portal
 aceita uma sessão por usuário):
@@ -23,14 +25,12 @@ aceita uma sessão por usuário):
   Stop-Service PowerCentral
   .venv\\Scripts\\python.exe scripts\\debug_historico_grande.py
   Start-Service PowerCentral
-
-Opcional, para repetir um período exato:
-  .venv\\Scripts\\python.exe scripts\\debug_historico_grande.py 2026-09-04T18:00 2026-09-08T08:00
 """
 
 import os
 import sys
 from datetime import datetime, timedelta
+from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -38,113 +38,125 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app import create_app  # noqa: E402
 from app.domain import disparos as dom_disp  # noqa: E402
 from app.integrations.softguard_client import (  # noqa: E402
+    FORMATO_DATA_HISTORICO,
     HISTORICO_PATH,
     SoftGuardClient,
     SoftGuardError,
 )
-from app.services import collector  # noqa: E402
+from app.services import collector, settings_service  # noqa: E402
 
 FUSO = ZoneInfo("America/Sao_Paulo")
-CODIGOS = (dom_disp.CODIGO_DISPARO,) + dom_disp.CODIGOS_ARME + dom_disp.CODIGOS_DESARME
-JANELAS_HORAS = (96, 72, 48, 24, 12, 6, 3)
+CODIGOS_DISPAROS = (dom_disp.CODIGO_DISPARO,) + dom_disp.CODIGOS_ARME + dom_disp.CODIGOS_DESARME
+# Janela curta de propósito: já sabemos que tamanho não é o problema.
+JANELA_HORAS = 3
 
 
-def _parse(texto: str) -> datetime:
-    for formato in ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
-        try:
-            return datetime.strptime(texto, formato).replace(tzinfo=FUSO)
-        except ValueError:
-            continue
-    raise SystemExit(f"Data inválida: {texto!r} — use 2026-09-04T18:00")
-
-
-def _uma_pagina(client: SoftGuardClient, *, desde, hasta, start: int, limit: int) -> dict:
-    """Uma página crua, sem o loop de paginação — para ver o `total` que o
-    portal declara e em que ponto ele quebra."""
-    from urllib.parse import urljoin
-
-    from app.integrations.softguard_client import FORMATO_DATA_HISTORICO
-
+def _consultar(client: SoftGuardClient, *, codigos, desde, hasta) -> dict:
+    """Uma página crua, sem o loop de paginação."""
     resposta = client._request(
         "GET",
         urljoin(client._credentials.base_url, HISTORICO_PATH),
         params={
             "FechaDesde": desde.strftime(FORMATO_DATA_HISTORICO),
             "FechaHasta": hasta.strftime(FORMATO_DATA_HISTORICO),
-            "CodigosAlarma": ",".join(CODIGOS),
+            "CodigosAlarma": ",".join(codigos),
             "table": "p_recepcion",
             "OrdenarFecha": "DESC",
             "Mostrar": 5000,
-            "page": (start // limit) + 1,
-            "start": start,
-            "limit": limit,
+            "page": 1,
+            "start": 0,
+            "limit": 100,
         },
     )
     return client._json(resposta)
 
 
-def _sondar(client: SoftGuardClient, *, desde, hasta, rotulo: str) -> None:
-    print(f"\n--- {rotulo}: {desde:%d/%m %H:%M} -> {hasta:%d/%m %H:%M} ---")
+def _testar(client, *, codigos, desde, hasta, rotulo: str) -> bool:
+    etiqueta = ",".join(codigos) if codigos else "(vazio)"
     try:
-        payload = _uma_pagina(client, desde=desde, hasta=hasta, start=0, limit=100)
+        payload = _consultar(client, codigos=codigos, desde=desde, hasta=hasta)
     except SoftGuardError as exc:
-        print(f"  1ª página JÁ FALHOU: {str(exc)[:160]}")
-        return
-
+        curto = str(exc).split(" for url")[0][-90:]
+        print(f"  FALHOU  {rotulo:<22} [{etiqueta}]  {curto}")
+        return False
     total = int(payload.get("total", 0) or 0)
     linhas = payload.get("rows", payload.get("data", []))
-    print(f"  1ª página OK — total declarado: {total} | linhas nesta página: {len(linhas)}")
-
-    if total > 5000:
-        print(
-            "  >>> total ACIMA de 5000, que é o `Mostrar` enviado pelo client.\n"
-            "      Se a paginação quebrar além disso, é aqui que está a causa."
-        )
-
-    # Onde a paginação quebra? Anda de 1000 em 1000 até o total declarado.
-    for start in range(1000, min(total, 20000) + 1, 1000):
-        try:
-            pagina = _uma_pagina(client, desde=desde, hasta=hasta, start=start, limit=100)
-        except SoftGuardError as exc:
-            print(f"  QUEBROU em start={start}: {str(exc)[:120]}")
-            return
-        vieram = len(pagina.get("rows", pagina.get("data", [])))
-        if vieram == 0:
-            print(f"  start={start}: 0 linhas (portal parou de servir antes do total)")
-            return
-    print(f"  paginação foi até o fim sem erro (total {total})")
+    print(f"  ok      {rotulo:<22} [{etiqueta}]  total={total} linhas={len(linhas)}")
+    return True
 
 
 def main() -> None:
-    if len(sys.argv) >= 3:
-        hasta = _parse(sys.argv[2])
-        desde = _parse(sys.argv[1])
-    else:
-        # Reproduz a janela padrão de fim de semana que falhou.
-        hasta = datetime.now(FUSO).replace(minute=0, second=0, microsecond=0)
-        desde = hasta - timedelta(hours=JANELAS_HORAS[0])
+    hasta = datetime.now(FUSO).replace(minute=0, second=0, microsecond=0)
+    desde = hasta - timedelta(hours=JANELA_HORAS)
 
     app = create_app()
     with app.app_context():
         client = SoftGuardClient(collector.credenciais_softguard(app.config))
-        print(f"Códigos consultados: {','.join(CODIGOS)}")
-
-        _sondar(client, desde=desde, hasta=hasta, rotulo="janela pedida")
-
-        for horas in JANELAS_HORAS:
-            if hasta - timedelta(hours=horas) <= desde:
-                continue
-            _sondar(
-                client,
-                desde=hasta - timedelta(hours=horas),
-                hasta=hasta,
-                rotulo=f"últimas {horas}h",
+        codigos_atendimentos = tuple(
+            dict.fromkeys(
+                (*settings_service.get_atend_codigos_evento(), *dom_disp.CODIGOS_ARME)
             )
+        )
+
+        print(f"Janela fixa: {desde:%d/%m %H:%M} -> {hasta:%d/%m %H:%M} ({JANELA_HORAS}h)")
+        print("(tamanho já foi descartado — aqui só muda a lista de códigos)\n")
+
+        print("1) CONTROLE — códigos do Atendimentos, que passou hoje:")
+        controle_ok = _testar(
+            client, codigos=codigos_atendimentos, desde=desde, hasta=hasta,
+            rotulo="atendimentos",
+        )
+        if not controle_ok:
+            print(
+                "\n>>> Até o CONTROLE falhou. Então não são os códigos: ou o\n"
+                "    endpoint está fora, ou o usuário de integração perdeu\n"
+                "    permissão nele. Me mande esta saída."
+            )
+            return
+
+        print("\n2) Os 7 códigos do Disparos juntos:")
+        if _testar(
+            client, codigos=CODIGOS_DISPAROS, desde=desde, hasta=hasta, rotulo="disparos (todos)"
+        ):
+            print(
+                "\n>>> Passou agora! Então o 500 de hoje foi momentâneo (portal\n"
+                "    instável), não um defeito da consulta. Tente o relatório\n"
+                "    de novo pela tela."
+            )
+            return
+
+        print("\n3) Um código por vez — quem quebra sozinho:")
+        individuais = {c: _testar(
+            client, codigos=(c,), desde=desde, hasta=hasta, rotulo=f"só {c}"
+        ) for c in CODIGOS_DISPAROS}
+
+        culpados = [c for c, ok in individuais.items() if not ok]
+        if culpados:
+            print(
+                f"\n>>> CULPADO(S): {', '.join(culpados)}\n"
+                "    Esse(s) código(s) derruba(m) o endpoint sozinho(s). O\n"
+                "    conserto é no que o sistema pede, não no tamanho."
+            )
+            return
+
+        print("\n4) Todos passam sozinhos — somando até quebrar:")
+        acumulado: list[str] = []
+        for codigo in CODIGOS_DISPAROS:
+            acumulado.append(codigo)
+            if not _testar(
+                client, codigos=tuple(acumulado), desde=desde, hasta=hasta,
+                rotulo=f"{len(acumulado)} código(s)",
+            ):
+                print(
+                    f"\n>>> Quebra ao incluir **{codigo}** junto dos anteriores.\n"
+                    "    Não é o código sozinho, é a combinação/quantidade —\n"
+                    "    o conserto é dividir a consulta por códigos."
+                )
+                return
 
         print(
-            "\nLeitura: a maior janela que passa ponta a ponta é o tamanho\n"
-            "seguro para fatiar a busca. Se TODAS falharem, não é volume —\n"
-            "me mande a saída que eu investigo por outro caminho."
+            "\n>>> Tudo passou agora, inclusive os 7 juntos. O 500 de hoje foi\n"
+            "    momentâneo. Tente o relatório de novo pela tela."
         )
 
 
