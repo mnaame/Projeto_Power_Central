@@ -793,6 +793,16 @@ $env:FLASK_APP = "app:create_app"
 Start-Service PowerCentral
 ```
 
+**Os passos são todos obrigatórios — `git pull` sozinho não atualiza nada.**
+O serviço carrega o código na memória quando sobe: enquanto ele não for
+reiniciado, o Python que está rodando continua sendo o da versão antiga,
+por mais que os arquivos na pasta já sejam os novos. Isso engana, porque a
+tela não muda e o erro corrigido continua acontecendo igual. Já custou uma
+manhã de diagnóstico em cima de código que nem estava em execução.
+
+Se só quiser recarregar o código, sem migração nem dependência nova,
+`Restart-Service PowerCentral` basta.
+
 ## 8. Troubleshooting
 
 **O painel não abre no navegador**
