@@ -824,6 +824,30 @@ instâncias** mexendo no mesmo banco — o serviço `PowerCentral` rodando e,
 ao mesmo tempo, alguém com `flask run` aberto na mesma pasta (o segundo
 sobe outro agendador). Pare uma das duas e tente de novo.
 
+**"Internal Server Error" ao gerar um relatório de vários dias (só os longos)**
+Se o relatório curto sai e o de 3–4 dias derruba, o culpado é o **token do
+portal vencendo no meio da busca**. O SoftGuard não devolve 401 quando a
+sessão morre: devolve **500** com `Invalid Token` no corpo. Um relatório de
+4 dias são centenas de páginas e vários minutos de portal, tempo de sobra
+para o token expirar — e a página seguinte derrubava a operação inteira.
+
+O client passou a reconhecer esse 500 pelo corpo, refazer o login (com
+cookies novos — relogar por cima do token morto o portal recusa) e retomar
+de onde parou. Se voltar a acontecer, confirme no log
+(`logs\power_central.log`) se aparece `Token vencido em ...; refazendo
+login e repetindo.`: com essa linha a renovação está funcionando e o
+problema é outro; sem ela, o portal mudou a mensagem de erro e a detecção
+precisa ser reajustada.
+
+Para medir o comportamento do portal direto, com o serviço **parado** (ele
+só aceita uma sessão por usuário):
+
+```powershell
+Stop-Service PowerCentral
+.venv\Scripts\python.exe scripts\debug_historico_500.py
+Start-Service PowerCentral
+```
+
 **O serviço não inicia**
 Rode manualmente para ver o erro na tela:
 `\.venv\Scripts\waitress-serve.exe --call app:create_app` (dentro da pasta

@@ -122,15 +122,17 @@ class _SessaoSoftGuard:
     pedido é lento e castiga o portal). O mapa de contas também é caro
     (lista inteira do dealer), então fica em cache com validade curta.
 
-    **Sessão tem prazo.** O `SoftGuardClient` faz login uma vez e nunca
-    reautentica sozinho (`_logged_in` só é setado na subida, e `_request`
-    repete a chamada sem relogar). No resto do sistema isso nunca apareceu
-    porque cada operação cria um client novo; aqui o client é
-    reaproveitado, então um token vencido faria o portal responder 500 e a
-    sessão morta ficaria em cache para sempre — foi exatamente o que
-    aconteceu em produção. Por isso o client é descartado por idade, e
-    quem chama ainda tem uma segunda linha de defesa em
-    `_executar_renovando_sessao`."""
+    **Sessão tem prazo.** O token do portal vence sozinho e em silêncio: a
+    resposta vem como 500 com `Invalid Token` no corpo, nunca 401. Aqui o
+    client é reaproveitado entre comandos, então uma sessão morta ficaria
+    em cache para sempre e o bot emudeceria até alguém reiniciar o serviço
+    — foi exatamente o que aconteceu em produção.
+
+    Hoje o `SoftGuardClient` reconhece esse 500 e reloga sozinho, mas as
+    duas defesas daqui continuam valendo por serem mais baratas: o
+    descarte por idade evita gastar uma requisição só para descobrir que a
+    sessão morreu, e `_executar_renovando_sessao` cobre a falha que
+    escapar da detecção (o portal mudar o texto do erro, por exemplo)."""
 
     VALIDADE_MAPA = timedelta(minutes=30)
     VALIDADE_SESSAO = timedelta(minutes=20)
@@ -187,9 +189,11 @@ def _executar_renovando_sessao(funcao, *, sessao):
     vez com login novo.
 
     Existe porque a sessão do portal morre em silêncio: o token vence e o
-    SoftGuard passa a responder **500**, não 401 — e o `SoftGuardClient`
-    não relogá sozinho. Sem isto, a primeira expiração deixaria o bot
-    mudo até alguém reiniciar o serviço (visto em produção).
+    SoftGuard passa a responder **500**, não 401. Sem isto, a primeira
+    expiração deixava o bot mudo até alguém reiniciar o serviço (visto em
+    produção). O `SoftGuardClient` hoje reconhece esse 500 e reloga
+    sozinho; isto aqui fica como rede de baixo, para o caso de a detecção
+    não pegar — o portal mudar o texto do erro, por exemplo.
 
     Seguro repetir: nada é enviado ao técnico antes das chamadas ao
     portal — as respostas de "não achei"/"qual?" retornam sem exceção, e

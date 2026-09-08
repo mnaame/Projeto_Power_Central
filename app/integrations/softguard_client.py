@@ -47,6 +47,13 @@ DEFAULT_PAGE_SIZE = 100
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_BACKOFF_SECONDS = 2.0
 
+# O token do portal vence sozinho e em silêncio: a resposta vem como
+# **500**, nunca 401, com este texto dentro do envelope de falha do WCF.
+# Reconhecer pelo corpo é a única forma de separar "a sessão morreu" de "o
+# portal está com problema" — e a diferença importa, porque a primeira se
+# resolve relogando e a segunda não.
+MARCA_TOKEN_VENCIDO = "invalid token"
+
 # Filtro exato da tela "Falha TST" do portal (seção 5 do prompt).
 FILTRO_FALHA_TST = [
     {"property": "cue_nparticion", "value": "0"},
@@ -104,6 +111,16 @@ class SoftGuardClient:
         return self._logged_in
 
     def login(self) -> None:
+        """Autentica **sempre a partir de um cookie jar limpo**.
+
+        Medido contra o portal: relogar por cima de uma sessão cujo token
+        já venceu é rejeitado (`IsValid` devolve `Status: 0`), enquanto o
+        mesmo login num `requests.Session` novo passa. Sem o descarte
+        abaixo, a renovação automática seria inútil justamente na hora em
+        que ela precisa funcionar."""
+        self._session = requests.Session()
+        self._logged_in = False
+
         base = self._credentials.base_url
         self._request("GET", urljoin(base, DESKTOP_APP_PATH))
 
@@ -149,7 +166,7 @@ class SoftGuardClient:
             params.update(
                 {"page": (start // page_size) + 1, "start": start, "limit": page_size}
             )
-            response = self._request(
+            response = self._request_reautenticando(
                 "GET", urljoin(self._credentials.base_url, path), params=params
             )
             payload = self._json(response)
@@ -260,31 +277,41 @@ class SoftGuardClient:
         sessão autenticada por cookie sozinha)."""
         if not self._logged_in:
             self.login()
-        token = self._session.cookies.get("OAuth_Token", "")
 
-        response = self._request(
-            "GET",
-            urljoin(self._credentials.base_url, EXPORT_HISTORICO_PATH),
-            params={
-                "token": token,
-                "fechaProceso": "true",
-                "fechahoraeventocheck": "true",
-                "FechaDesde": desde.strftime(FORMATO_DATA_EXPORT),
-                "FechaHasta": hasta.strftime(FORMATO_DATA_EXPORT),
-                "TipoEvento": "",
-                "Origen": "true",
-                "Estado": "",
-                "Codigoalarma": ",".join(codigos_alarme),
-                "dealerFirma": DEALER_FIRMA,
-                "TrackGuard": "true",
-                "CuentaReporte": cue_iid,
-                "CuentaNumero": numero_conta,
-                "mostrar": 5000,
-                "exportToExcel": "yes",
-                "cuentanombre": f"{DEALER_FIRMA} - {nome_cliente}",
-            },
-            timeout=timeout,
-        )
+        def _baixar() -> requests.Response:
+            # O token é lido DENTRO da tentativa, não uma vez lá fora: como
+            # aqui ele viaja na query (e não só no cookie), repetir com o
+            # valor antigo depois de relogar falharia pelo mesmo motivo.
+            return self._request(
+                "GET",
+                urljoin(self._credentials.base_url, EXPORT_HISTORICO_PATH),
+                params={
+                    "token": self._session.cookies.get("OAuth_Token", ""),
+                    "fechaProceso": "true",
+                    "fechahoraeventocheck": "true",
+                    "FechaDesde": desde.strftime(FORMATO_DATA_EXPORT),
+                    "FechaHasta": hasta.strftime(FORMATO_DATA_EXPORT),
+                    "TipoEvento": "",
+                    "Origen": "true",
+                    "Estado": "",
+                    "Codigoalarma": ",".join(codigos_alarme),
+                    "dealerFirma": DEALER_FIRMA,
+                    "TrackGuard": "true",
+                    "CuentaReporte": cue_iid,
+                    "CuentaNumero": numero_conta,
+                    "mostrar": 5000,
+                    "exportToExcel": "yes",
+                    "cuentanombre": f"{DEALER_FIRMA} - {nome_cliente}",
+                },
+                timeout=timeout,
+            )
+
+        try:
+            response = _baixar()
+        except SoftGuardAuthError:
+            logger.warning("Token vencido no export do histórico; relogando.")
+            self.login()
+            response = _baixar()
 
         texto = response.content.decode("utf-8", "replace").lower()
         if "no se encontr" in texto or "regularizar la situaci" in texto:
@@ -300,7 +327,7 @@ class SoftGuardClient:
         if not self._logged_in:
             self.login()
 
-        response = self._request(
+        response = self._request_reautenticando(
             "GET",
             urljoin(self._credentials.base_url, TIMELINE_PATH),
             params={"IdEvento": id_evento, "limit": limit},
@@ -308,12 +335,45 @@ class SoftGuardClient:
         payload = self._json(response)
         return payload.get("rows", payload.get("data", []))
 
+    @staticmethod
+    def _recusar_token_vencido(response: requests.Response) -> None:
+        """Transforma o 500 de token vencido em `SoftGuardAuthError`.
+
+        Sem isto o vencimento cai no laço de retentativa comum e a mesma
+        chamada é repetida com o mesmo token morto — três falhas certas e
+        ~6s de espera para chegar na mesma resposta."""
+        if response.status_code != 500:
+            return
+        try:
+            corpo = response.text[:2000].lower()
+        except Exception:  # corpo ilegível não deve mascarar o erro HTTP
+            return
+        if MARCA_TOKEN_VENCIDO in corpo:
+            raise SoftGuardAuthError(f"Token vencido em {response.url}")
+
+    def _request_reautenticando(self, method: str, url: str, **kwargs) -> requests.Response:
+        """`_request` que sobrevive ao token vencer no meio de uma operação
+        longa: reloga uma vez e repete a chamada.
+
+        A paginação de um relatório grande são centenas de requisições e
+        leva minutos — tempo mais que suficiente para o token morrer no
+        meio do caminho. Era essa a causa do 500 ao gerar relatórios de
+        vários dias: as primeiras páginas vinham, o token vencia, e o
+        pedido seguinte derrubava a operação inteira."""
+        try:
+            return self._request(method, url, **kwargs)
+        except SoftGuardAuthError:
+            logger.warning("Token vencido em %s; refazendo login e repetindo.", url)
+            self.login()
+            return self._request(method, url, **kwargs)
+
     def _request(self, method: str, url: str, **kwargs) -> requests.Response:
         timeout = kwargs.pop("timeout", self._timeout)
         ultima_excecao: Exception | None = None
         for tentativa in range(1, self._max_retries + 1):
             try:
                 response = self._session.request(method, url, timeout=timeout, **kwargs)
+                self._recusar_token_vencido(response)
                 response.raise_for_status()
                 # Reforça a captura de cookies da resposta na sessão (cobre a
                 # troca de OAuth_Token no passo de login — ver seção 5).

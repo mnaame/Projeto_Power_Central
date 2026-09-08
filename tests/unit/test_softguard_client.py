@@ -293,3 +293,115 @@ def test_listar_zonas_usa_o_filtro_da_tela(requests_mock):
     assert {"property": "zon_ccodigo:ISNOTNULLOREMPTYTRIM", "value": ""} in filtro
     assert json.loads(query["sort"][0])[0]["property"] == "orderCodigo"
     assert query["limit"] == ["400"]
+
+
+# ----------------------------------------------------------------------
+# Token que vence no meio da operação
+#
+# Medido contra o portal em produção: a sessão morre em silêncio e o
+# SoftGuard responde **500** (nunca 401) com "Invalid Token" no corpo. Uma
+# consulta curta cabe na validade e passa; a paginação de um relatório de
+# vários dias são centenas de requisições, leva minutos, e o token vence no
+# meio — era essa a causa do 500 ao gerar relatórios longos.
+# ----------------------------------------------------------------------
+
+FALHA_TOKEN = (
+    '<Fault xmlns="http://schemas.microsoft.com/ws/2005/05/envelope/none">'
+    "<Reason><Text xml:lang=\"en-US\">Exception RaisedMessage: Exception has been "
+    "thrown by the target of an invocation., InnerMessage: Invalid Token: FD"
+    "</Text></Reason></Fault>"
+)
+
+
+def test_token_vencido_vira_erro_de_autenticacao_sem_repetir(requests_mock):
+    """O 500 de token vencido não pode cair no laço de retentativa: repetir
+    a mesma chamada com o mesmo token morto falha do mesmo jeito e só gasta
+    o tempo do backoff."""
+    _mock_login_ok(requests_mock)
+    requests_mock.get(
+        f"{CREDS.base_url}/Rest/search/EventoTimeLineFull",
+        status_code=500,
+        text=FALHA_TOKEN,
+    )
+
+    client = _client(max_retries=3)
+    client.login()
+    chamadas_antes = len(requests_mock.request_history)
+
+    with pytest.raises(SoftGuardAuthError):
+        client.buscar_timeline("123")
+
+    # Uma tentativa + o login da renovação + a repetição — e não três
+    # tentativas cegas por chamada.
+    timeline = [
+        r for r in requests_mock.request_history[chamadas_antes:]
+        if "EventoTimeLineFull" in r.url
+    ]
+    assert len(timeline) == 2
+
+
+def test_500_comum_continua_repetindo(requests_mock):
+    """Só o token vencido é tratado como sessão morta. Um 500 qualquer
+    continua sendo instabilidade do portal, com as retentativas de sempre."""
+    _mock_login_ok(requests_mock)
+    requests_mock.get(
+        f"{CREDS.base_url}/Rest/search/EventoTimeLineFull",
+        status_code=500,
+        text="<Fault>banco fora do ar</Fault>",
+    )
+
+    client = _client(max_retries=2)
+    client.login()
+    chamadas_antes = len(requests_mock.request_history)
+
+    with pytest.raises(SoftGuardError):
+        client.buscar_timeline("123")
+
+    timeline = [
+        r for r in requests_mock.request_history[chamadas_antes:]
+        if "EventoTimeLineFull" in r.url
+    ]
+    # Uma rodada de max_retries e para: sem token vencido não há por que
+    # relogar, e relogar a cada 500 do portal só multiplicaria a carga.
+    assert len(timeline) == 2
+
+
+def test_login_comeca_com_cookie_jar_limpo(requests_mock):
+    """Relogar por cima de um token morto é recusado pelo portal (medido:
+    o mesmo login passa num `requests.Session` novo). Se o jar antigo
+    sobrevivesse, a renovação automática falharia justamente na hora em que
+    precisa funcionar."""
+    _mock_login_ok(requests_mock)
+
+    client = _client()
+    client.login()
+    client._session.cookies.set("OAuth_Token", "token-morto")
+    client._session.cookies.set("lixo", "sobra-de-sessao-antiga")
+
+    client.login()
+
+    assert client._session.cookies.get("lixo") is None
+    assert client._session.cookies.get("OAuth_Token") == "abc123"
+
+
+def test_paginacao_renova_o_token_no_meio_e_termina_a_busca(requests_mock):
+    """O caso real do relatório de vários dias: as primeiras páginas vêm, o
+    token vence, e a busca precisa continuar de onde parou — não recomeçar
+    nem morrer."""
+    _mock_login_ok(requests_mock)
+    requests_mock.get(
+        f"{CREDS.base_url}/Rest/Search/CuentaByDealer",
+        [
+            {"json": {"total": 4, "rows": [{"cue_ncuenta": "1"}, {"cue_ncuenta": "2"}]}},
+            {"status_code": 500, "text": FALHA_TOKEN},
+            {"json": {"total": 4, "rows": [{"cue_ncuenta": "3"}, {"cue_ncuenta": "4"}]}},
+        ],
+    )
+
+    client = _client()
+    contas = client.buscar_contas_em_falha_tst(page_size=2)
+
+    assert [c["cue_ncuenta"] for c in contas] == ["1", "2", "3", "4"]
+    # Relogou de verdade no meio do caminho (o login aparece duas vezes).
+    logins = [r for r in requests_mock.request_history if "OAuthLogin" in r.url]
+    assert len(logins) == 2

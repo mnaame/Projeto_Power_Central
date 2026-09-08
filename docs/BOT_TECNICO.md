@@ -121,11 +121,12 @@ Orquestra: loop, autorização, cooldown, despacho e auditoria.
 ### 3.6 A sessão reaproveitada precisa de prazo (bug real)
 
 Reaproveitar o login entre comandos é pedido do complemento — e foi o que
-quebrou o bot em produção no primeiro dia. O `SoftGuardClient` faz login
-**uma vez** (`_logged_in` só é setado na subida) e nunca reautentica:
-`_request` repete a chamada até 3 vezes, mas sempre com a mesma sessão. No
-resto do sistema isso nunca apareceu porque cada operação cria um client
-novo (`report_service`, `tecnico_service`, `bi_service`).
+quebrou o bot em produção no primeiro dia. Na época o `SoftGuardClient`
+fazia login **uma vez** (`_logged_in` só era setado na subida) e nunca
+reautenticava: `_request` repetia a chamada até 3 vezes, mas sempre com a
+mesma sessão morta. No resto do sistema isso não aparecia porque cada
+operação cria um client novo (`report_service`, `tecnico_service`,
+`bi_service`).
 
 Quando o token venceu, o portal passou a responder **500 — não 401**, em
 `/Rest/Zona/` e no export. Como o client ficava em cache, a sessão morta
@@ -145,6 +146,14 @@ Duas defesas, porque uma só não basta:
 Repetir o comando é seguro porque nada é enviado ao técnico antes das
 chamadas ao portal: as respostas de "não achei"/"qual?" retornam sem
 exceção, e o documento/zoneamento só sai depois que o portal respondeu.
+
+Depois disso o problema apareceu **fora do bot** — relatórios de vários
+dias caíam com o mesmo 500 — e o conserto subiu uma camada: o
+`SoftGuardClient` agora reconhece `Invalid Token` no corpo do 500 e reloga
+sozinho, com cookie jar limpo (relogar por cima do token morto o portal
+recusa). As duas defesas acima continuam, por serem mais baratas: o prazo
+evita gastar uma requisição para descobrir que a sessão morreu, e o
+`_executar_renovando_sessao` cobre o que escapar da detecção.
 
 A auditoria também passou a guardar **o que foi pedido** nas falhas —
 antes, um erro do portal não dizia sequer qual conta o técnico tinha
