@@ -1,22 +1,12 @@
 """Valida a Auditoria de Horários contra o portal real, ANTES de confiar nela.
 
-Duas coisas foram escritas a partir do HAR e da leitura do código, não de
-uma medição — e este script existe para fechar essa lacuna:
+O endpoint `/rest/search/Horario` com filtro `hor_iidcuenta` foi escrito a
+partir do HAR, não de uma medição — e a regra do módulo depende inteiramente
+dele: "nenhuma linha = conta sem horário". Se para conta sem horário o
+portal devolvesse **erro** em vez de lista vazia, o módulo contaria tudo
+como falha em vez de encontrar o que procura.
 
-  1. **`/rest/search/Horario` com filtro `hor_iidcuenta`.** A regra do
-     módulo é "nenhuma linha = conta sem horário". Se o endpoint devolvesse
-     erro (em vez de lista vazia) para conta sem horário, o módulo contaria
-     tudo como erro em vez de encontrar o que procura.
-  2. **De onde vem o tipo da conta.** O `CuentaByDealer` identifica o tipo
-     por número (o mesmo `_tip_nTipo` do filtro da tela "Falha TST") e a
-     descrição sai do catálogo `t_CuentasTipoServicio`. Os nomes exatos dos
-     campos variam de tela para tela no portal, então o código procura por
-     uma lista de candidatos — aqui a gente vê quais existem de verdade.
-
-Se o tipo não aparecer, o módulo continua funcionando: a coluna vira "—" e
-essas contas NUNCA são escondidas pelo filtro (melhor auditar a mais do que
-deixar passar batido). Mas aí o filtro "Comercial" perde a serventia, e é
-melhor saber disso agora.
+Este script confere isso numa amostra, antes de confiar na lista inteira.
 
 Uso (PowerShell, na pasta do projeto — PARE o serviço antes, o portal
 aceita uma sessão por usuário):
@@ -28,7 +18,6 @@ aceita uma sessão por usuário):
 
 import os
 import sys
-from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -65,61 +54,26 @@ def main() -> None:
 
         print("1) CONTAS (CuentaByDealer)")
         contas = client.listar_todas_contas()
-        print(f"   {len(contas)} conta(s).")
+        print(f"   {len(contas)} conta(s) — é esse o tamanho da varredura.")
         if not contas:
             print("   >>> Sem contas, não dá para seguir.")
             return
+        print(f"   campos disponíveis: {', '.join(sorted(contas[0].keys()))}")
 
-        chaves = sorted(contas[0].keys())
-        print(f"   campos disponíveis: {', '.join(chaves)}\n")
-
-        achados_texto = [c for c in dom_horarios.CAMPOS_TIPO_TEXTO
-                         if c in {k.lower() for k in chaves}]
-        achados_numero = [c for c in dom_horarios.CAMPOS_TIPO_NUMERO
-                          if c in {k.lower() for k in chaves}]
-        print(f"   campo de tipo TEXTO encontrado:  {achados_texto or 'NENHUM'}")
-        print(f"   campo de tipo NÚMERO encontrado: {achados_numero or 'NENHUM'}")
-
-        print("\n2) CATÁLOGO DE TIPOS (t_CuentasTipoServicio)")
-        try:
-            linhas_catalogo = client.listar_tipos_servico()
-            print(f"   {len(linhas_catalogo)} linha(s).")
-            if linhas_catalogo:
-                print(f"   campos: {', '.join(sorted(linhas_catalogo[0].keys()))}")
-            catalogo = dom_horarios.catalogo_de_tipos(linhas_catalogo)
-            print(f"   traduzido: {catalogo or 'VAZIO — os nomes dos campos não bateram'}")
-        except SoftGuardError as exc:
-            catalogo = {}
-            print(f"   FALHOU: {exc}")
-            print("   >>> Sem catálogo o tipo fica '—'. O módulo funciona,")
-            print("       mas o filtro por tipo perde a serventia.")
-
-        print("\n3) TIPO RESOLVIDO POR CONTA (como o módulo vai ver)")
-        tipos = Counter(dom_horarios.tipo_da_conta(linha, catalogo) for linha in contas)
-        for tipo, quantidade in tipos.most_common():
-            print(f"   {quantidade:>4}  {tipo}")
-        if list(tipos) == [dom_horarios.TIPO_DESCONHECIDO]:
-            print(
-                "\n   >>> TODAS desconhecidas. O filtro por tipo não vai\n"
-                "       recortar nada (e, por segurança, não esconde\n"
-                "       ninguém). Use o filtro por nome na tela."
-            )
-
-        print(f"\n4) HORÁRIOS — amostra de {AMOSTRA} conta(s)")
-        print(f"   {'conta':>8}  {'linhas':>6}  {'tipo':<14}  resumo")
+        print(f"\n2) HORÁRIOS — amostra de {AMOSTRA} conta(s)")
+        print(f"   {'conta':>8}  {'linhas':>6}  resumo")
         campos_horario = set()
         sem = com = erros = 0
         for linha in contas[:AMOSTRA]:
             cue_iid = linha.get("cue_iid") or linha.get("Id")
             numero = str(linha.get("cue_ncuenta") or "").strip()
-            tipo = dom_horarios.tipo_da_conta(linha, catalogo)
             if cue_iid is None:
                 continue
             try:
                 rows = client.listar_horarios(cue_iid)
             except Exception as exc:  # noqa: BLE001 — é isso que queremos ver
                 erros += 1
-                print(f"   {numero:>8}  {'ERRO':>6}  {tipo:<14}  {type(exc).__name__}: {exc}")
+                print(f"   {numero:>8}  {'ERRO':>6}  {type(exc).__name__}: {exc}")
                 continue
 
             if rows:
@@ -128,7 +82,7 @@ def main() -> None:
             else:
                 sem += 1
             print(
-                f"   {numero:>8}  {len(rows):>6}  {tipo:<14}  "
+                f"   {numero:>8}  {len(rows):>6}  "
                 f"{dom_horarios.resumo_horario(rows) or '(sem horário)'}"
             )
 

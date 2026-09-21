@@ -85,12 +85,8 @@ DEFAULTS: dict[str, str] = {
     # reprocessar comando antigo quando o serviço reinicia.
     "bot_update_offset": "",
     # --- Auditoria de Horários ---
-    # Residência normalmente não tem arme/desarme programado — auditar tudo
-    # encheria a lista de conta que não está errada. O padrão recorta em
-    # Comercial; a tela deixa incluir outros tipos.
-    "horarios_tipos_auditar": "Comercial",
-    # A varredura é uma consulta por conta. 0 = sem pausa; subir só se o
-    # portal reclamar do ritmo.
+    # A varredura é uma consulta por conta, em toda a base. 0 = sem pausa;
+    # subir só se o portal reclamar do ritmo.
     "horarios_pausa_segundos": "0",
     # Módulo Links da Central do Cliente (Auvo) — simulação LIGADA por
     # padrão: módulo de maior risco do sistema (escreve contatos reais com
@@ -512,10 +508,6 @@ def get_central_whatsapp_template() -> str:
 
 
 # --- Auditoria de Horários ---
-
-
-def get_horarios_tipos_auditar() -> tuple[str, ...]:
-    return _lista("horarios_tipos_auditar")
 
 
 def get_horarios_pausa_segundos() -> float:

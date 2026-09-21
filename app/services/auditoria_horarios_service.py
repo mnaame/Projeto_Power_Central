@@ -5,16 +5,11 @@ O portal não tem uma tela de "contas sem horário": para saber, alguém abre
 conta por conta. Este módulo faz essa varredura de uma vez, com **um
 login** reaproveitado, e entrega a lista.
 
-Duas decisões que valem explicação:
-
-1. **Falha numa conta não derruba a varredura** (mesma disciplina do
-   `tecnico_service.gerar_lote`). Uma conta que o portal recusou entra na
-   contagem de `erros` e a varredura segue — auditoria que morre no meio
-   do caminho não serve para nada.
-2. **Conta de tipo desconhecido nunca é escondida pelo filtro.** Se o
-   portal não disse o que a conta é, sumir com ela de um recorte
-   "Comercial" transformaria uma limitação da integração em conta não
-   auditada, que é exatamente o erro que o módulo existe para evitar.
+Sem recorte por tipo de conta: a varredura cobre a base inteira,
+residência inclusive. **Falha numa conta não derruba a varredura** (mesma
+disciplina do `tecnico_service.gerar_lote`) — a conta entra na contagem de
+`erros` e a varredura segue, porque auditoria que morre no meio do caminho
+não serve para nada.
 """
 
 from __future__ import annotations
@@ -41,26 +36,12 @@ def _criar_cliente(config) -> SoftGuardClient:
     return SoftGuardClient(credenciais_softguard(config))
 
 
-def _catalogo_de_tipos(client: SoftGuardClient) -> dict[str, str]:
-    """Catálogo id -> descrição. Uma chamada para a base inteira.
-
-    Falhar aqui **não** cancela a auditoria: sem catálogo as contas ficam
-    com tipo desconhecido, o que é pior para o filtro mas não impede a
-    entrega principal (a lista de quem está sem horário)."""
-    try:
-        return dom_horarios.catalogo_de_tipos(client.listar_tipos_servico())
-    except Exception as exc:  # noqa: BLE001 — catálogo é acessório
-        logger.warning("Auditoria de horários: sem catálogo de tipos (%s).", exc)
-        return {}
-
-
-def auditar(*, config, tipos=None, busca: str = "", softguard_client=None) -> dict:
+def auditar(*, config, busca: str = "", softguard_client=None) -> dict:
     """Varre todas as contas e devolve
     `{"sem": [...], "com": [...], "erros": n, "total": n}`.
 
-    `tipos` recorta por tipo de conta (padrão: o que estiver em
-    `horarios_tipos_auditar`); `busca` recorta por número/nome e continua
-    funcionando mesmo se o portal não entregar o tipo."""
+    `busca` recorta por número/nome — útil para reconferir um cliente sem
+    varrer a base inteira de novo."""
     client = softguard_client or _criar_cliente(config)
     pausa = settings_service.get_horarios_pausa_segundos()
 
@@ -72,35 +53,17 @@ def auditar(*, config, tipos=None, busca: str = "", softguard_client=None) -> di
             f"Não foi possível carregar as contas da PowerCentral: {exc}"
         ) from exc
 
-    catalogo = _catalogo_de_tipos(client)
-
-    # Classifica ANTES de consultar horário: o recorte por tipo é o que
-    # evita consultar conta que nem precisa de horário (residência).
-    candidatas = []
+    alvos = []
     for linha in linhas_contas:
         cue_iid = linha.get("cue_iid") or linha.get("Id")
         if cue_iid is None:
             continue  # sem id interno não há como consultar nada
-        candidatas.append(
-            (
-                str(cue_iid),
-                dom_horarios.ContaAuditada(
-                    conta=str(linha.get("cue_ncuenta") or "").strip(),
-                    nome=str(linha.get("cue_cnombre") or "").strip(),
-                    tipo=dom_horarios.tipo_da_conta(linha, catalogo),
-                ),
-            )
+        conta = dom_horarios.ContaAuditada(
+            conta=str(linha.get("cue_ncuenta") or "").strip(),
+            nome=str(linha.get("cue_cnombre") or "").strip(),
         )
-
-    tipos_desejados = (
-        tuple(tipos) if tipos is not None else settings_service.get_horarios_tipos_auditar()
-    )
-    alvos = [
-        (cue_iid, conta)
-        for cue_iid, conta in candidatas
-        if dom_horarios.tipo_aceito(conta, tipos_desejados)
-        and dom_horarios.nome_casa(conta, busca)
-    ]
+        if dom_horarios.nome_casa(conta, busca):
+            alvos.append((str(cue_iid), conta))
 
     sem: list[dom_horarios.ContaAuditada] = []
     com: list[dom_horarios.ContaAuditada] = []
@@ -121,7 +84,6 @@ def auditar(*, config, tipos=None, busca: str = "", softguard_client=None) -> di
                 dom_horarios.ContaAuditada(
                     conta=conta.conta,
                     nome=conta.nome,
-                    tipo=conta.tipo,
                     resumo=dom_horarios.resumo_horario(rows),
                 )
             )
@@ -131,19 +93,11 @@ def auditar(*, config, tipos=None, busca: str = "", softguard_client=None) -> di
         if pausa:
             time.sleep(pausa)
 
-    return {
-        "sem": sem,
-        "com": com,
-        "erros": erros,
-        "total": len(alvos),
-        "tipos": tipos_desejados,
-    }
+    return {"sem": sem, "com": com, "erros": erros, "total": len(alvos)}
 
 
 def _serializar(itens) -> list[dict]:
-    return [
-        {"conta": i.conta, "nome": i.nome, "tipo": i.tipo, "resumo": i.resumo} for i in itens
-    ]
+    return [{"conta": i.conta, "nome": i.nome, "resumo": i.resumo} for i in itens]
 
 
 def _desserializar(linhas) -> list[dom_horarios.ContaAuditada]:
@@ -151,7 +105,6 @@ def _desserializar(linhas) -> list[dom_horarios.ContaAuditada]:
         dom_horarios.ContaAuditada(
             conta=linha.get("conta", ""),
             nome=linha.get("nome", ""),
-            tipo=linha.get("tipo", dom_horarios.TIPO_DESCONHECIDO),
             resumo=linha.get("resumo", ""),
         )
         for linha in (linhas or [])
@@ -168,7 +121,6 @@ def salvar_snapshot(resultado: dict) -> AuditoriaHorarioSnapshot:
         sem=len(resultado["sem"]),
         com=len(resultado["com"]),
         erros=resultado["erros"],
-        tipos=", ".join(resultado.get("tipos") or ()),
         itens={
             "sem": _serializar(resultado["sem"]),
             "com": _serializar(resultado["com"]),
@@ -195,7 +147,6 @@ def resultado_do_snapshot(snapshot: AuditoriaHorarioSnapshot | None) -> dict | N
         "com": _desserializar(itens.get("com")),
         "erros": snapshot.erros,
         "total": snapshot.total,
-        "tipos": tuple(t.strip() for t in (snapshot.tipos or "").split(",") if t.strip()),
         "atualizado_em": snapshot.atualizado_em,
     }
 

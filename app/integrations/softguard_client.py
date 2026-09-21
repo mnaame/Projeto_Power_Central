@@ -21,9 +21,6 @@ TIMELINE_PATH = "/Rest/search/EventoTimeLineFull"
 EXPORT_HISTORICO_PATH = "/handler/ExportReporteHistoricoExcel"
 ZONA_PATH = "/Rest/Zona/"
 HORARIO_PATH = "/rest/search/Horario"
-# Catálogo de tipos de conta (Comercial, Residência, ...). O
-# `CuentaByDealer` traz o tipo como número; a descrição legível vem daqui.
-TIPOS_SERVICO_PATH = "/Rest/t_CuentasTipoServicio/"
 
 # Uma conta tem poucas faixas de horário (abertura/fechamento por dia da
 # semana); 50 cobre com folga sem pedir página grande à toa.
@@ -281,17 +278,6 @@ class SoftGuardClient:
             {"filter": json.dumps(filtro)},
             page_size=page_size,
         )
-
-    def listar_tipos_servico(
-        self, *, page_size: int = DEFAULT_PAGE_SIZE
-    ) -> list[dict[str, Any]]:
-        """Catálogo de tipos de conta (Comercial, Residência, ...).
-
-        O `CuentaByDealer` identifica o tipo por número — é o mesmo campo
-        que o filtro da tela "Falha TST" usa em `_tip_nTipo`. Para mostrar
-        "Comercial" em vez de "4" é preciso cruzar com este catálogo, que
-        é uma chamada só para a base inteira."""
-        return self._buscar_paginado(TIPOS_SERVICO_PATH, {}, page_size=page_size)
 
     def exportar_historico_html(
         self,

@@ -38,7 +38,7 @@
         {{ snapshot_horarios.sem }} conta(s) sem horário
       </div>
       <div class="stat-tile-hint">
-        {{ snapshot_horarios.tipos or 'todos os tipos' }} · atualizado em
+        de {{ snapshot_horarios.total }} conta(s) · atualizado em
         {{ snapshot_horarios.atualizado_em|data_local }}
       </div>
       {% else %}

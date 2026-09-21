@@ -15,8 +15,8 @@ class AuditoriaHorarioSnapshot(db.Model):
     uma varredura que terminou continua visível mesmo que o navegador tenha
     desistido de esperar a resposta.
 
-    `itens` guarda a lista inteira (conta, nome, tipo, resumo) — são
-    centenas de linhas curtas, não vale uma tabela filha para isso.
+    `itens` guarda a lista inteira (conta, nome, resumo) — são centenas de
+    linhas curtas, não vale uma tabela filha para isso.
     """
 
     __tablename__ = "auditoria_horario_snapshots"
@@ -27,8 +27,6 @@ class AuditoriaHorarioSnapshot(db.Model):
     sem = db.Column(db.Integer, nullable=False, default=0)
     com = db.Column(db.Integer, nullable=False, default=0)
     erros = db.Column(db.Integer, nullable=False, default=0)
-    # Tipos auditados nesta execução, como o usuário pediu na tela.
-    tipos = db.Column(db.String(200), nullable=False, default="")
     itens = db.Column(db.JSON, nullable=True)
 
     def __repr__(self) -> str:  # pragma: no cover

@@ -14,61 +14,43 @@ abriu hoje" nem "não fechou", porque não há horário esperado para comparar.
 ## 2. A regra, em uma linha
 
 `/rest/search/Horario` filtrado por `hor_iidcuenta` devolve as faixas
-cadastradas da conta. **Lista vazia = conta sem horário.** É só isso — o
-resto do módulo existe por causa do tipo de conta.
+cadastradas da conta. **Lista vazia = conta sem horário.** É só isso.
 
-## 3. Tipo de conta: a parte que separa "falta" de "não precisa"
+## 3. Escopo: todas as contas
 
-Residência normalmente **não tem** arme/desarme programado. Auditar tudo
-encheria a lista de conta que não está errada, e uma lista assim não é
-lida. Por isso o padrão recorta em **Comercial**
-(`horarios_tipos_auditar`), e a tela deixa incluir outros tipos.
+A varredura cobre **a base inteira**, residência inclusive.
 
-De onde vem o tipo: o `CuentaByDealer` identifica por **número** — é o
-mesmo campo que o filtro da tela "Falha TST" já usa em `_tip_nTipo` — e a
-descrição legível sai do catálogo `t_CuentasTipoServicio`, que é uma
-chamada só para a base inteira.
+Houve uma primeira versão que auditava só as contas comerciais, partindo da
+ideia de que residência não tem arme programado. Quem opera a base quis ver
+todas. Isso apagou junto a consulta ao catálogo `t_CuentasTipoServicio` e a
+camada que adivinhava o nome do campo de tipo entre as grafias do portal —
+que era justamente a parte do módulo nunca validada contra dados reais.
+Menos código, menos uma chamada ao portal, menos uma suposição.
 
-Como o portal varia a grafia dos campos entre telas, `domain/horarios.py`
-procura por uma **lista de nomes candidatos**, sem diferenciar maiúscula de
-minúscula. Campo ausente não vira erro: vira `TIPO_DESCONHECIDO` (`—`).
-
-> **Conta de tipo desconhecido nunca é escondida pelo filtro.** Se o portal
-> não disse o que a conta é, sumir com ela de um recorte "Comercial"
-> transformaria uma limitação da integração em conta não auditada — que é
-> exatamente o erro que o módulo existe para evitar. Antes aparecer a mais.
-
-Se o catálogo falhar, o módulo continua entregando o principal (a lista de
-quem está sem horário); só o filtro por tipo perde a serventia, e aí vale o
-filtro por número/nome, que independe do tipo.
+O recorte que sobrou é o filtro por **número/nome**, para reconferir um
+cliente sem varrer tudo de novo. Em branco, varre tudo.
 
 ## 4. Camadas
 
 ### 4.1 `app/domain/horarios.py` (puro)
 
 `tem_horario` / `resumo_horario` (contagem + primeira faixa, para a coluna
-de referência), `catalogo_de_tipos`, `tipo_da_conta`, os predicados
-`tipo_aceito` / `nome_casa` e a dataclass `ContaAuditada`.
+de referência), o predicado `nome_casa` e a dataclass `ContaAuditada`.
 
 ### 4.2 `app/integrations/softguard_client.py`
 
-- `listar_horarios(cue_iid)` → `/rest/search/Horario`, filtro
-  `hor_iidcuenta`, via `_buscar_paginado` (mesmo padrão dos outros
-  `buscar_*`/`listar_*`).
-- `listar_tipos_servico()` → catálogo `t_CuentasTipoServicio`.
+`listar_horarios(cue_iid)` → `/rest/search/Horario`, filtro
+`hor_iidcuenta`, via `_buscar_paginado` (mesmo padrão dos outros
+`buscar_*`/`listar_*`).
 
 ### 4.3 `app/services/auditoria_horarios_service.py`
 
-`auditar(*, config, tipos, busca)` faz a varredura com **um login**
-reaproveitado e devolve `{"sem", "com", "erros", "total", "tipos"}`.
+`auditar(*, config, busca)` faz a varredura com **um login** reaproveitado
+e devolve `{"sem", "com", "erros", "total"}`.
 
-Duas decisões que valem registro:
-
-- **Falha numa conta não derruba a varredura** (mesma disciplina do
-  `tecnico_service.gerar_lote`): a conta entra na contagem de `erros` e a
-  varredura segue. Auditoria que morre no meio não serve para nada.
-- **O recorte por tipo acontece antes da consulta**, não depois: conta que
-  não precisa de horário não gasta uma ida ao portal.
+**Falha numa conta não derruba a varredura** (mesma disciplina do
+`tecnico_service.gerar_lote`): a conta entra na contagem de `erros` e a
+varredura segue. Auditoria que morre no meio não serve para nada.
 
 `salvar_snapshot` / `ultimo_snapshot` / `resultado_do_snapshot` guardam e
 recuperam o último resultado; `registrar_auditoria` grava a execução com
@@ -78,7 +60,8 @@ recuperam o último resultado; `registrar_auditoria` grava a execução com
 
 `index` (GET) mostra o último resultado, `rodar` (POST) executa e
 `exportar` gera o `.xlsx` com a aba **"SEM horário"** primeiro (o
-entregável) e **"COM horário"** como referência.
+entregável, com conta e nome) e **"COM horário"** como referência (com o
+resumo da faixa).
 
 `rodar` **grava um snapshot e redireciona** em vez de renderizar direto
 (POST/Redirect/GET). A varredura consulta o portal uma vez por conta e leva
@@ -94,11 +77,11 @@ Sem snapshot, o card convida a rodar a auditoria.
 
 ## 6. O que ainda não foi medido contra o portal
 
-Os nomes exatos dos campos de tipo e o comportamento do endpoint de horário
-para conta sem horário vieram do HAR e da leitura do código, **não de uma
-medição em produção**. `scripts/debug_horarios.py` fecha essa lacuna: mostra
-quais campos existem de verdade, como o tipo fica resolvido por conta e o
-que o endpoint devolve numa amostra.
+O comportamento do endpoint de horário para uma conta **sem** horário veio
+do HAR e da leitura do código, **não de uma medição em produção** — e a
+regra do módulo depende inteiramente dele. `scripts/debug_horarios.py`
+confere numa amostra se conta sem horário responde lista vazia (e não
+erro).
 
 ```powershell
 Stop-Service PowerCentral
@@ -113,5 +96,4 @@ conferir uma conta que você sabe que tem horário cadastrado.
 
 | Chave | Padrão | Para quê |
 |---|---|---|
-| `horarios_tipos_auditar` | `Comercial` | Tipos auditados por padrão |
 | `horarios_pausa_segundos` | `0` | Pausa entre contas, se o portal reclamar do ritmo |

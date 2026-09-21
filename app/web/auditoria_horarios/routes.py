@@ -24,21 +24,12 @@ from flask import (
 )
 from flask_login import current_user, login_required
 
-from app.domain import horarios as dom_horarios
 from app.extensions import db
 from app.integrations.softguard_client import SoftGuardError
-from app.services import auditoria_horarios_service, audit_service, settings_service
+from app.services import audit_service, auditoria_horarios_service
 from app.services.report_xlsx import gerar_xlsx_auditoria_horarios
 
 bp = Blueprint("auditoria_horarios", __name__, url_prefix="/auditoria-horarios")
-
-
-def _tipos_do_formulario() -> tuple[str, ...]:
-    """Tipos pedidos na tela; vazio cai no padrão configurado."""
-    bruto = (request.form.get("tipos") or "").strip()
-    if not bruto:
-        return settings_service.get_horarios_tipos_auditar()
-    return tuple(t.strip() for t in bruto.split(",") if t.strip())
 
 
 @bp.route("")
@@ -46,23 +37,17 @@ def _tipos_do_formulario() -> tuple[str, ...]:
 def index():
     snapshot = auditoria_horarios_service.ultimo_snapshot()
     resultado = auditoria_horarios_service.resultado_do_snapshot(snapshot)
-    return render_template(
-        "auditoria_horarios/index.html",
-        resultado=resultado,
-        tipos_padrao=", ".join(settings_service.get_horarios_tipos_auditar()),
-        tipo_desconhecido=dom_horarios.TIPO_DESCONHECIDO,
-    )
+    return render_template("auditoria_horarios/index.html", resultado=resultado)
 
 
 @bp.route("/rodar", methods=["POST"])
 @login_required
 def rodar():
-    tipos = _tipos_do_formulario()
     busca = (request.form.get("busca") or "").strip()
 
     try:
         resultado = auditoria_horarios_service.auditar(
-            config=current_app.config, tipos=tipos, busca=busca
+            config=current_app.config, busca=busca
         )
     except (auditoria_horarios_service.AuditoriaHorariosError, SoftGuardError) as exc:
         flash(str(exc), "error")
@@ -98,8 +83,8 @@ def exportar():
 
     gerar_xlsx_auditoria_horarios(
         caminho,
-        sem=[(i.conta, i.nome, i.tipo) for i in resultado["sem"]],
-        com=[(i.conta, i.nome, i.tipo, i.resumo) for i in resultado["com"]],
+        sem=[(i.conta, i.nome) for i in resultado["sem"]],
+        com=[(i.conta, i.nome, i.resumo) for i in resultado["com"]],
     )
 
     audit_service.registrar(

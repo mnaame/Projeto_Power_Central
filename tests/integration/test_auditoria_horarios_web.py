@@ -6,7 +6,6 @@ from app.domain.horarios import ContaAuditada
 from app.extensions import db
 from app.services import auditoria_horarios_service
 from tests.integration.test_auditoria_horarios_service import (
-    CATALOGO,
     FAIXA,
     FakeSoftGuardClient,
     _conta,
@@ -17,18 +16,14 @@ def _semear_snapshot():
     """Grava um snapshot sem tocar no portal — a tela e o export leem
     daqui, não da varredura."""
     resultado = {
-        "sem": [ContaAuditada(conta="96", nome="LOJA SEM HORARIO", tipo="Comercial")],
+        "sem": [ContaAuditada(conta="96", nome="LOJA SEM HORARIO")],
         "com": [
             ContaAuditada(
-                conta="95",
-                nome="LOJA COM HORARIO",
-                tipo="Comercial",
-                resumo="1 faixa(s) 06:00–18:00",
+                conta="95", nome="LOJA COM HORARIO", resumo="1 faixa(s) 06:00–18:00"
             )
         ],
         "erros": 0,
         "total": 2,
-        "tipos": ("Comercial",),
     }
     auditoria_horarios_service.salvar_snapshot(resultado)
     db.session.commit()
@@ -82,12 +77,12 @@ def test_export_gera_as_duas_abas(operador_client, app):
     assert wb.sheetnames == ["SEM horário", "COM horário"]
 
     aba_sem = wb["SEM horário"]
-    assert [c.value for c in aba_sem[1]] == ["CONTA", "NOME", "TIPO"]
-    assert [c.value for c in aba_sem[2]] == ["96", "LOJA SEM HORARIO", "Comercial"]
+    assert [c.value for c in aba_sem[1]] == ["CONTA", "NOME"]
+    assert [c.value for c in aba_sem[2]] == ["96", "LOJA SEM HORARIO"]
 
     aba_com = wb["COM horário"]
-    assert [c.value for c in aba_com[1]] == ["CONTA", "NOME", "TIPO", "RESUMO"]
-    assert aba_com[2][3].value == "1 faixa(s) 06:00–18:00"
+    assert [c.value for c in aba_com[1]] == ["CONTA", "NOME", "RESUMO"]
+    assert aba_com[2][2].value == "1 faixa(s) 06:00–18:00"
 
 
 def test_rodar_grava_snapshot_e_redireciona(operador_client, app, monkeypatch):
@@ -96,15 +91,12 @@ def test_rodar_grava_snapshot_e_redireciona(operador_client, app, monkeypatch):
     fake = FakeSoftGuardClient(
         contas=[_conta("10", "95", "LOJA A"), _conta("11", "96", "LOJA B")],
         horarios={"10": [], "11": FAIXA},
-        tipos=CATALOGO,
     )
     monkeypatch.setattr(
         auditoria_horarios_service, "_criar_cliente", lambda config: fake
     )
 
-    resposta = operador_client.post(
-        "/auditoria-horarios/rodar", data={"tipos": "Comercial"}
-    )
+    resposta = operador_client.post("/auditoria-horarios/rodar")
     assert resposta.status_code == 302
     assert resposta.headers["Location"].endswith("/auditoria-horarios")
 

@@ -769,20 +769,17 @@ precisar abrir conta por conta no portal. Conta comercial sem horário é
 monitoramento cego: não existe "não abriu hoje" nem "não fechou", porque
 não há horário esperado para comparar.
 
-Como usar: aba **Auditoria de Horários** → confira os tipos (o padrão é
-**Comercial**) → "Rodar auditoria". A tela mostra as contas sem horário em
+Como usar: aba **Auditoria de Horários** → "Rodar auditoria". Varre a base
+inteira, residência inclusive. A tela mostra as contas sem horário em
 destaque e as com horário como referência; "Baixar Excel" leva as duas
 listas em abas separadas.
 
-Duas coisas para saber antes de usar:
+O campo de filtro é opcional: em branco varre tudo, e serve para reconferir
+um cliente específico sem varrer a base de novo.
 
-- **A varredura consulta o portal uma vez por conta** e pode levar alguns
-  minutos. O resultado fica salvo: se o navegador cansar de esperar, é só
-  recarregar a página que ele está lá.
-- **Residência normalmente não tem horário programado** — por isso o padrão
-  audita só Comercial. Conta cujo tipo o portal não informa aparece como
-  "—" e nunca é escondida pelo filtro: antes aparecer a mais do que deixar
-  passar batido.
+**A varredura consulta o portal uma vez por conta** e pode levar alguns
+minutos. O resultado fica salvo: se o navegador cansar de esperar, é só
+recarregar a página que ele está lá.
 
 O dashboard ganha o card **"Saúde do cadastro"** com o número da última
 auditoria e a data — ele lê do resultado salvo, nunca roda a varredura

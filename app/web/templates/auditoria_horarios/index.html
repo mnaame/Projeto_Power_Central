@@ -11,10 +11,9 @@
     {% endif %}
   </div>
   <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
-    Varre todas as contas da PowerCentral e mostra quais estão
-    <strong>sem horário de arme/desarme cadastrado</strong>, sem precisar
-    abrir conta por conta. Residência normalmente não tem horário
-    programado — por isso o padrão audita só <strong>Comercial</strong>.
+    Varre <strong>todas</strong> as contas da PowerCentral e mostra quais
+    estão <strong>sem horário de arme/desarme cadastrado</strong>, sem
+    precisar abrir conta por conta.
   </p>
 
   <div class="banner banner-info" role="status">
@@ -26,22 +25,15 @@
   <form method="post" action="{{ url_for('auditoria_horarios.rodar') }}" class="card"
         style="display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: flex-end;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div class="field" style="margin-bottom: 0; flex: 1; min-width: 220px;">
-      <label for="tipos">Tipos de conta (separados por vírgula)</label>
-      <input id="tipos" type="text" name="tipos" value="{{ tipos_padrao }}"
-             placeholder="ex.: Comercial, Industrial">
-    </div>
-    <div class="field" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+    <div class="field" style="margin-bottom: 0; flex: 1; min-width: 260px;">
       <label for="busca">Filtrar por conta ou nome (opcional)</label>
-      <input id="busca" type="text" name="busca" placeholder="ex.: Villefort">
+      <input id="busca" type="text" name="busca" placeholder="deixe vazio para varrer tudo">
     </div>
     <button type="submit" class="btn btn-primary">Rodar auditoria</button>
   </form>
   <p class="muted" style="margin-top: var(--space-2);">
-    Conta cujo tipo o portal não informa aparece como
-    <strong>{{ tipo_desconhecido }}</strong> e <strong>nunca</strong> é
-    escondida pelo filtro — antes aparecer a mais do que deixar passar
-    batido.
+    Em branco, varre a base inteira. O filtro serve para reconferir um
+    cliente sem varrer tudo de novo.
   </p>
 </div>
 
@@ -64,7 +56,7 @@
     <div class="stat-tile">
       <div class="stat-tile-label">Com horário</div>
       <div class="stat-tile-value">{{ resultado.com|length }}</div>
-      <div class="stat-tile-hint">Tipos: {{ resultado.tipos|join(', ') or 'todos' }}</div>
+      <div class="stat-tile-hint">Já cadastradas</div>
     </div>
     <div class="stat-tile">
       <div class="stat-tile-label">Atualizado em</div>
@@ -81,13 +73,12 @@
   {% if resultado.sem %}
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Conta</th><th>Nome</th><th>Tipo</th></tr></thead>
+      <thead><tr><th>Conta</th><th>Nome</th></tr></thead>
       <tbody>
         {% for item in resultado.sem %}
         <tr>
           <td class="is-numeric">{{ item.conta }}</td>
           <td>{{ item.nome }}</td>
-          <td><span class="chip {{ 'chip-neutral' if item.tipo == tipo_desconhecido else 'chip-warning' }}">{{ item.tipo }}</span></td>
         </tr>
         {% endfor %}
       </tbody>
@@ -107,13 +98,12 @@
   {% if resultado.com %}
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Conta</th><th>Nome</th><th>Tipo</th><th>Horário</th></tr></thead>
+      <thead><tr><th>Conta</th><th>Nome</th><th>Horário</th></tr></thead>
       <tbody>
         {% for item in resultado.com %}
         <tr>
           <td class="is-numeric">{{ item.conta }}</td>
           <td>{{ item.nome }}</td>
-          <td><span class="chip chip-neutral">{{ item.tipo }}</span></td>
           <td>{{ item.resumo or '—' }}</td>
         </tr>
         {% endfor %}
