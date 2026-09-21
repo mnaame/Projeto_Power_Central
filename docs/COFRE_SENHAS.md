@@ -148,6 +148,14 @@ Regras de operação:
   nada. Existe porque backup que nunca foi aberto é esperança, não backup.
 - Auditoria: `cofre_backup_exportado` / `cofre_backup_restaurado`, só
   contadores — nunca a senha do backup, nunca uma senha do cofre.
+- **Sem tamanho mínimo para a senha do backup.** Houve uma trava de 12
+  caracteres aqui; saiu a pedido de quem opera o cofre, e a razão é boa:
+  quem guarda o arquivo é quem decide o quanto quer protegê-lo, e uma
+  recusa não ensina nada — só impede. O que ficou no lugar informa em vez
+  de barrar: indicador de força ao digitar e o texto dizendo o que muda.
+  `TAMANHO_RECOMENDADO` (12) só alimenta esse aviso. O único caso ainda
+  barrado é senha **vazia** — cifrar com nada não é cifrar, e o arquivo
+  sairia abrível por qualquer um que conheça o formato.
 
 > **A senha do backup não tem recuperação.** Não é um "esqueci minha
 > senha": é cifragem de verdade, e ninguém consegue abrir o arquivo sem

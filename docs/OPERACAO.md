@@ -574,10 +574,16 @@ não recupera senha nenhuma. O backup do cofre resolve isso: gera um arquivo
 cifrado com **uma senha que você escolhe na hora**, que não depende do
 servidor — restaura numa instalação nova, com chave nova.
 
-**Gerar:** aba Cofre de Senhas → **Backup** → escolha a senha do backup
-(mínimo 12 caracteres), repita, confirme com a sua senha de acesso →
-"Gerar e baixar backup". Baixa um `.json` cifrado. Guarde-o junto com os
-demais backups (§6).
+**Gerar:** aba Cofre de Senhas → **Backup** → escolha a senha do backup,
+repita, confirme com a sua senha de acesso → "Gerar e baixar backup". Baixa
+um `.json` cifrado. Guarde-o junto com os demais backups (§6).
+
+A senha do backup pode ter **o tamanho que você quiser** — não há mínimo, e
+a tela mostra a força conforme você digita. Só vale saber o que está em
+jogo: é ela, sozinha, que protege o arquivo. De 12 caracteres para cima a
+quebra por tentativa fica inviável; com uma senha curta o arquivo fica tão
+protegido quanto ela for, então guarde-o com o mesmo cuidado que guardaria
+as senhas escritas num papel.
 
 > ⚠️ **A senha do backup não tem recuperação.** Não é um "esqueci minha
 > senha" — é cifragem de verdade. Sem ela, ninguém abre o arquivo: nem

@@ -75,9 +75,33 @@ def test_dois_backups_da_mesma_senha_usam_sais_diferentes():
     assert a["conteudo"] != b["conteudo"]
 
 
-def test_senha_curta_e_recusada_na_geracao():
-    with pytest.raises(dom.BackupSenhaFracaError):
-        dom.empacotar([{"titulo": "x", "senha": "y"}], senha="curta")
+def test_senha_curta_e_aceita():
+    """Não há tamanho mínimo: quem guarda o arquivo decide o quanto quer
+    protegê-lo. A tela avisa; o código não impede."""
+    itens = [{"titulo": "x", "senha": "y"}]
+
+    pacote = dom.empacotar(itens, senha="ab", iteracoes=1000)
+
+    assert dom.desempacotar(pacote, senha="ab") == itens
+
+
+def test_senha_de_um_caractere_tambem_vale():
+    pacote = dom.empacotar([], senha="7", iteracoes=1000)
+
+    assert dom.desempacotar(pacote, senha="7") == []
+
+
+def test_senha_vazia_e_recusada():
+    """O único caso barrado: cifrar com nada não é cifrar — o arquivo
+    sairia abrível por qualquer um que conheça o formato."""
+    with pytest.raises(dom.BackupSenhaVaziaError):
+        dom.empacotar([{"titulo": "x", "senha": "y"}], senha="")
+
+
+def test_senha_curta_e_sinalizada_para_a_tela():
+    assert dom.senha_curta("ab") is True
+    assert dom.senha_curta("frase-longa-de-backup") is False
+    assert dom.senha_curta("") is False  # vazia é outro caso, não "curta"
 
 
 def test_arquivo_que_nao_e_backup_da_erro_de_formato():

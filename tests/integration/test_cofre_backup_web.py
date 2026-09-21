@@ -129,15 +129,25 @@ def test_senhas_do_backup_diferentes_nao_geram_arquivo(app, admin_client):
     assert "não são iguais".encode() in resposta.data
 
 
-def test_senha_de_backup_curta_e_recusada(app, admin_client):
+def test_senha_de_backup_curta_gera_o_arquivo(app, admin_client):
+    """Sem tamanho mínimo: quem guarda o arquivo decide o quanto quer
+    protegê-lo. E o arquivo tem que abrir depois com essa mesma senha."""
+    _criar(app, titulo="DVR", senha="SENHA-DO-DVR")
+
+    resposta = _exportar(admin_client, senha_backup="ab", senha_backup_confirmacao="ab")
+
+    assert resposta.status_code == 200
+    assert dom_backup.desempacotar(resposta.data, senha="ab")[0]["senha"] == "SENHA-DO-DVR"
+
+
+def test_senha_de_backup_vazia_e_recusada(app, admin_client):
     _criar(app, titulo="DVR", senha="x")
 
     resposta = _exportar(
-        admin_client, senha_backup="curta", senha_backup_confirmacao="curta",
-        follow_redirects=True,
+        admin_client, senha_backup="", senha_backup_confirmacao="", follow_redirects=True
     )
 
-    assert b"pelo menos" in resposta.data
+    assert b"Informe a senha do backup" in resposta.data
 
 
 def test_exportacao_auditada_sem_senha_nenhuma(app, admin_client):

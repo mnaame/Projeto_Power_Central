@@ -269,7 +269,7 @@ def backup():
     return render_template(
         "cofre/backup.html",
         total_segredos=Segredo.query.count(),
-        minimo_senha=dom_backup.MINIMO_SENHA_BACKUP,
+        tamanho_recomendado=dom_backup.TAMANHO_RECOMENDADO,
     )
 
 
@@ -296,7 +296,7 @@ def backup_exportar():
         db.session.commit()
         flash("Sua senha está incorreta — o backup não foi gerado.", "warning")
         return redirect(url_for("cofre.backup"))
-    except dom_backup.BackupSenhaFracaError as exc:
+    except dom_backup.BackupSenhaVaziaError as exc:
         flash(str(exc), "warning")
         return redirect(url_for("cofre.backup"))
     except (cofre_service.CofreDecifraError, cofre_service.CofreSemChaveError) as exc:

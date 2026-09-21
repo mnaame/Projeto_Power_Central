@@ -9,10 +9,10 @@ para evitar.
 Por isso o arquivo é cifrado com uma **senha digitada na hora da
 exportação**, e carrega dentro de si o sal e os parâmetros de derivação.
 Consequência prática: ele se restaura num servidor novo, com chave nova,
-sem depender de nada da máquina antiga. A contrapartida é que a segurança
-do arquivo passa a ser a força dessa senha — daí o mínimo exigido em
-`validar_senha_backup` — e **quem esquece a senha perde o backup**, sem
-recurso: não há "esqueci minha senha" em cifra de verdade.
+sem depender de nada da máquina antiga. Duas contrapartidas, e as duas são
+do dono do arquivo: a segurança dele é a força dessa senha (a tela avisa,
+sem impedir — ver `TAMANHO_RECOMENDADO`), e **quem esquece a senha perde o
+backup**, sem recurso — não há "esqueci minha senha" em cifra de verdade.
 
 Formato (JSON, para poder ser inspecionado sem ferramenta especial):
 
@@ -51,9 +51,15 @@ VERSAO = 1
 ITERACOES = 600_000
 TAMANHO_SALT = 16
 
-# A cifra do arquivo vale o que vale esta senha. Curta demais transforma o
-# backup num arquivo de senhas quase em claro.
-MINIMO_SENHA_BACKUP = 12
+# Tamanho **recomendado**, não exigido. Existiu aqui uma trava de 12
+# caracteres; ela saiu a pedido de quem opera o cofre, e a razão é boa:
+# quem guarda o arquivo é quem decide o quanto quer protegê-lo, e uma
+# recusa não ensina nada — só impede. O aviso continua na tela, com
+# indicador de força ao digitar; o que não existe mais é a recusa.
+#
+# O único caso ainda barrado é senha **vazia**: cifrar com nada não é
+# cifrar, e o arquivo sairia abrível por qualquer um que conheça o formato.
+TAMANHO_RECOMENDADO = 12
 
 CAMPOS = (
     "titulo",
@@ -71,8 +77,8 @@ class BackupError(Exception):
     """Base dos erros de backup do cofre."""
 
 
-class BackupSenhaFracaError(BackupError):
-    """Senha de backup abaixo do mínimo exigido."""
+class BackupSenhaVaziaError(BackupError):
+    """Senha de backup em branco — cifrar com nada é não cifrar."""
 
 
 class BackupSenhaInvalidaError(BackupError):
@@ -84,11 +90,16 @@ class BackupFormatoInvalidoError(BackupError):
 
 
 def validar_senha_backup(senha: str) -> None:
-    if len(senha or "") < MINIMO_SENHA_BACKUP:
-        raise BackupSenhaFracaError(
-            f"A senha do backup precisa ter pelo menos {MINIMO_SENHA_BACKUP} "
-            "caracteres — é ela que protege o arquivo inteiro."
+    """Não há tamanho mínimo — só não dá para cifrar com nada."""
+    if not senha:
+        raise BackupSenhaVaziaError(
+            "Informe a senha do backup — é ela que protege o arquivo inteiro."
         )
+
+
+def senha_curta(senha: str) -> bool:
+    """Para a tela avisar sem impedir."""
+    return 0 < len(senha or "") < TAMANHO_RECOMENDADO
 
 
 def derivar_chave(senha: str, salt: bytes, *, iteracoes: int | None = None) -> bytes:
