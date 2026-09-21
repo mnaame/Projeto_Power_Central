@@ -10,6 +10,7 @@ from app.models.bi import BiRun, BiIntervencao
 from app.models.cofre import Segredo
 from app.models.central_cliente import CentralClienteLote, CentralClienteLink
 from app.models.tarefa import Tarefa
+from app.models.horarios import AuditoriaHorarioSnapshot
 
 __all__ = [
     "User",
@@ -30,4 +31,5 @@ __all__ = [
     "CentralClienteLote",
     "CentralClienteLink",
     "Tarefa",
+    "AuditoriaHorarioSnapshot",
 ]

@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}Auditoria de Horários{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>Auditoria de Horários</h2>
+    {% if resultado %}
+    <a class="btn btn-ghost" href="{{ url_for('auditoria_horarios.exportar') }}">Baixar Excel</a>
+    {% endif %}
+  </div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Varre todas as contas da PowerCentral e mostra quais estão
+    <strong>sem horário de arme/desarme cadastrado</strong>, sem precisar
+    abrir conta por conta. Residência normalmente não tem horário
+    programado — por isso o padrão audita só <strong>Comercial</strong>.
+  </p>
+
+  <div class="banner banner-info" role="status">
+    <span>A varredura consulta o portal <strong>uma vez por conta</strong> e
+    pode levar alguns minutos. O resultado fica salvo aqui — se o navegador
+    cansar de esperar, é só recarregar esta página.</span>
+  </div>
+
+  <form method="post" action="{{ url_for('auditoria_horarios.rodar') }}" class="card"
+        style="display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: flex-end;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field" style="margin-bottom: 0; flex: 1; min-width: 220px;">
+      <label for="tipos">Tipos de conta (separados por vírgula)</label>
+      <input id="tipos" type="text" name="tipos" value="{{ tipos_padrao }}"
+             placeholder="ex.: Comercial, Industrial">
+    </div>
+    <div class="field" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+      <label for="busca">Filtrar por conta ou nome (opcional)</label>
+      <input id="busca" type="text" name="busca" placeholder="ex.: Villefort">
+    </div>
+    <button type="submit" class="btn btn-primary">Rodar auditoria</button>
+  </form>
+  <p class="muted" style="margin-top: var(--space-2);">
+    Conta cujo tipo o portal não informa aparece como
+    <strong>{{ tipo_desconhecido }}</strong> e <strong>nunca</strong> é
+    escondida pelo filtro — antes aparecer a mais do que deixar passar
+    batido.
+  </p>
+</div>
+
+{% if not resultado %}
+<div class="section">
+  <div class="card empty-state">
+    <h3>Nenhuma auditoria rodada ainda</h3>
+    <p class="muted">Clique em "Rodar auditoria" para varrer as contas.</p>
+  </div>
+</div>
+{% else %}
+<div class="section">
+  <div class="section-title"><h2>Último resultado</h2></div>
+  <div class="stat-grid">
+    <div class="stat-tile">
+      <div class="stat-tile-label">Sem horário</div>
+      <div class="stat-tile-value {{ 'is-critical' if resultado.sem else 'is-ok' }}">{{ resultado.sem|length }}</div>
+      <div class="stat-tile-hint">de {{ resultado.total }} conta(s) auditada(s)</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Com horário</div>
+      <div class="stat-tile-value">{{ resultado.com|length }}</div>
+      <div class="stat-tile-hint">Tipos: {{ resultado.tipos|join(', ') or 'todos' }}</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Atualizado em</div>
+      <div class="stat-tile-value" style="font-size: 1.1rem;">{{ resultado.atualizado_em|data_local }}</div>
+      {% if resultado.erros %}
+      <div class="stat-tile-hint">{{ resultado.erros }} conta(s) não consultada(s)</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Sem horário cadastrado</h2></div>
+  {% if resultado.sem %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Conta</th><th>Nome</th><th>Tipo</th></tr></thead>
+      <tbody>
+        {% for item in resultado.sem %}
+        <tr>
+          <td class="is-numeric">{{ item.conta }}</td>
+          <td>{{ item.nome }}</td>
+          <td><span class="chip {{ 'chip-neutral' if item.tipo == tipo_desconhecido else 'chip-warning' }}">{{ item.tipo }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted" style="margin-top: var(--space-3);">{{ resultado.sem|length }} conta(s).</p>
+  {% else %}
+  <div class="card empty-state">
+    <h3>Nenhuma conta sem horário</h3>
+    <p class="muted">Todas as contas auditadas têm horário cadastrado.</p>
+  </div>
+  {% endif %}
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Com horário (referência)</h2></div>
+  {% if resultado.com %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Conta</th><th>Nome</th><th>Tipo</th><th>Horário</th></tr></thead>
+      <tbody>
+        {% for item in resultado.com %}
+        <tr>
+          <td class="is-numeric">{{ item.conta }}</td>
+          <td>{{ item.nome }}</td>
+          <td><span class="chip chip-neutral">{{ item.tipo }}</span></td>
+          <td>{{ item.resumo or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted" style="margin-top: var(--space-3);">{{ resultado.com|length }} conta(s).</p>
+  {% else %}
+  <div class="card empty-state">
+    <h3>Nenhuma conta com horário</h3>
+    <p class="muted">Nenhuma das contas auditadas tem horário cadastrado.</p>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

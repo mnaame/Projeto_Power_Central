@@ -27,6 +27,31 @@
 </a>
 {% endif %}
 
+{# Saúde do cadastro: lê do último snapshot da Auditoria de Horários. A
+   varredura NÃO roda aqui — ela consulta o portal uma vez por conta. #}
+<a href="{{ url_for('auditoria_horarios.index') }}" class="card" style="display: block; margin-bottom: var(--space-4); text-decoration: none; color: inherit;">
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap;">
+    <div>
+      <div class="stat-tile-label">Saúde do cadastro</div>
+      {% if snapshot_horarios %}
+      <div class="stat-tile-value" style="font-size: var(--font-size-2xl);">
+        {{ snapshot_horarios.sem }} conta(s) sem horário
+      </div>
+      <div class="stat-tile-hint">
+        {{ snapshot_horarios.tipos or 'todos os tipos' }} · atualizado em
+        {{ snapshot_horarios.atualizado_em|data_local }}
+      </div>
+      {% else %}
+      <div class="stat-tile-value" style="font-size: var(--font-size-2xl);">—</div>
+      <div class="stat-tile-hint">Rode a auditoria para saber</div>
+      {% endif %}
+    </div>
+    {% if snapshot_horarios and snapshot_horarios.sem %}
+    <span class="chip chip-warning">precisa cadastrar</span>
+    {% endif %}
+  </div>
+</a>
+
 <div class="stat-grid">
   <div class="stat-tile">
     <div class="stat-tile-label">Sem comunicação agora</div>

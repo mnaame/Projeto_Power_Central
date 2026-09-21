@@ -20,6 +20,14 @@ HISTORICO_PATH = "/Rest/Search/ReporteHistorico"
 TIMELINE_PATH = "/Rest/search/EventoTimeLineFull"
 EXPORT_HISTORICO_PATH = "/handler/ExportReporteHistoricoExcel"
 ZONA_PATH = "/Rest/Zona/"
+HORARIO_PATH = "/rest/search/Horario"
+# Catálogo de tipos de conta (Comercial, Residência, ...). O
+# `CuentaByDealer` traz o tipo como número; a descrição legível vem daqui.
+TIPOS_SERVICO_PATH = "/Rest/t_CuentasTipoServicio/"
+
+# Uma conta tem poucas faixas de horário (abertura/fechamento por dia da
+# semana); 50 cobre com folga sem pedir página grande à toa.
+PAGE_SIZE_HORARIOS = 50
 
 # A tela de zoneamento pede 400 por página; a conta com mais zonas na base
 # real não chega perto disso, mas o paginador cobre se passar.
@@ -257,6 +265,33 @@ class SoftGuardClient:
             {"filter": json.dumps(filtro), "sort": json.dumps(ORDENACAO_ZONAS)},
             page_size=page_size,
         )
+
+    def listar_horarios(
+        self, cue_iid: str | int, *, page_size: int = PAGE_SIZE_HORARIOS
+    ) -> list[dict[str, Any]]:
+        """Horários de arme/desarme cadastrados da conta (`cue_iid`, o mesmo
+        id interno do zoneamento e do export).
+
+        **Lista vazia = conta sem horário cadastrado** — é essa a leitura que
+        a Auditoria de Horários faz. As linhas trazem `hor_ndiaapertura` /
+        `hor_choraapertura` e `hor_ndiacierre` / `hor_choracierre`."""
+        filtro = [{"property": "hor_iidcuenta", "value": int(cue_iid)}]
+        return self._buscar_paginado(
+            HORARIO_PATH,
+            {"filter": json.dumps(filtro)},
+            page_size=page_size,
+        )
+
+    def listar_tipos_servico(
+        self, *, page_size: int = DEFAULT_PAGE_SIZE
+    ) -> list[dict[str, Any]]:
+        """Catálogo de tipos de conta (Comercial, Residência, ...).
+
+        O `CuentaByDealer` identifica o tipo por número — é o mesmo campo
+        que o filtro da tela "Falha TST" usa em `_tip_nTipo`. Para mostrar
+        "Comercial" em vez de "4" é preciso cruzar com este catálogo, que
+        é uma chamada só para a base inteira."""
+        return self._buscar_paginado(TIPOS_SERVICO_PATH, {}, page_size=page_size)
 
     def exportar_historico_html(
         self,

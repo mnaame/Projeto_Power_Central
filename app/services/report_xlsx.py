@@ -67,6 +67,8 @@ COLUNAS_BI_CRONICOS = (
     "ÚLTIMA CLASSIFICAÇÃO",
     "DISPAROS/DIA ATUAL",
 )
+COLUNAS_HORARIOS_SEM = ("CONTA", "NOME", "TIPO")
+COLUNAS_HORARIOS_COM = ("CONTA", "NOME", "TIPO", "RESUMO")
 
 _LARGURAS = {
     "DATA EVENTO": 18,
@@ -103,6 +105,9 @@ _LARGURAS = {
     "LINK DE ACESSO": 60,
     "CÓDIGO DO CONTATO": 16,
     "STATUS": 14,
+    "NOME": 40,
+    "TIPO": 18,
+    "RESUMO": 26,
 }
 _COLUNAS_COM_QUEBRA = {
     "SITUAÇÃO",
@@ -214,6 +219,24 @@ def gerar_xlsx_central_cliente(caminho: Path, *, linhas: Sequence[Sequence[objec
     ws = wb.active
     ws.title = "CENTRAL_CLIENTE"
     _montar_aba(ws, COLUNAS_CENTRAL_CLIENTE, linhas)
+
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(caminho)
+
+
+def gerar_xlsx_auditoria_horarios(
+    caminho: Path,
+    *,
+    sem: Sequence[Sequence[object]],
+    com: Sequence[Sequence[object]],
+) -> None:
+    """Duas abas: "SEM horário" é o entregável (o que precisa ser
+    cadastrado) e vem primeiro; "COM horário" fica como referência de
+    conferência."""
+    wb = Workbook()
+    wb.remove(wb.active)
+    _montar_aba(wb.create_sheet("SEM horário"), COLUNAS_HORARIOS_SEM, sem)
+    _montar_aba(wb.create_sheet("COM horário"), COLUNAS_HORARIOS_COM, com)
 
     caminho.parent.mkdir(parents=True, exist_ok=True)
     wb.save(caminho)

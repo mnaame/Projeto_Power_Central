@@ -7,7 +7,13 @@ from app.domain.ordering import ordenar_por_falha_mais_antiga
 from app.extensions import db
 from app.models.cycle import AlertSent, CollectionCycle
 from app.models.watchdog import WatchdogState
-from app.services import audit_service, settings_service, tarefa_service, trigger_service
+from app.services import (
+    audit_service,
+    auditoria_horarios_service,
+    settings_service,
+    tarefa_service,
+    trigger_service,
+)
 
 bp = Blueprint("dashboard", __name__)
 
@@ -67,8 +73,14 @@ def _dados_dashboard() -> dict:
 
     tarefas_hoje = tarefa_service.contar_dia(current_user.id)
 
+    # Card "Saúde do cadastro": lê do snapshot, NUNCA roda a varredura —
+    # ela consulta o portal uma vez por conta e levaria minutos a cada
+    # carregamento do dashboard.
+    snapshot_horarios = auditoria_horarios_service.ultimo_snapshot()
+
     return {
         "tarefas_hoje": tarefas_hoje,
+        "snapshot_horarios": snapshot_horarios,
         "ultimo_sucesso": ultimo_sucesso,
         "ultimo_ciclo": ultimo_ciclo,
         "contas_sem_comunicacao": contas_sem_comunicacao,

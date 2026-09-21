@@ -23,6 +23,7 @@ def register_context(app) -> None:
 
 def register_blueprints(app) -> None:
     from app.web.admin.routes import bp as admin_bp
+    from app.web.auditoria_horarios.routes import bp as auditoria_horarios_bp
     from app.web.auth.routes import bp as auth_bp
     from app.web.auvo.routes import bp as auvo_bp
     from app.web.bi.routes import bp as bi_bp
@@ -43,3 +44,4 @@ def register_blueprints(app) -> None:
     app.register_blueprint(cofre_bp)
     app.register_blueprint(central_cliente_bp)
     app.register_blueprint(tarefas_bp)
+    app.register_blueprint(auditoria_horarios_bp)

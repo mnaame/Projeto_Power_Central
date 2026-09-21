@@ -762,6 +762,35 @@ Se o bot parar de responder: confira se está marcado como ligado, se o
 Telegram está configurado (seção Telegram, logo abaixo) e se o serviço
 está no ar — o bot roda junto com o coletor.
 
+### 5.2.9 Auditoria de Horários
+
+Mostra quais contas estão **sem horário de arme/desarme cadastrado**, sem
+precisar abrir conta por conta no portal. Conta comercial sem horário é
+monitoramento cego: não existe "não abriu hoje" nem "não fechou", porque
+não há horário esperado para comparar.
+
+Como usar: aba **Auditoria de Horários** → confira os tipos (o padrão é
+**Comercial**) → "Rodar auditoria". A tela mostra as contas sem horário em
+destaque e as com horário como referência; "Baixar Excel" leva as duas
+listas em abas separadas.
+
+Duas coisas para saber antes de usar:
+
+- **A varredura consulta o portal uma vez por conta** e pode levar alguns
+  minutos. O resultado fica salvo: se o navegador cansar de esperar, é só
+  recarregar a página que ele está lá.
+- **Residência normalmente não tem horário programado** — por isso o padrão
+  audita só Comercial. Conta cujo tipo o portal não informa aparece como
+  "—" e nunca é escondida pelo filtro: antes aparecer a mais do que deixar
+  passar batido.
+
+O dashboard ganha o card **"Saúde do cadastro"** com o número da última
+auditoria e a data — ele lê do resultado salvo, nunca roda a varredura
+sozinho.
+
+Detalhe técnico e validação contra o portal em
+[`AUDITORIA_HORARIOS.md`](AUDITORIA_HORARIOS.md).
+
 ## 6. Backup
 
 O banco de dados inteiro é **um único arquivo**:
