@@ -9,6 +9,7 @@
     <div style="display: flex; gap: var(--space-2);">
       <a class="btn btn-primary" href="{{ url_for('cofre.novo') }}">Novo segredo</a>
       {% if current_user.is_admin %}
+      <a class="btn btn-ghost" href="{{ url_for('cofre.backup') }}">Backup</a>
       <a class="btn btn-ghost" href="{{ url_for('cofre.configuracao') }}">Configuração</a>
       {% endif %}
     </div>

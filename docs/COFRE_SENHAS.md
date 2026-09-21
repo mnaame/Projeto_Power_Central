@@ -96,11 +96,64 @@ constraint explicitamente em `nivel`.
 - **Configuração** (admin): aviso da `VAULT_ENCRYPTION_KEY` — perder a
   chave torna as senhas irrecuperáveis; orienta backup **separado** do
   backup do banco.
+- **Backup** (`/cofre/backup`, só admin) — ver §3.1.
 - **Auditoria de revelar**: reaproveita a tela genérica já existente
   (`admin.auditoria`) — o filtro de ação já é populado dinamicamente a
   partir do que existe na tabela, então `cofre_senha_revelada` aparece lá
   sozinho assim que o primeiro evento for gravado. Não precisa de tela
   nova (extra do §6 do complemento já coberto de graça).
+
+### 3.1 Backup — arquivo cifrado por senha
+
+O backup do banco (§6 do `OPERACAO.md`) copia o cofre **cifrado**: sem a
+`VAULT_ENCRYPTION_KEY` ele não serve para nada. E a chave mora na máquina
+que se perdeu. Ou seja, a cópia do banco sozinha não protege contra o
+cenário que mais assusta — perder o servidor inteiro.
+
+Daí a decisão que define o módulo: **o backup do cofre NÃO usa a
+`VAULT_ENCRYPTION_KEY`**. Ele é cifrado com uma senha que o admin digita na
+hora, e carrega dentro de si o sal e os parâmetros de derivação
+(PBKDF2-HMAC-SHA256, 600 mil iterações — patamar OWASP 2023). O arquivo é
+autossuficiente: restaura numa instalação nova, com chave nova. Se ele
+dependesse da chave antiga, seria inútil exatamente no dia em que é a
+única cópia — há um teste de integração que encena esse desastre completo.
+
+O que o formato faz de propósito:
+
+- **JSON**, para poder ser inspecionado sem ferramenta especial;
+- **metadados em claro** (data, contagem de itens) — dá para escolher entre
+  dois arquivos sem precisar abrir nenhum;
+- **nada além da contagem** sai do envelope cifrado: nem título, nem login,
+  nem URL. Um teste garante que nenhum desses valores aparece no arquivo;
+- **Fernet autenticado**: senha errada e arquivo adulterado dão o mesmo
+  erro, e não há como distinguir — a mensagem cobre os dois casos.
+
+Regras de operação:
+
+- **Só admin.** O arquivo leva o cofre inteiro, itens `restrito` incluídos.
+- **Exportar exige reautenticação**, pelo mesmo motivo que revelar uma
+  senha exige: exportar é revelar todas de uma vez. Restaurar também exige,
+  porque escreve no cofre.
+- **O arquivo nunca toca o disco do servidor** — é montado em memória e
+  enviado. Ao contrário dos outros exports, não fica cópia em
+  `instance/reports/` esperando alguém achar.
+- **Restaurar não sobrescreve por padrão.** Casa por título (sem
+  diferenciar maiúsculas); item que já existe é ignorado a menos que
+  "substituir" esteja marcado. Restaurar por engano em cima de um cofre
+  vivo é pior do que restaurar de menos, porque o que foi sobrescrito não
+  volta.
+- **Item sem título ou sem senha é pulado**, contado em `invalidos`: um
+  arquivo meio corrompido deve restaurar o que dá, não falhar inteiro.
+- **"Conferir arquivo"** abre o backup e diz o que tem dentro sem gravar
+  nada. Existe porque backup que nunca foi aberto é esperança, não backup.
+- Auditoria: `cofre_backup_exportado` / `cofre_backup_restaurado`, só
+  contadores — nunca a senha do backup, nunca uma senha do cofre.
+
+> **A senha do backup não tem recuperação.** Não é um "esqueci minha
+> senha": é cifragem de verdade, e ninguém consegue abrir o arquivo sem
+> ela. Ela precisa ser guardada **separada do arquivo** — cofre físico,
+> gerenciador pessoal ou envelope lacrado. Guardar os dois juntos é o
+> mesmo que não cifrar.
 
 ## 4. Fases
 

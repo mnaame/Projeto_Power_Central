@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from io import BytesIO
 
 from flask import (
     Blueprint,
@@ -10,19 +11,26 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     url_for,
 )
 from flask_login import current_user, login_required
 
+from app.domain import cofre_backup as dom_backup
 from app.domain.cofre import gerar_senha
 from app.domain.dates import FUSO_HORARIO
 from app.extensions import db, limiter
-from app.models.cofre import CATEGORIAS
+from app.models.cofre import CATEGORIAS, Segredo
 from app.services import audit_service, cofre_service
 from app.web.auth.decorators import roles_required
 from app.web.cofre.forms import SegredoForm
 
 bp = Blueprint("cofre", __name__, url_prefix="/cofre")
+
+# Um backup do cofre é texto curto; qualquer coisa muito maior que isso não
+# é um backup nosso, e ler o arquivo inteiro na memória antes de descobrir
+# seria um jeito bobo de derrubar o serviço.
+LIMITE_ARQUIVO_BACKUP = 8 * 1024 * 1024
 
 
 def _carregar_ou_abort(segredo_id: int):
@@ -243,3 +251,129 @@ def excluir(segredo_id: int):
 def configuracao():
     chave_configurada = bool(current_app.config.get("VAULT_ENCRYPTION_KEY"))
     return render_template("cofre/configuracao.html", chave_configurada=chave_configurada)
+
+
+# ----------------------------------------------------------------------
+# Backup
+#
+# Só admin: o arquivo leva o cofre inteiro, itens `restrito` incluídos.
+# O arquivo nunca é gravado no servidor — é montado em memória e enviado,
+# para não deixar cópia do cofre em disco esperando alguém achar.
+# ----------------------------------------------------------------------
+
+
+@bp.route("/backup")
+@login_required
+@roles_required("admin")
+def backup():
+    return render_template(
+        "cofre/backup.html",
+        total_segredos=Segredo.query.count(),
+        minimo_senha=dom_backup.MINIMO_SENHA_BACKUP,
+    )
+
+
+@bp.route("/backup/exportar", methods=["POST"])
+@login_required
+@roles_required("admin")
+@limiter.limit("5 per minute")
+def backup_exportar():
+    senha_backup = request.form.get("senha_backup", "")
+    confirmacao = request.form.get("senha_backup_confirmacao", "")
+
+    if senha_backup != confirmacao:
+        flash("As duas senhas do backup não são iguais.", "warning")
+        return redirect(url_for("cofre.backup"))
+
+    try:
+        pacote = cofre_service.exportar_backup(
+            usuario=current_user,
+            senha_reautenticacao=request.form.get("senha_reautenticacao", ""),
+            senha_backup=senha_backup,
+            config=current_app.config,
+        )
+    except cofre_service.CofreReautenticacaoInvalidaError:
+        db.session.commit()
+        flash("Sua senha está incorreta — o backup não foi gerado.", "warning")
+        return redirect(url_for("cofre.backup"))
+    except dom_backup.BackupSenhaFracaError as exc:
+        flash(str(exc), "warning")
+        return redirect(url_for("cofre.backup"))
+    except (cofre_service.CofreDecifraError, cofre_service.CofreSemChaveError) as exc:
+        flash(f"{exc} O backup não foi gerado.", "error")
+        return redirect(url_for("cofre.backup"))
+
+    db.session.commit()
+    carimbo = datetime.now(FUSO_HORARIO).strftime("%Y%m%d_%H%M%S")
+    return send_file(
+        BytesIO(pacote),
+        mimetype="application/json",
+        as_attachment=True,
+        download_name=f"cofre_backup_{carimbo}.json",
+    )
+
+
+def _conteudo_enviado():
+    arquivo = request.files.get("arquivo")
+    if arquivo is None or not arquivo.filename:
+        return None
+    return arquivo.read(LIMITE_ARQUIVO_BACKUP + 1)
+
+
+@bp.route("/backup/restaurar", methods=["POST"])
+@login_required
+@roles_required("admin")
+@limiter.limit("5 per minute")
+def backup_restaurar():
+    """Dois modos no mesmo formulário: "conferir" só abre o arquivo e diz o
+    que tem dentro; "restaurar" grava. Conferir existe para o backup ser
+    testado antes do dia em que ele for a única cópia."""
+    conteudo = _conteudo_enviado()
+    if conteudo is None:
+        flash("Escolha o arquivo de backup.", "warning")
+        return redirect(url_for("cofre.backup"))
+    if len(conteudo) > LIMITE_ARQUIVO_BACKUP:
+        flash("Arquivo grande demais para ser um backup do cofre.", "warning")
+        return redirect(url_for("cofre.backup"))
+
+    senha_backup = request.form.get("senha_backup", "")
+    so_conferir = request.form.get("modo") != "restaurar"
+
+    try:
+        if so_conferir:
+            info = cofre_service.conferir_backup(conteudo, senha_backup=senha_backup)
+            flash(
+                f"Arquivo válido: {info['itens']} senha(s), gerado em "
+                f"{info['criado_em'][:19].replace('T', ' ')}. Nada foi alterado.",
+                "info",
+            )
+            return redirect(url_for("cofre.backup"))
+
+        resultado = cofre_service.restaurar_backup(
+            conteudo,
+            usuario=current_user,
+            senha_reautenticacao=request.form.get("senha_reautenticacao", ""),
+            senha_backup=senha_backup,
+            substituir=request.form.get("substituir") == "on",
+            config=current_app.config,
+        )
+    except cofre_service.CofreReautenticacaoInvalidaError:
+        db.session.commit()
+        flash("Sua senha está incorreta — nada foi restaurado.", "warning")
+        return redirect(url_for("cofre.backup"))
+    except (dom_backup.BackupSenhaInvalidaError, dom_backup.BackupFormatoInvalidoError) as exc:
+        flash(str(exc), "warning")
+        return redirect(url_for("cofre.backup"))
+    except cofre_service.CofreSemChaveError as exc:
+        db.session.rollback()
+        flash(str(exc), "error")
+        return redirect(url_for("cofre.backup"))
+
+    db.session.commit()
+    flash(
+        f"Restauração concluída: {resultado['adicionados']} adicionada(s), "
+        f"{resultado['substituidos']} substituída(s), "
+        f"{resultado['ignorados']} já existia(m).",
+        "info",
+    )
+    return redirect(url_for("cofre.index"))

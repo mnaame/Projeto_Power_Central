@@ -7,8 +7,11 @@ auditoria, nunca em log, nunca fora do momento exato de revelar.
 
 from __future__ import annotations
 
+from datetime import date
+
 from cryptography.fernet import Fernet, InvalidToken
 
+from app.domain import cofre_backup as dom_backup
 from app.extensions import db
 from app.models.cofre import Segredo
 from app.security import verify_password
@@ -210,3 +213,157 @@ def revelar(segredo: Segredo, *, usuario, senha_reautenticacao: str, config) -> 
         },
     )
     return senha
+
+
+# ----------------------------------------------------------------------
+# Backup — arquivo cifrado por senha, independente da VAULT_ENCRYPTION_KEY
+#
+# Exportar é revelar TODAS as senhas de uma vez, então exige reautenticação
+# pelo mesmo motivo que revelar uma exige. Restaurar escreve no cofre e
+# pode sobrescrever — exige pelo mesmo motivo.
+# ----------------------------------------------------------------------
+
+
+def _item_para_backup(segredo: Segredo, *, config) -> dict:
+    return {
+        "titulo": segredo.titulo,
+        "categoria": segredo.categoria,
+        "login": segredo.login or "",
+        "senha": decifrar(segredo.senha_cifrada, config=config),
+        "url": segredo.url or "",
+        "notas": notas_em_claro(segredo, config=config),
+        "nivel": segredo.nivel,
+        "expira_em": segredo.expira_em.isoformat() if segredo.expira_em else "",
+    }
+
+
+def exportar_backup(*, usuario, senha_reautenticacao: str, senha_backup: str, config) -> bytes:
+    """Cofre inteiro num arquivo cifrado pela `senha_backup`.
+
+    Exporta **tudo**, inclusive os itens `restrito` — por isso a rota é só
+    admin. A senha do backup é validada antes de decifrar qualquer coisa,
+    para não deixar senha em claro na memória à toa quando o pedido já
+    nasceu inválido."""
+    dom_backup.validar_senha_backup(senha_backup)
+
+    if not verify_password(usuario.password_hash, senha_reautenticacao):
+        audit_service.registrar(
+            action="cofre_backup_exportado",
+            result="failure",
+            user=usuario,
+            details={"motivo": "reautenticacao_invalida"},
+        )
+        raise CofreReautenticacaoInvalidaError()
+
+    segredos = Segredo.query.order_by(Segredo.titulo).all()
+    itens = [_item_para_backup(s, config=config) for s in segredos]
+    pacote = dom_backup.empacotar(itens, senha=senha_backup)
+
+    audit_service.registrar(
+        action="cofre_backup_exportado",
+        result="success",
+        user=usuario,
+        details={"itens": len(itens)},
+    )
+    return pacote
+
+
+def conferir_backup(conteudo: bytes, *, senha_backup: str) -> dict:
+    """Abre o arquivo só para conferir, sem gravar nada.
+
+    Existe porque backup que nunca foi aberto é esperança, não backup: é a
+    forma de descobrir que a senha está errada agora, e não no dia em que
+    o cofre se perder."""
+    envelope = dom_backup.ler_metadados(conteudo)
+    itens = dom_backup.desempacotar(conteudo, senha=senha_backup)
+    return {
+        "criado_em": envelope.get("criado_em", ""),
+        "itens": len(itens),
+        "titulos": sorted(i.get("titulo", "") for i in itens),
+    }
+
+
+def _data_ou_none(bruto: str):
+    try:
+        return date.fromisoformat(bruto) if bruto else None
+    except ValueError:
+        return None
+
+
+def restaurar_backup(
+    conteudo: bytes,
+    *,
+    usuario,
+    senha_reautenticacao: str,
+    senha_backup: str,
+    substituir: bool,
+    config,
+) -> dict:
+    """Grava no cofre os itens do arquivo.
+
+    Casa por **título** (sem diferenciar maiúsculas): um item que já existe
+    é ignorado, a menos que `substituir` esteja marcado. O padrão é não
+    sobrescrever de propósito — restaurar por engano em cima de um cofre
+    vivo é pior do que restaurar de menos, porque o que foi sobrescrito não
+    volta.
+
+    Item sem título ou sem senha é contado em `invalidos` e pulado: um
+    arquivo meio corrompido deve restaurar o que dá, não falhar inteiro."""
+    if not verify_password(usuario.password_hash, senha_reautenticacao):
+        audit_service.registrar(
+            action="cofre_backup_restaurado",
+            result="failure",
+            user=usuario,
+            details={"motivo": "reautenticacao_invalida"},
+        )
+        raise CofreReautenticacaoInvalidaError()
+
+    itens = dom_backup.desempacotar(conteudo, senha=senha_backup)
+    existentes = {s.titulo.strip().lower(): s for s in Segredo.query.all()}
+
+    adicionados = substituidos = ignorados = invalidos = 0
+    for item in itens:
+        titulo = str(item.get("titulo") or "").strip()
+        senha = item.get("senha")
+        if not titulo or not senha:
+            invalidos += 1
+            continue
+
+        atual = existentes.get(titulo.lower())
+        if atual is not None and not substituir:
+            ignorados += 1
+            continue
+
+        campos = dict(
+            titulo=titulo,
+            categoria=str(item.get("categoria") or "outro"),
+            login=str(item.get("login") or "") or None,
+            senha=senha,
+            url=str(item.get("url") or "") or None,
+            notas=str(item.get("notas") or "") or None,
+            nivel="restrito" if item.get("nivel") == "restrito" else "equipe",
+            expira_em=_data_ou_none(str(item.get("expira_em") or "")),
+            user_id=usuario.id,
+            config=config,
+        )
+        if atual is not None:
+            atualizar(atual, **campos)
+            substituidos += 1
+        else:
+            existentes[titulo.lower()] = criar(**campos)
+            adicionados += 1
+
+    resultado = {
+        "adicionados": adicionados,
+        "substituidos": substituidos,
+        "ignorados": ignorados,
+        "invalidos": invalidos,
+        "total": len(itens),
+    }
+    audit_service.registrar(
+        action="cofre_backup_restaurado",
+        result="success",
+        user=usuario,
+        details=resultado,
+    )
+    return resultado

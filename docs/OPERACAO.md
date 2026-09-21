@@ -560,10 +560,46 @@ auditoria de todo acesso à senha.
   edição. Apagar o campo e salvar remove a nota, como esperado.
 - **Configuração** (só admin): mostra se a `VAULT_ENCRYPTION_KEY` está
   configurada e repete o aviso de backup separado — ver §3.1 e §6.
+- **Backup** (só admin): botão **"Backup"** no topo da aba. Ver logo abaixo.
 
 > Se a `VAULT_ENCRYPTION_KEY` não estiver configurada, a aba funciona
 > normalmente para listar itens, mas criar, editar ou revelar mostra um
 > aviso pedindo para configurar a chave (§3.1) antes de continuar.
+
+#### Backup do cofre (não perder as senhas nunca)
+
+O backup do banco (§6) copia o cofre **cifrado**, e a chave que abre está
+na mesma máquina. Se o servidor se perder inteiro, a cópia do banco sozinha
+não recupera senha nenhuma. O backup do cofre resolve isso: gera um arquivo
+cifrado com **uma senha que você escolhe na hora**, que não depende do
+servidor — restaura numa instalação nova, com chave nova.
+
+**Gerar:** aba Cofre de Senhas → **Backup** → escolha a senha do backup
+(mínimo 12 caracteres), repita, confirme com a sua senha de acesso →
+"Gerar e baixar backup". Baixa um `.json` cifrado. Guarde-o junto com os
+demais backups (§6).
+
+> ⚠️ **A senha do backup não tem recuperação.** Não é um "esqueci minha
+> senha" — é cifragem de verdade. Sem ela, ninguém abre o arquivo: nem
+> você, nem o suporte, nem quem escreveu o sistema. Guarde-a **separada do
+> arquivo**: cofre físico, gerenciador de senhas pessoal ou envelope
+> lacrado. Guardar os dois no mesmo lugar é o mesmo que não ter cifrado.
+
+**Conferir (faça isto de vez em quando):** na mesma tela, escolha o
+arquivo, digite a senha do backup e clique em **"Conferir arquivo"**. Ele
+abre o backup e diz quantas senhas tem e de quando é, **sem alterar nada**.
+É como você descobre hoje que a senha está errada, em vez de descobrir no
+dia em que aquele arquivo for a única cópia.
+
+**Restaurar:** mesma tela, escolha o arquivo, a senha do backup e a sua
+senha de acesso → "Restaurar no cofre". Por padrão ele só **acrescenta** o
+que falta e não encosta no que já existe. Marque "Substituir as senhas que
+já existem" apenas se realmente quiser que o arquivo mande — o que for
+sobrescrito não volta.
+
+Só admin gera, confere ou restaura: o arquivo leva o cofre inteiro, itens
+restritos incluídos. Tudo fica na auditoria (só os números, nunca as
+senhas).
 
 ### 5.2.6 Central do Cliente (só admin)
 
@@ -792,6 +828,12 @@ Detalhe técnico e validação contra o portal em
 
 O banco de dados inteiro é **um único arquivo**:
 `instance\power_central.db`. Fazer backup é copiar esse arquivo.
+
+> **A cópia do banco NÃO recupera as senhas do Cofre sozinha.** Elas estão
+> cifradas com a `VAULT_ENCRYPTION_KEY`, que mora no `.env` da máquina —
+> se o servidor se perder inteiro, o banco copiado não abre. Para o Cofre,
+> gere também o **backup próprio do módulo** (§5.2.5), que é cifrado por
+> uma senha sua e não depende do servidor.
 
 Sugestão simples: uma Tarefa Agendada do Windows (esta sim, sem problema
 nenhum usar o Agendador — a restrição do prompt original era só sobre não

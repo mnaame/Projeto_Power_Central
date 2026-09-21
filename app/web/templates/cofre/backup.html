@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Backup — Cofre de Senhas{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>Backup do Cofre</h2>
+    <a class="btn btn-ghost" href="{{ url_for('cofre.index') }}">Voltar</a>
+  </div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Gera um arquivo com as <strong>{{ total_segredos }}</strong> senha(s) do
+    cofre, cifrado com uma senha que você escolhe agora. O arquivo é
+    independente do servidor: restaura numa instalação nova, com
+    <code>VAULT_ENCRYPTION_KEY</code> diferente.
+  </p>
+
+  <div class="banner banner-critical" role="alert">
+    <span><strong>A senha do backup não tem recuperação.</strong> Não é um
+    "esqueci minha senha" — é cifragem de verdade. Sem ela o arquivo é
+    inútil, e ninguém (nem a Novo Millenium, nem o suporte) consegue abrir.
+    Guarde a senha <strong>separada do arquivo</strong>: cofre físico,
+    gerenciador de senhas pessoal ou envelope lacrado.</span>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Gerar backup</h2></div>
+  <form method="post" action="{{ url_for('cofre.backup_exportar') }}" class="card"
+        style="max-width: 640px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="field">
+      <label for="senha_backup">Senha do backup (mínimo {{ minimo_senha }} caracteres)</label>
+      <input id="senha_backup" type="password" name="senha_backup" required
+             minlength="{{ minimo_senha }}" autocomplete="new-password">
+      <p class="muted" style="margin-top: var(--space-1);">
+        Use uma frase longa que você consiga lembrar ou guardar. É ela que
+        protege o arquivo inteiro.
+      </p>
+    </div>
+
+    <div class="field">
+      <label for="senha_backup_confirmacao">Repita a senha do backup</label>
+      <input id="senha_backup_confirmacao" type="password" name="senha_backup_confirmacao"
+             required minlength="{{ minimo_senha }}" autocomplete="new-password">
+    </div>
+
+    <div class="field">
+      <label for="senha_reautenticacao">Sua senha de acesso ao sistema</label>
+      <input id="senha_reautenticacao" type="password" name="senha_reautenticacao" required
+             autocomplete="current-password">
+      <p class="muted" style="margin-top: var(--space-1);">
+        Gerar um backup é revelar todas as senhas de uma vez — confirma quem
+        está pedindo, e fica registrado na auditoria.
+      </p>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Gerar e baixar backup</button>
+  </form>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Conferir ou restaurar um backup</h2></div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    <strong>Confira seu backup de vez em quando.</strong> Backup que nunca
+    foi aberto é esperança, não backup — melhor descobrir hoje que a senha
+    está errada do que no dia em que ele for a única cópia. "Conferir" abre
+    o arquivo e diz o que tem dentro, sem alterar nada.
+  </p>
+
+  <form method="post" action="{{ url_for('cofre.backup_restaurar') }}" class="card"
+        enctype="multipart/form-data" style="max-width: 640px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="field">
+      <label for="arquivo">Arquivo de backup (.json)</label>
+      <input id="arquivo" type="file" name="arquivo" accept=".json,application/json" required>
+    </div>
+
+    <div class="field">
+      <label for="senha_backup_restaurar">Senha do backup</label>
+      <input id="senha_backup_restaurar" type="password" name="senha_backup" required
+             autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label for="senha_reautenticacao_restaurar">Sua senha de acesso (só para restaurar)</label>
+      <input id="senha_reautenticacao_restaurar" type="password" name="senha_reautenticacao"
+             autocomplete="current-password">
+    </div>
+
+    <div class="field">
+      <label style="display: flex; align-items: center; gap: var(--space-2); font-weight: normal;">
+        <input type="checkbox" name="substituir" style="width: auto;">
+        Substituir as senhas que já existem no cofre (mesmo título)
+      </label>
+      <p class="muted" style="margin-top: var(--space-1);">
+        Desmarcado, a restauração só <strong>acrescenta</strong> o que falta
+        e não encosta no que já está lá. Marcado, o que veio do arquivo
+        sobrescreve o que está no cofre — e o que for sobrescrito não volta.
+      </p>
+    </div>
+
+    <div style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
+      <button type="submit" name="modo" value="conferir" class="btn btn-ghost">
+        Conferir arquivo
+      </button>
+      <button type="submit" name="modo" value="restaurar" class="btn btn-primary"
+              onclick="return confirm('Restaurar as senhas deste arquivo no cofre?');">
+        Restaurar no cofre
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
