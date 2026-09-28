@@ -75,6 +75,32 @@ def _paginar_mostrando(client, *, filtro) -> list[dict]:
     return linhas
 
 
+def _pedir_por_numero(client, numero: str) -> str:
+    """Consulta a conta pelo número, sem a listagem. Devolve texto pronto
+    para impressão."""
+    resposta = client._session.request(
+        "GET",
+        urljoin(client._credentials.base_url, SEARCH_PATH),
+        params={
+            "filter": json.dumps([{"property": "cue_ncuenta", "value": numero}]),
+            "page": 1,
+            "start": 0,
+            "limit": PAGINA,
+        },
+        timeout=120,
+    )
+    if resposta.status_code != 200:
+        return f"HTTP {resposta.status_code}"
+    payload = resposta.json()
+    linhas = payload.get("rows", payload.get("data", []))
+    if not linhas:
+        return "nada (total=%s)" % payload.get("total", 0)
+    return "ACHOU -> " + ", ".join(
+        f"{str(l.get('cue_ncuenta') or '').strip()} {str(l.get('cue_cnombre') or '').strip()}"
+        for l in linhas
+    )
+
+
 def main() -> None:
     procurada = sys.argv[1].strip().lstrip("0") if len(sys.argv) > 1 else "356"
 
@@ -118,11 +144,30 @@ def main() -> None:
             )
         else:
             print(f"   NÃO — {procurada} não veio em nenhuma das páginas acima.")
+
+            print("\n5) PEDINDO A CONTA DIRETO, POR NÚMERO")
+            # Se nem pedindo explicitamente ela vem, não é recorte da
+            # listagem: é que este usuário não enxerga a conta.
+            for valor in (procurada, procurada.zfill(4)):
+                achou = _pedir_por_numero(client, valor)
+                print(f"   filtro cue_ncuenta={valor!r}: {achou}")
+
+            usuario = app.config.get("SOFTGUARD_USERNAME", "(não configurado)")
             print(
-                "\n>>> A consulta do bot não traz essa conta. Olhe a tabela de\n"
-                "    páginas: se a soma de 'vieram' for menor que 'total diz',\n"
-                "    o portal parou de servir no meio. Me mande esta saída."
+                f"\n>>> O portal não entrega a conta {procurada} para o usuário de\n"
+                f"    integração ({usuario}), nem na lista nem pedindo direto.\n"
+                "    A paginação está íntegra (a soma das páginas bate com o\n"
+                "    'total diz'), então não é a consulta parando no meio.\n\n"
+                "    Teste decisivo, sem código: entre no portal pelo navegador\n"
+                f"    COM O USUÁRIO {usuario} e veja quantas contas ele lista.\n"
+                "    Se ele também não vir as novas, é permissão — as contas\n"
+                "    precisam ser liberadas para esse usuário no perfil dele."
             )
+
+        print("\n6) MAIORES NÚMEROS DE CONTA QUE O PORTAL ENTREGOU")
+        print("   (compare com a sua tela para achar quais faltam)")
+        principais_ord = dom_contas.ordenar(dom_contas.contas_da_resposta(principais))
+        print("   " + ", ".join(c.numero for c in principais_ord[-20:]))
 
 
 if __name__ == "__main__":
