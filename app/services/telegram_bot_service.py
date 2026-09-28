@@ -161,12 +161,18 @@ class _SessaoSoftGuard:
         self._mapa = None
         self._mapa_em = None
 
-    def contas(self) -> list[dom_contas.Conta]:
+    def contas(self, *, forcar: bool = False) -> list[dom_contas.Conta]:
         """Todas as contas COM as partições — o bot é o único que precisa
-        delas (o técnico trabalha no setor, não no local inteiro)."""
+        delas (o técnico trabalha no setor, não no local inteiro).
+
+        `forcar=True` ignora o cache e busca do portal. Usado quando a
+        resposta do cache seria "não encontrei": conta cadastrada agora no
+        portal só apareceria meia hora depois, e o técnico no campo leria
+        isso como "a conta não existe"."""
         agora = datetime.now(timezone.utc)
         if (
-            self._mapa is None
+            forcar
+            or self._mapa is None
             or self._mapa_em is None
             or agora - self._mapa_em > self.VALIDADE_MAPA
         ):
@@ -211,6 +217,16 @@ def _resolver_ou_avisar(termo: str, sessao, telegram, chat_id: str, *, comando: 
     técnico (não encontrada / ambígua / falta escolher a partição). Nunca
     chuta — nem o cliente, nem o setor."""
     resolucao = dom_bot.resolver_conta(termo, sessao.contas())
+
+    if resolucao.status == dom_bot.RESOLUCAO_NAO_ENCONTRADA:
+        # "Não encontrei" é o único sintoma de cache velho que o técnico
+        # consegue ver — e ele lê como "a conta não existe". Antes de dizer
+        # isso, recarrega a base do portal e tenta de novo: conta cadastrada
+        # há cinco minutos passa a valer na hora, em vez de só na meia hora
+        # seguinte. Custa uma busca, e só no caminho que já ia falhar.
+        logger.info("Bot: %r não está no mapa; recarregando a base de contas.", termo)
+        resolucao = dom_bot.resolver_conta(termo, sessao.contas(forcar=True))
+
     if resolucao.status == dom_bot.RESOLUCAO_OK:
         return resolucao.conta
     if resolucao.status == dom_bot.RESOLUCAO_AMBIGUA:
@@ -259,7 +275,9 @@ def _comando_clientes(argumentos, *, sessao, telegram, chat_id: str) -> str:
     """Lista a base com as partições. Monoespaçado e quebrado em várias
     mensagens quando for grande (a base real passa de 100 linhas)."""
     filtro = " ".join(argumentos).strip()
-    encontradas = dom_bot.filtrar_clientes(sessao.contas(), filtro)
+    # Sempre do portal: é comando manual e esporádico, e quem pede a lista
+    # normalmente pede porque acabou de cadastrar alguém.
+    encontradas = dom_bot.filtrar_clientes(sessao.contas(forcar=True), filtro)
     texto = dom_bot.formatar_lista_clientes(encontradas, filtro=filtro)
     for mensagem in _mensagens_monoespacadas(texto):
         telegram.enviar_mensagem(mensagem, chat_id=chat_id)

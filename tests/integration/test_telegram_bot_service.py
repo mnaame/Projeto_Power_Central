@@ -90,13 +90,16 @@ class SessaoFake:
     def __init__(self, client):
         self._client = client
         self.invalidada = False
+        self.recargas = 0  # quantas vezes pediram a base ignorando o cache
 
     def client(self):
         return self._client
 
-    def contas(self):
+    def contas(self, *, forcar=False):
         from app.domain import contas as dom_contas
 
+        if forcar:
+            self.recargas += 1
         return dom_contas.contas_da_resposta(CONTAS)
 
     def invalidar(self):
@@ -590,7 +593,7 @@ def test_clientes_pede_as_particoes_ao_portal(app, autorizado):
             return CONTAS
 
     class SessaoReal(SessaoFake):
-        def contas(self):
+        def contas(self, *, forcar=False):
             from app.domain import contas as dom_contas
 
             return dom_contas.contas_da_resposta(
@@ -612,3 +615,71 @@ def test_ajuda_reflete_a_configuracao_do_bot(app, autorizado):
     assert "usa 3." in texto
     assert "30s entre um pedido e outro" in texto
     assert "/clientes" in texto
+
+
+# ----------------------------------------------------------------------
+# Base de contas desatualizada
+#
+# Caso real: a conta é cadastrada no portal e o técnico tenta usar no
+# mesmo minuto. O mapa fica em cache por 30 min, então a resposta era
+# "não achei nenhuma conta" — que o técnico em campo lê como "essa conta
+# não existe", e não como "o bot está com uma lista velha".
+# ----------------------------------------------------------------------
+
+
+class SessaoComContaNova(SessaoFake):
+    """Cache velho: a conta 777 só aparece quando a base é recarregada."""
+
+    CONTA_NOVA = {
+        "cue_ncuenta": "0777", "cue_nparticion": "0", "cue_iid": "9777",
+        "cue_cnombre": "PADARIA NOVA",
+    }
+
+    def contas(self, *, forcar=False):
+        from app.domain import contas as dom_contas
+
+        if forcar:
+            self.recargas += 1
+            return dom_contas.contas_da_resposta([*CONTAS, self.CONTA_NOVA])
+        return dom_contas.contas_da_resposta(CONTAS)
+
+
+def test_conta_recem_cadastrada_e_encontrada_apos_recarregar(app, autorizado):
+    """O conserto: antes de dizer "não achei", recarrega a base do portal."""
+    sessao = SessaoComContaNova(FakeSoftGuard())
+
+    telegram, _ = _processar(app, "/zona 777", sessao=sessao)
+
+    assert sessao.recargas == 1
+    assert "Não achei" not in telegram.texto_completo
+    assert "PADARIA NOVA" in telegram.texto_completo
+
+
+def test_conta_que_ja_esta_no_cache_nao_recarrega(app, autorizado):
+    """A recarga só acontece no caminho que ia falhar — o comando do dia a
+    dia não paga uma busca a mais no portal."""
+    sessao = SessaoFake(FakeSoftGuard())
+
+    _processar(app, "/zona 95", sessao=sessao)
+
+    assert sessao.recargas == 0
+
+
+def test_conta_que_nao_existe_mesmo_ainda_avisa(app, autorizado):
+    """Recarregar não pode virar desculpa para nunca mais dizer "não
+    achei": conta que não existe no portal continua avisando."""
+    sessao = SessaoFake(FakeSoftGuard())
+
+    telegram, _ = _processar(app, "/zona 12345", sessao=sessao)
+
+    assert sessao.recargas == 1  # tentou
+    assert "Não achei" in telegram.texto_completo
+
+
+def test_clientes_sempre_busca_a_base_do_portal(app, autorizado):
+    """Quem pede a lista normalmente acabou de cadastrar alguém."""
+    sessao = SessaoFake(FakeSoftGuard())
+
+    _processar(app, "/clientes", sessao=sessao)
+
+    assert sessao.recargas == 1

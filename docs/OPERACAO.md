@@ -761,7 +761,11 @@ Comandos (o técnico manda direto pro bot ou num grupo onde ele esteja):
 - **`/zona <conta ou nome>`** — zoneamento completo do cliente: número da
   zona, descrição e o alarme que ela gera.
 - **`/clientes [filtro]`** — lista os clientes da base, já com as
-  partições. Ex.: `/clientes` (tudo) ou `/clientes villefort`.
+  partições. Ex.: `/clientes` (tudo) ou `/clientes villefort`. A lista vem
+  direto da PowerCentral a cada pedido, então conta cadastrada agora
+  aparece na hora — **mas mande o comando de novo**: mensagem antiga do
+  Telegram é texto congelado e nunca se atualiza sozinha (vale também para
+  mensagem fixada).
 - **`/ajuda`** — lista os comandos.
 
 **Locais com partição** (tesouraria, depósito): na PowerCentral cada setor
@@ -780,6 +784,14 @@ A conta pode ser o **número** (`95`, `0095`) ou **parte do nome**
 responde a lista e pede o número — **ele nunca escolhe sozinho**, porque
 mandar o zoneamento da loja errada entrega o mapa de sensores de um
 cliente para outro.
+
+> **Cadastrou uma conta nova e ela não aparece?** Não há nada para
+> atualizar: o bot lê a base direto da PowerCentral e, quando não encontra
+> a conta pedida, recarrega a lista antes de responder — então conta
+> cadastrada há um minuto já funciona. Se o bot ainda disser "não achei",
+> a conta realmente não está no portal (confira o número). E lembre que
+> **mensagem antiga do Telegram não se atualiza**: mande `/clientes` de
+> novo em vez de olhar a lista de ontem.
 
 **Ligar e autorizar** (Configurações → Bot do Técnico, só admin):
 

@@ -105,7 +105,8 @@ Orquestra: loop, autorização, cooldown, despacho e auditoria.
 - `_SessaoSoftGuard`: mantém o `SoftGuardClient` **logado entre comandos**
   (relogar a cada pedido é lento e castiga o portal) e guarda o mapa de
   contas em cache de 30 min (é a lista inteira do dealer, consulta cara).
-  **Com prazo** — ver §3.6.
+  **Com prazo** — ver §3.6. `contas(forcar=True)` ignora o cache — ver
+  §3.7.
 - `processar_update(...)`: um update. Erro de negócio vira resposta ao
   técnico; `SoftGuardAuthError` derruba o cache da sessão e pede para
   repetir.
@@ -158,6 +159,34 @@ evita gastar uma requisição para descobrir que a sessão morreu, e o
 A auditoria também passou a guardar **o que foi pedido** nas falhas —
 antes, um erro do portal não dizia sequer qual conta o técnico tinha
 pedido.
+
+### 3.7 "Não achei a conta" que era cache velho (bug real)
+
+O mapa de contas fica 30 minutos em cache. Conta cadastrada agora no portal
+só entrava na meia hora seguinte — e, até lá, `/relatorio 777` respondia
+**"Não achei nenhuma conta com 777"**.
+
+O problema não é a espera, é a mensagem: o técnico em campo lê aquilo como
+"essa conta não existe", não como "o bot está com uma lista velha". Ele
+desiste, ou liga para o escritório. Relatado em produção exatamente assim
+— contas novas que não apareciam.
+
+O conserto usa o próprio sintoma como gatilho. "Não encontrada" é o único
+caso em que um cache velho muda a resposta: se a conta foi achada, o cache
+serviu. Então, antes de responder "não achei", `_resolver_ou_avisar`
+recarrega a base do portal (`contas(forcar=True)`) e resolve de novo.
+
+O que isso preserva:
+
+- **Custo zero no caminho normal.** Comando que acha a conta no cache não
+  paga busca nenhuma a mais — há teste garantindo que não recarrega.
+- **"Não achei" continua existindo.** Conta que não existe no portal
+  segue avisando, depois da recarga. Recarregar não vira desculpa para
+  nunca mais dizer que não encontrou.
+
+`/clientes` é o caso à parte: busca sempre do portal, sem consultar cache.
+É comando manual e esporádico, e quem pede a lista normalmente pede porque
+acabou de cadastrar alguém.
 
 ## 4. Comandos
 
