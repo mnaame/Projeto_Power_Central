@@ -950,6 +950,42 @@ Rode manualmente para ver o erro na tela:
 do projeto, com as variáveis de ambiente do `.env` carregadas). Confira
 também `logs\service_stderr.log`.
 
+**Falta cliente na lista do bot, nos relatórios ou no BI (sem erro nenhum)**
+Se uma conta existe no portal mas **nenhuma** parte do sistema a enxerga —
+não aparece no `/clientes`, não entra em relatório, não conta no BI — quase
+sempre é o **intervalo de contas do usuário de integração**, no portal:
+
+> Portal → usuário de integração (o do `SOFTGUARD_USERNAME`) → aba
+> **Intervalos** → linha do revendedor (`MIL`), com **Home** e **Fim**.
+
+Esse par define a faixa de contas que aquele usuário enxerga. Conta com
+número **acima do "Fim" simplesmente não é entregue** pela API — sem erro,
+sem aviso, sem log. O sistema não tem como saber que ela existe.
+
+Aconteceu em produção: o intervalo terminava em `0352` e as contas 0353 em
+diante ficavam invisíveis para o bot, os relatórios, o BI e a Auditoria de
+Horários. O sintoma visível era só "a lista do bot está velha".
+
+> **Deixe o "Fim" folgado (ex.: `9999`), não no número da última conta
+> cadastrada.** Fechar no número de hoje resolve hoje e recria o problema —
+> igualmente silencioso — na próxima conta que entrar.
+
+Depois de ampliar o intervalo, gere um relatório de um período já passado:
+as contas que estavam de fora nunca apareceram em relatório nenhum, e vale
+conferir o que ficou para trás.
+
+Para confirmar que é isso, com o serviço **parado**:
+
+```powershell
+Stop-Service PowerCentral
+.venv\Scripts\python.exe scripts\debug_contas_faltando.py 356
+Start-Service PowerCentral
+```
+
+Ele mostra quantas contas a API entrega e se a conta procurada está entre
+elas. Compare com o total que a sua tela do portal mostra: se a API
+entregar menos, é o intervalo.
+
 **Os dados não atualizam / o coletor parece parado**
 Veja a página `/health` (ex.: `http://127.0.0.1:8000/health`) — mostra
 `last_cycle_at` e `last_cycle_status`. Se `watchdog_alert_active: true`, o

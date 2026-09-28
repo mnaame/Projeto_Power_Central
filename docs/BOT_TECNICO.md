@@ -188,6 +188,16 @@ O que isso preserva:
 É comando manual e esporádico, e quem pede a lista normalmente pede porque
 acabou de cadastrar alguém.
 
+**Nem toda conta faltando é cache.** Investigando exatamente este sintoma
+em produção, a causa acabou sendo outra: o usuário de integração tinha um
+**intervalo de contas** no portal (aba Intervalos: revendedor `MIL`, Home
+`0000`, Fim `0352`), e conta acima do "Fim" não é entregue pela API — sem
+erro, sem aviso. Recarregar não resolve o que o portal não manda.
+
+Como distinguir: `scripts/debug_contas_faltando.py <conta>` mostra quantas
+contas a API entrega; se for menos do que a tela do portal mostra, é o
+intervalo, não o cache. Detalhe em `OPERACAO.md` §8.
+
 ## 4. Comandos
 
 | Comando | O que faz |
