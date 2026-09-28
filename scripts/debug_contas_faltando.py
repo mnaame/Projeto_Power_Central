@@ -75,9 +75,21 @@ def _paginar_mostrando(client, *, filtro) -> list[dict]:
     return linhas
 
 
-def _pedir_por_numero(client, numero: str) -> str:
-    """Consulta a conta pelo número, sem a listagem. Devolve texto pronto
-    para impressão."""
+def _pedir_por_numero(client, numero: str) -> tuple[bool, str]:
+    """Consulta a conta pelo número, sem a listagem.
+
+    **Reloga antes de perguntar.** A primeira versão disto perguntava na
+    mesma sessão usada para listar as 188 contas e levava 500 — que neste
+    portal é o que uma sessão vencida responde (ver docs/OPERACAO.md). O
+    500 foi lido como "a conta não existe", que é conclusão que a medição
+    não sustentava. Sessão nova elimina essa dúvida.
+
+    Devolve (a pergunta foi respondida?, texto para impressão)."""
+    try:
+        client.login()
+    except SoftGuardError as exc:
+        return False, f"não deu para relogar: {exc}"
+
     resposta = client._session.request(
         "GET",
         urljoin(client._credentials.base_url, SEARCH_PATH),
@@ -90,12 +102,16 @@ def _pedir_por_numero(client, numero: str) -> str:
         timeout=120,
     )
     if resposta.status_code != 200:
-        return f"HTTP {resposta.status_code}"
-    payload = resposta.json()
+        corpo = " ".join(resposta.text.split())[:200]
+        return False, f"HTTP {resposta.status_code} — a PERGUNTA falhou, não a conta. Corpo: {corpo}"
+    try:
+        payload = resposta.json()
+    except ValueError:
+        return False, f"resposta não-JSON: {resposta.text[:150]!r}"
     linhas = payload.get("rows", payload.get("data", []))
     if not linhas:
-        return "nada (total=%s)" % payload.get("total", 0)
-    return "ACHOU -> " + ", ".join(
+        return True, "nada (total=%s)" % payload.get("total", 0)
+    return True, "ACHOU -> " + ", ".join(
         f"{str(l.get('cue_ncuenta') or '').strip()} {str(l.get('cue_cnombre') or '').strip()}"
         for l in linhas
     )
@@ -145,18 +161,28 @@ def main() -> None:
         else:
             print(f"   NÃO — {procurada} não veio em nenhuma das páginas acima.")
 
-            print("\n5) PEDINDO A CONTA DIRETO, POR NÚMERO")
-            # Se nem pedindo explicitamente ela vem, não é recorte da
-            # listagem: é que este usuário não enxerga a conta.
+            print("\n5) PEDINDO A CONTA DIRETO, POR NÚMERO (sessão nova a cada tentativa)")
+            respondeu = False
             for valor in (procurada, procurada.zfill(4)):
-                achou = _pedir_por_numero(client, valor)
-                print(f"   filtro cue_ncuenta={valor!r}: {achou}")
+                ok, texto = _pedir_por_numero(client, valor)
+                respondeu = respondeu or ok
+                print(f"   filtro cue_ncuenta={valor!r}: {texto}")
 
             usuario = app.config.get("SOFTGUARD_USERNAME", "(não configurado)")
+            if respondeu:
+                print(
+                    f"\n>>> A conta {procurada} não vem para o usuário de integração\n"
+                    f"    ({usuario}), nem na lista nem pedindo direto — e desta vez\n"
+                    "    a pergunta foi respondida, então a ausência é real."
+                )
+            else:
+                print(
+                    "\n>>> ATENÇÃO: o pedido direto FALHOU (erro na consulta), então\n"
+                    "    ele não diz nada sobre a conta. O que continua valendo é só\n"
+                    "    o passo 2: a listagem veio íntegra e sem essa conta."
+                )
             print(
-                f"\n>>> O portal não entrega a conta {procurada} para o usuário de\n"
-                f"    integração ({usuario}), nem na lista nem pedindo direto.\n"
-                "    A paginação está íntegra (a soma das páginas bate com o\n"
+                "\n    A paginação está íntegra (a soma das páginas bate com o\n"
                 "    'total diz'), então não é a consulta parando no meio.\n\n"
                 "    Teste decisivo, sem código: entre no portal pelo navegador\n"
                 f"    COM O USUÁRIO {usuario} e veja quantas contas ele lista.\n"
