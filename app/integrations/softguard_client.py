@@ -48,6 +48,13 @@ FILTRO_TODAS_CONTAS = [{"property": "cue_nparticion", "value": "0"}]
 DEALER_FIRMA = "MIL"
 
 DEFAULT_TIMEOUT_SECONDS = 15
+# O ReporteHistorico varre o histórico do dealer INTEIRO no período (não
+# tem filtro de conta), então é a consulta mais pesada do portal — e a
+# única que fica mais lenta quando a base de contas cresce. 15s serve para
+# as consultas de tela; aqui não serve, e o sintoma é feio: "Read timed
+# out" vira relatório que falha sem explicar por quê. Mesmo patamar do
+# export, que já nasceu com 120 pelo mesmo motivo.
+TIMEOUT_HISTORICO_SEGUNDOS = 120
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_BACKOFF_SECONDS = 2.0
@@ -154,13 +161,23 @@ class SoftGuardClient:
             raise SoftGuardAuthError(f"Sessão inválida: {payload!r}")
 
     def _buscar_paginado(
-        self, path: str, params_base: dict[str, Any], *, page_size: int
+        self,
+        path: str,
+        params_base: dict[str, Any],
+        *,
+        page_size: int,
+        timeout: float | None = None,
     ) -> list[dict[str, Any]]:
         """Loop de paginação page/start/limit até `total`, comum às
         consultas de busca do portal. Devolve as linhas cruas — parsing e
-        regra de negócio são responsabilidade da camada de domínio."""
+        regra de negócio são responsabilidade da camada de domínio.
+
+        `timeout` vale por página e existe porque nem toda busca custa o
+        mesmo: a de contas responde na hora, a de histórico pode demorar."""
         if not self._logged_in:
             self.login()
+
+        timeout = timeout or self._timeout
 
         linhas: list[dict[str, Any]] = []
         start = 0
@@ -172,7 +189,10 @@ class SoftGuardClient:
                 {"page": (start // page_size) + 1, "start": start, "limit": page_size}
             )
             response = self._request_reautenticando(
-                "GET", urljoin(self._credentials.base_url, path), params=params
+                "GET",
+                urljoin(self._credentials.base_url, path),
+                params=params,
+                timeout=timeout,
             )
             payload = self._json(response)
             total = int(payload.get("total", 0) or 0)
@@ -219,6 +239,7 @@ class SoftGuardClient:
                 "Mostrar": 5000,
             },
             page_size=page_size,
+            timeout=TIMEOUT_HISTORICO_SEGUNDOS,
         )
 
     def listar_todas_contas(

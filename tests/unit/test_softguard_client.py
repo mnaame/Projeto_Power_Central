@@ -405,3 +405,71 @@ def test_paginacao_renova_o_token_no_meio_e_termina_a_busca(requests_mock):
     # Relogou de verdade no meio do caminho (o login aparece duas vezes).
     logins = [r for r in requests_mock.request_history if "OAuthLogin" in r.url]
     assert len(logins) == 2
+
+
+# ----------------------------------------------------------------------
+# Timeout por tipo de consulta
+#
+# O ReporteHistorico varre o histórico do dealer inteiro no período, sem
+# filtro de conta — então fica mais lento conforme a base cresce. Com os
+# 15s do padrão, ampliar a faixa de contas visíveis ao usuário de
+# integração passou a derrubar relatório com "Read timed out".
+# ----------------------------------------------------------------------
+
+
+def test_busca_de_historico_usa_timeout_generoso(requests_mock):
+    from datetime import datetime
+
+    from app.integrations.softguard_client import TIMEOUT_HISTORICO_SEGUNDOS
+
+    _mock_login_ok(requests_mock)
+    requests_mock.get(
+        f"{CREDS.base_url}/Rest/Search/ReporteHistorico",
+        json={"total": 1, "rows": [{"id": 1}]},
+    )
+
+    capturado = {}
+    original = requests.Session.request
+
+    def espiao(self, method, url, **kwargs):
+        if "ReporteHistorico" in url:
+            capturado["timeout"] = kwargs.get("timeout")
+        return original(self, method, url, **kwargs)
+
+    requests.Session.request = espiao
+    try:
+        _client().buscar_historico(
+            codigos_alarme=["BUR"],
+            desde=datetime(2026, 9, 30, 11, 0),
+            hasta=datetime(2026, 10, 1, 11, 0),
+        )
+    finally:
+        requests.Session.request = original
+
+    assert capturado["timeout"] == TIMEOUT_HISTORICO_SEGUNDOS
+
+
+def test_busca_de_contas_mantem_o_timeout_curto(requests_mock):
+    """Só o histórico é pesado — subir o timeout das outras consultas
+    deixaria o coletor preso em cima de um portal fora do ar."""
+    _mock_login_ok(requests_mock)
+    requests_mock.get(
+        f"{CREDS.base_url}/Rest/Search/CuentaByDealer",
+        json={"total": 1, "rows": [{"cue_ncuenta": "1"}]},
+    )
+
+    capturado = {}
+    original = requests.Session.request
+
+    def espiao(self, method, url, **kwargs):
+        if "CuentaByDealer" in url:
+            capturado["timeout"] = kwargs.get("timeout")
+        return original(self, method, url, **kwargs)
+
+    requests.Session.request = espiao
+    try:
+        _client(timeout=15).buscar_contas_em_falha_tst()
+    finally:
+        requests.Session.request = original
+
+    assert capturado["timeout"] == 15

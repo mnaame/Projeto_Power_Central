@@ -920,6 +920,31 @@ instâncias** mexendo no mesmo banco — o serviço `PowerCentral` rodando e,
 ao mesmo tempo, alguém com `flask run` aberto na mesma pasta (o segundo
 sobe outro agendador). Pare uma das duas e tente de novo.
 
+**Relatório falha com "Read timed out"**
+O portal não respondeu dentro do tempo limite — não é erro do site nem de
+webhook (não existe webhook neste caminho). A consulta do histórico
+(`ReporteHistorico`) varre o histórico do dealer **inteiro** no período,
+sem filtro de conta, então é a mais pesada do portal e a única que fica
+mais lenta quando a base de contas cresce.
+
+Apareceu em produção logo depois de **ampliar o intervalo de contas** do
+usuário de integração (de `0352` para `0999`): com mais contas visíveis, a
+consulta deixou de caber nos 15s do padrão. O limite dessa consulta subiu
+para 120s (`TIMEOUT_HISTORICO_SEGUNDOS`), igual ao do export.
+
+Se voltar a acontecer mesmo assim, meça quanto a consulta está realmente
+demorando, com o serviço **parado**:
+
+```powershell
+Stop-Service PowerCentral
+.venv\Scripts\python.exe scripts\debug_janela.py
+Start-Service PowerCentral
+```
+
+A coluna `seg` mostra o tempo por janela. Se até as janelas curtas
+estiverem perto do limite, o problema é o portal estar lento — não adianta
+só subir o número.
+
 **"Internal Server Error" ao gerar um relatório de vários dias (só os longos)**
 Se o relatório curto sai e o de 3–4 dias derruba, o culpado é o **token do
 portal vencendo no meio da busca**. O SoftGuard não devolve 401 quando a
