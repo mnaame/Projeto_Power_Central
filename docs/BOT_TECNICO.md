@@ -206,6 +206,29 @@ zonas, zona isolada demais, comunicação instável, bateria/energia/violação
 do painel. `/diagnostico <conta> [dias]` manda só o texto; `/relatorio`
 manda o texto e os arquivos.
 
+### Quando uma conta é considerada "com problema"
+
+| Eixo | Dispara quando | Gravidade | Chave |
+|---|---|---|---|
+| Disparo repetido na **mesma zona** | ≥ 3 na mesma zona | ALTA | `diag_disparos_zona_limiar` |
+| Disparos **espalhados** na conta | ≥ 5 no período | ALTA (MÉDIA se a zona já acusou) | `diag_disparos_limiar` |
+| Zona **isolada** (bypass) repetida | ≥ 3 vezes na mesma zona | MÉDIA | `diag_bypass_limiar` |
+| **Comunicação** instável | > 4 falhas no período | MÉDIA | `diag_comunicacao_limiar` |
+| Comunicação **caindo todo dia** | ≥ 1 falha/dia em média | ALTA | `diag_comunicacao_por_dia_alta` |
+| Bateria / tamper | 1 evento basta | ALTA | `diag_codigos_painel_*` |
+| Falta de energia (AC) | 1 evento basta | MÉDIA | `diag_codigos_painel_ac` |
+
+Por que disparo tem **dois** eixos: "mesma zona repetindo" é um PONTO com
+defeito (sensor, posicionamento, galho batendo) e dá para mandar o técnico
+direto nele; "muitos disparos espalhados" é a CONTA (instalação, uso,
+vizinhança) e pede outro tipo de visita. Num aviso só, não dava para saber
+qual dos dois era. Note que uma zona com 4 disparos acusa mesmo sem o total
+chegar a 5 — um ponto com defeito não precisa que a conta inteira dispare.
+
+Por que comunicação tem **taxa**, e não só total: 300 falhas em 15 dias é um
+painel caindo o tempo todo; 5 em 15 dias é ruído. Sem a média por dia, os
+dois viravam o mesmo aviso.
+
 Três decisões que regem o módulo:
 
 **A regra de disparo não é reescrita aqui.** `domain/diagnostico.py` chama
@@ -229,7 +252,14 @@ em vez de adivinhar — diagnóstico errado é pior que diagnóstico ausente.
 
 Os códigos (comunicação, bateria, AC, tamper) vivem em `settings`
 (`diag_codigos_*`) porque o código exato depende do **modelo do painel** de
-cada cliente. `scripts/debug_diagnostico.py <conta>` mostra, contra um
+cada cliente — e porque errar um deles produz a pior saída possível: um
+"sem problemas" falso. Foi o que aconteceu na conta 118 (SHOPPING VETTORE
+PAMPULHA 1º PISO): o painel caía e voltava o dia inteiro, e o diagnóstico
+dizia que estava tudo bem, porque o código real da plataforma é **`NYR`**
+(painel de alarme off-line) e a lista trazia `FST`, sugerido pelo catálogo
+genérico e inexistente nesta base. `TST` (teste OK) é a restauração e não
+pode ser contado — contá-lo dobraria o número e transformaria conta
+saudável em problema. Há teste de regressão para os dois casos. `scripts/debug_diagnostico.py <conta>` mostra, contra um
 export real, como as colunas foram mapeadas e quais códigos apareceram —
 inclusive marcando os que estão fora das listas, que é como se descobre o
 que falta acrescentar.

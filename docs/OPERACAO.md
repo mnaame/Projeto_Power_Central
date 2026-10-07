@@ -766,6 +766,17 @@ Comandos (o técnico manda direto pro bot ou num grupo onde ele esteja):
   comunicação instável, e bateria/falta de energia/violação do painel. Ex.:
   `/diagnostico 95` ou `/diagnostico 95 15`. Quando não há nada a relatar,
   ele diz isso — "sem problemas" também é resposta.
+
+  O que conta como problema: **3 disparos na mesma zona** (ponto com
+  defeito), **5 disparos no período** (a conta inteira disparando), **3
+  bypasses na mesma zona**, **mais de 4 falhas de comunicação** (e
+  gravidade alta a partir de 1 por dia em média), e **qualquer** evento de
+  bateria, violação ou falta de energia. Tudo ajustável em Configurações
+  (chaves `diag_*`) sem mexer no sistema.
+
+  > Se o bot disser "sem problemas" numa conta que você sabe que tem
+  > problema, provavelmente falta o código do painel dela na lista — veja
+  > o troubleshooting (§8).
 - **`/clientes [filtro]`** — lista os clientes da base, já com as
   partições. Ex.: `/clientes` (tudo) ou `/clientes villefort`. A lista vem
   direto da PowerCentral a cada pedido, então conta cadastrada agora
@@ -1016,6 +1027,28 @@ Start-Service PowerCentral
 Ele mostra quantas contas a API entrega e se a conta procurada está entre
 elas. Compare com o total que a sua tela do portal mostra: se a API
 entregar menos, é o intervalo.
+
+**O diagnóstico do bot diz "sem problemas" numa conta problemática**
+Quase sempre é **código de evento faltando na lista**. Os códigos do painel
+variam por modelo, e o diagnóstico só conta o que está configurado — então
+um código fora da lista some em silêncio, e silêncio vira "tudo certo".
+
+Aconteceu com a conta 118: o painel caía e voltava o dia inteiro e o bot
+dizia que estava tudo bem, porque a plataforma reporta isso como **`NYR`**
+e a lista trazia `FST` (do catálogo genérico, inexistente nesta base).
+
+Para descobrir qual código falta, com o serviço **parado**:
+
+```powershell
+Stop-Service PowerCentral
+.venv\Scripts\python.exe scripts\debug_diagnostico.py 118 15
+Start-Service PowerCentral
+```
+
+Ele lista todos os códigos que apareceram na conta e **marca os que estão
+fora das listas**. Achando o código do problema, acrescente-o em
+Configurações, na chave `diag_codigos_*` correspondente (comunicação,
+bateria, AC ou tamper). Não precisa mexer no sistema nem reiniciar.
 
 **Os dados não atualizam / o coletor parece parado**
 Veja a página `/health` (ex.: `http://127.0.0.1:8000/health`) — mostra

@@ -719,8 +719,9 @@ def test_diagnostico_responde_so_texto_sem_arquivo(app, autorizado):
     assert telegram.documentos == []  # nada de arquivo neste comando
     corpo = telegram.texto_completo
     assert "Diagnóstico" in corpo
-    assert "Disparos recorrentes" in corpo
-    assert "PORTAO SOCIAL (4)" in corpo
+    # Os dois eixos saem separados: o PONTO com defeito e a CONTA disparando.
+    assert "Disparo repetido na mesma zona: PORTAO SOCIAL (4x)" in corpo
+    assert "Disparos no período" in corpo
     assert "Falta de energia (AC)" in corpo
 
 
@@ -729,7 +730,7 @@ def test_relatorio_manda_o_diagnostico_antes_do_arquivo(app, autorizado):
 
     telegram, _ = _processar(app, "/relatorio 95", sessao=sessao)
 
-    assert "Disparos recorrentes" in telegram.texto_completo
+    assert "Disparo repetido na mesma zona" in telegram.texto_completo
     assert len(telegram.documentos) == 2  # .xls e .pdf continuam indo
 
 

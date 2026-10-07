@@ -53,8 +53,10 @@ class ConfigDiagnostico:
     então a lista precisa ser ajustável sem mexer no sistema."""
 
     disparos_limiar: int = 5
+    disparos_zona_limiar: int = 3
     bypass_limiar: int = 3
     comunicacao_limiar: int = 4
+    comunicacao_por_dia_alta: float = 1.0
     codigos_comunicacao: tuple[str, ...] = ()
     codigos_painel_bateria: tuple[str, ...] = ()
     codigos_painel_ac: tuple[str, ...] = ()
@@ -89,24 +91,57 @@ def _contar_por_codigo(eventos, codigos: Sequence[str]) -> int:
     return sum(1 for e in eventos if _codigo(e) in alvo)
 
 
-def _achado_disparos(eventos, *, cfg: ConfigDiagnostico, dias: int) -> Achado | None:
-    """Reaproveita a avaliação validada e só agrupa por zona. Pânico,
-    rotina de entrada/saída e ciclo curto já saem de lá excluídos."""
+def _achados_disparos(eventos, *, cfg: ConfigDiagnostico, dias: int) -> list[Achado]:
+    """Duas perguntas diferentes sobre o mesmo dado, e por isso dois
+    achados:
+
+    - **mesma zona repetindo** é um PONTO com problema (sensor com
+      defeito, mal posicionado, animal, galho batendo) — dá para mandar
+      o técnico direto nele;
+    - **muitos disparos espalhados** é a CONTA com problema (instalação,
+      uso, vizinhança) — exige outro tipo de visita.
+
+    Juntar os dois num aviso só, como estava, escondia qual dos dois era.
+    Pânico, rotina de entrada/saída e ciclo curto já vêm excluídos da
+    regra validada em `domain/disparos.py`."""
     avaliados = dom_disparos.avaliar_disparos_da_conta(
         eventos, zonas_ignoradas=cfg.zonas_ignoradas
     )
     validos = [a for a in avaliados if a.valido]
-    if len(validos) < cfg.disparos_limiar:
-        return None
+    if not validos:
+        return []
 
     por_zona = Counter(a.zona or ZONA_SEM_NOME for a in validos)
-    citadas = ", ".join(f"{zona} ({qtd})" for zona, qtd in por_zona.most_common(TOP_ZONAS))
     periodo = f" em {dias} dia(s)" if dias else ""
-    return Achado(
-        severidade=SEVERIDADE_ALTA,
-        titulo="Disparos recorrentes",
-        detalhe=f"{len(validos)} disparo(s){periodo}; concentrados em: {citadas}",
-    )
+    achados: list[Achado] = []
+
+    reincidentes = [
+        (zona, qtd) for zona, qtd in por_zona.most_common()
+        if qtd >= cfg.disparos_zona_limiar
+    ][:TOP_ZONAS]
+    if reincidentes:
+        citadas = ", ".join(f"{zona} ({qtd}x)" for zona, qtd in reincidentes)
+        achados.append(
+            Achado(
+                severidade=SEVERIDADE_ALTA,
+                titulo="Disparo repetido na mesma zona",
+                detalhe=f"{citadas} — verificar o sensor/instalação desse ponto",
+            )
+        )
+
+    if len(validos) >= cfg.disparos_limiar:
+        achados.append(
+            Achado(
+                severidade=SEVERIDADE_MEDIA if reincidentes else SEVERIDADE_ALTA,
+                titulo="Disparos no período",
+                detalhe=(
+                    f"{len(validos)} disparo(s){periodo}, "
+                    f"em {len(por_zona)} zona(s): "
+                    + ", ".join(f"{z} ({q})" for z, q in por_zona.most_common(TOP_ZONAS))
+                ),
+            )
+        )
+    return achados
 
 
 def _achados_bypass(eventos, *, cfg: ConfigDiagnostico) -> list[Achado]:
@@ -130,14 +165,31 @@ def _achados_bypass(eventos, *, cfg: ConfigDiagnostico) -> list[Achado]:
     return achados
 
 
-def _achado_comunicacao(eventos, *, cfg: ConfigDiagnostico) -> Achado | None:
+def _achado_comunicacao(eventos, *, cfg: ConfigDiagnostico, dias: int) -> Achado | None:
+    """O total levanta a suspeita; a MÉDIA POR DIA diz a gravidade.
+
+    Sem a taxa, "300 falhas em 15 dias" (painel caindo o tempo todo) e
+    "5 em 15 dias" (ruído) viravam exatamente o mesmo aviso, e o técnico
+    não tinha como separar um do outro."""
     quantidade = _contar_por_codigo(eventos, cfg.codigos_comunicacao)
     if quantidade <= cfg.comunicacao_limiar:
         return None
+
+    por_dia = quantidade / dias if dias else 0.0
+    if por_dia >= cfg.comunicacao_por_dia_alta:
+        return Achado(
+            severidade=SEVERIDADE_ALTA,
+            titulo="Comunicação instável",
+            detalhe=(
+                f"{quantidade} falha(s) de comunicação em {dias} dia(s) "
+                f"(~{por_dia:.1f}/dia) — painel ficando off-line com frequência"
+            ),
+        )
+    periodo = f" em {dias} dia(s)" if dias else " no período"
     return Achado(
         severidade=SEVERIDADE_MEDIA,
         titulo="Comunicação instável",
-        detalhe=f"{quantidade} queda(s)/falha(s) de comunicação no período",
+        detalhe=f"{quantidade} falha(s) de comunicação{periodo}",
     )
 
 
@@ -174,11 +226,9 @@ def diagnosticar(
     resposta, e o técnico precisa dela tanto quanto da outra."""
     achados: list[Achado] = []
 
-    disparos = _achado_disparos(eventos, cfg=cfg, dias=dias)
-    if disparos is not None:
-        achados.append(disparos)
+    achados.extend(_achados_disparos(eventos, cfg=cfg, dias=dias))
     achados.extend(_achados_bypass(eventos, cfg=cfg))
-    comunicacao = _achado_comunicacao(eventos, cfg=cfg)
+    comunicacao = _achado_comunicacao(eventos, cfg=cfg, dias=dias)
     if comunicacao is not None:
         achados.append(comunicacao)
     achados.extend(_achados_painel(eventos, cfg=cfg))

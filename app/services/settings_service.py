@@ -87,17 +87,30 @@ DEFAULTS: dict[str, str] = {
     # --- Diagnóstico automático da conta (bot) ---
     # Limiares do que vira achado. Editáveis porque "muito disparo" numa
     # loja de rua não é o mesmo que num condomínio.
+    # Disparo espalhado pela conta (vários pontos) — pergunta "esta conta
+    # dispara muito?".
     "diag_disparos_limiar": "5",
+    # Disparo repetido NA MESMA zona — pergunta diferente: "este ponto
+    # está com defeito?". Três na mesma zona já é padrão, não azar.
+    "diag_disparos_zona_limiar": "3",
     "diag_bypass_limiar": "3",
+    # Comunicação: o total no período levanta a suspeita...
     "diag_comunicacao_limiar": "4",
+    # ...e a MÉDIA POR DIA diz a gravidade. 300 falhas em 15 dias é um
+    # painel caindo o tempo todo; 5 em 15 dias é ruído. Sem a taxa, os
+    # dois viravam o mesmo aviso.
+    "diag_comunicacao_por_dia_alta": "1",
     # Códigos do catálogo `codigosalarmas` da plataforma (HAR 07/10), já
     # filtrados para painel de alarme. Ficam em configuração porque o
     # código exato depende do MODELO do painel de cada cliente: faltando
     # algum, acrescente aqui sem mexer no sistema.
-    # EPC perda de comunicações · FST falha na supervisão do teste
-    # periódico · FCS sensores · FCR rádio não responde · FCW Wi-Fi ·
-    # PSC/PSP/PSG/PSS supervisão (sensor/pânico/PGM/sirene).
-    "diag_codigos_comunicacao": "EPC,FST,FCS,FCR,FCW,PSC,PSP,PSG,PSS",
+    # NYR painel de alarme off-line (falha no teste periódico) — é ESTE
+    # que a plataforma usa de verdade, confirmado numa conta que oscilava
+    # e saía como "sem problemas"; o `FST` do catálogo genérico não
+    # aparece na base. TST (teste OK) é a restauração e NÃO entra aqui.
+    # EPC perda de comunicações · FCS sensores · FCR rádio não responde ·
+    # FCW Wi-Fi · PSC/PSP/PSG/PSS supervisão (sensor/pânico/PGM/sirene).
+    "diag_codigos_comunicacao": "NYR,EPC,FST,FCS,FCR,FCW,PSC,PSP,PSG,PSS",
     # _BT/E41 bateria morta · BTF falha no teste · BTM ausente · N36 falta
     # · BBF/BFS/PTS/PBC fraca (sem fio/sensor/teclado/controle) · P51 low
     # battery report.
@@ -544,6 +557,14 @@ def get_diag_disparos_limiar() -> int:
     return int(get("diag_disparos_limiar"))
 
 
+def get_diag_disparos_zona_limiar() -> int:
+    return int(get("diag_disparos_zona_limiar"))
+
+
+def get_diag_comunicacao_por_dia_alta() -> float:
+    return float(get("diag_comunicacao_por_dia_alta"))
+
+
 def get_diag_bypass_limiar() -> int:
     return int(get("diag_bypass_limiar"))
 
@@ -575,8 +596,10 @@ def config_diagnostico():
 
     return ConfigDiagnostico(
         disparos_limiar=get_diag_disparos_limiar(),
+        disparos_zona_limiar=get_diag_disparos_zona_limiar(),
         bypass_limiar=get_diag_bypass_limiar(),
         comunicacao_limiar=get_diag_comunicacao_limiar(),
+        comunicacao_por_dia_alta=get_diag_comunicacao_por_dia_alta(),
         codigos_comunicacao=get_diag_codigos_comunicacao(),
         codigos_painel_bateria=get_diag_codigos_painel_bateria(),
         codigos_painel_ac=get_diag_codigos_painel_ac(),
