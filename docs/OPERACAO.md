@@ -1029,7 +1029,23 @@ elas. Compare com o total que a sua tela do portal mostra: se a API
 entregar menos, é o intervalo.
 
 **O diagnóstico do bot diz "sem problemas" numa conta problemática**
-Quase sempre é **código de evento faltando na lista**. Os códigos do painel
+A causa mais comum é **descrição de evento fora do catálogo**. O arquivo
+exportado pela plataforma não traz o código do evento, só a descrição em
+português — então o sistema precisa traduzir, e o que ele não reconhece ele
+ignora.
+
+Para mapear o catálogo inteiro de uma vez, com a planilha de códigos da
+plataforma em mãos:
+
+```powershell
+cd C:\power_central
+.venv\Scripts\python.exe scripts\importar_catalogo_codigos.py catalogo_codigos_alarme.xlsx
+```
+
+Ele gera um arquivo `.txt` ao lado da planilha; copie todo o conteúdo e
+cole em **Configurações → `diag_descricoes`**. Vale na hora, sem reiniciar.
+
+A causa menos comum é **código faltando nas listas de categoria**. Os códigos do painel
 variam por modelo, e o diagnóstico só conta o que está configurado — então
 um código fora da lista some em silêncio, e silêncio vira "tudo certo".
 

@@ -33,6 +33,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app  # noqa: E402
+from app.domain import catalogo_eventos as dom_catalogo  # noqa: E402
 from app.domain import contas as dom_contas  # noqa: E402
 from app.domain import diagnostico as dom_diag  # noqa: E402
 from app.domain import tecnico as dom_tecnico  # noqa: E402
@@ -104,7 +105,8 @@ def main() -> None:
             print("   >>> SEM COLUNA DE ZONA: disparos e bypass não vão dizer a zona.")
             print("       Veja no cabeçalho acima como ela se chama e me avise.")
 
-        eventos = dom_tecnico.eventos_do_export(conteudo)
+        mapa = settings_service.mapa_catalogo_eventos()
+        eventos = dom_tecnico.eventos_do_export(conteudo, mapa_catalogo=mapa)
         brutas = [l for l in linhas if not dom_tecnico.linha_e_cabecalho(l)]
         print(f"\n5) EVENTOS LIDOS: {len(eventos)} (de {len(brutas)} linha(s) de dados)")
 
@@ -126,13 +128,30 @@ def main() -> None:
                 "       linhas cruas acima em qual coluna ele aparece e me avise."
             )
 
-        print("\n6) CÓDIGOS ENCONTRADOS (os que o diagnóstico NÃO conhece vão marcados)")
+        print("\n6) CÓDIGOS RECONHECIDOS")
         conhecidos = set(codigos)
         for codigo, quantidade in Counter(
             str(e["rec_calarma"]) for e in eventos
         ).most_common():
-            marca = "" if codigo in conhecidos else "   <- fora das listas"
+            marca = "" if codigo in conhecidos else "   <- fora das listas do diagnóstico"
             print(f"   {quantidade:>5}  {codigo}{marca}")
+
+        # O export guarda a DESCRIÇÃO, não o código: descrição que não está
+        # no catálogo vira evento invisível. É esta lista que diz o que
+        # falta mapear — sem ela, "sem problemas" pode ser só ignorância.
+        print("\n6b) DESCRIÇÕES FORA DO CATÁLOGO (eventos que estão sendo IGNORADOS)")
+        col_evento_idx = col_evento
+        ignoradas = Counter()
+        for linha in brutas:
+            if col_evento_idx is None or col_evento_idx >= len(linha):
+                continue
+            texto = linha[col_evento_idx].texto
+            if texto and not dom_catalogo.codigo_da_descricao(texto, mapa=mapa):
+                ignoradas[texto] += 1
+        if not ignoradas:
+            print("   (nenhuma — todo evento do arquivo foi reconhecido)")
+        for texto, quantidade in ignoradas.most_common(20):
+            print(f"   {quantidade:>5}  {texto}")
 
         print("\n7) ZONAS ENCONTRADAS")
         zonas = Counter(str(e["_zon_cdescripcion"] or "(vazio)") for e in eventos)
@@ -151,9 +170,10 @@ def main() -> None:
 
         print(
             "\n>>> Confira: o problema que você SABE que essa conta teve aparece\n"
-            "    acima? Se não, olhe o passo 6 — se o código dele estiver\n"
-            "    marcado como 'fora das listas', é só acrescentá-lo na\n"
-            "    configuração correspondente (diag_codigos_*)."
+            "    acima? Se não, o passo 6b diz por quê — descrição fora do\n"
+            "    catálogo vira evento ignorado. Para mapear o catálogo\n"
+            "    inteiro de uma vez:\n"
+            "      .venv\\Scripts\\python.exe scripts\\importar_catalogo_codigos.py <planilha.xlsx>"
         )
 
 

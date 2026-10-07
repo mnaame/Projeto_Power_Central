@@ -21,6 +21,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
+from app.domain import catalogo_eventos as dom_catalogo
+
 # Campos tentados em ordem — o primeiro não-vazio identifica o técnico da
 # tarefa (nomes variam conforme a versão da API da Auvo).
 _CAMPOS_TECNICO = ("userToName", "idUserToName", "userTo", "responsavel", "idUserTo")
@@ -362,12 +364,6 @@ _FORMATOS_EXPORT = (
     "%d/%m %H:%M:%S",
 )
 
-# Código de evento: exatamente 3 caracteres (todo o catálogo da
-# plataforma é assim — BUR, BYP, POW, _BT, E41, P51...) e seguido de
-# separador ou fim da célula. Sem exigir o separador, uma linha de rodapé
-# como "total de eventos: 3" vira o "código" TOT.
-_RE_CODIGO = re.compile(r"^\s*([A-Z_][A-Z0-9]{2})(?:\s*[-–—:]|\s*$)")
-
 
 def _sem_acento(texto: str) -> str:
     return "".join(
@@ -432,14 +428,19 @@ def _data_iso_do_export(texto: str) -> str:
     return ""
 
 
-def eventos_do_export(conteudo: bytes | str) -> list[dict[str, object]]:
+def eventos_do_export(
+    conteudo: bytes | str, *, mapa_catalogo: Mapping[str, str] | None = None
+) -> list[dict[str, object]]:
     """Linhas do export no formato de evento que `domain/disparos.py`
     consome (mesmos nomes de campo do ReporteHistorico), para a regra
     validada de disparo rodar sem alteração nenhuma.
 
     Export sem cabeçalho reconhecível devolve lista vazia em vez de
     adivinhar colunas — diagnóstico errado é pior que diagnóstico
-    ausente."""
+    ausente.
+
+    `mapa_catalogo` traduz descrição -> código; sem ele vale o mapa padrão
+    de `domain/catalogo_eventos.py`."""
     linhas = linhas_do_export(conteudo)
     cabecalho = next((l for l in linhas if linha_e_cabecalho(l)), None)
     if cabecalho is None:
@@ -465,12 +466,16 @@ def eventos_do_export(conteudo: bytes | str) -> list[dict[str, object]]:
         if linha_e_cabecalho(linha):
             continue
         texto_evento = _celula(linha, col_evento)
-        encontrado = _RE_CODIGO.match(texto_evento.upper())
-        if encontrado is None:
+        # O export guarda a DESCRIÇÃO, não o código (medido na conta 118):
+        # a tradução vem do catálogo. Descrição desconhecida é pulada —
+        # vira "fora do catálogo" no script de calibragem, que é como se
+        # descobre o que falta mapear.
+        codigo = dom_catalogo.codigo_da_descricao(texto_evento, mapa=mapa_catalogo)
+        if not codigo:
             continue
         eventos.append(
             {
-                "rec_calarma": encontrado.group(1),
+                "rec_calarma": codigo,
                 "rec_tfechahora": _data_iso_do_export(_celula(linha, col_data)),
                 "_zon_cdescripcion": _celula(linha, col_zona),
                 # O export não traz o id do evento nem o operador; o id

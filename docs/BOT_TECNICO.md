@@ -252,6 +252,26 @@ pior saída possível de um diagnóstico: o técnico lê e vai embora. Essa
 distinção — arquivo ilegível × período realmente sem evento — tem teste nos
 dois sentidos.
 
+**O export não traz o código do evento — só a descrição.** A tela mostra
+`NYR - Falha no Teste Periódico de Comunicação`; o arquivo exportado guarda
+apenas o texto. Medido na conta 118: 791 linhas de dados, **zero** eventos
+legíveis, porque todas as regras são escritas em cima do código — disparo,
+arme e desarme tanto quanto comunicação e painel.
+
+A tradução vive em `domain/catalogo_eventos.py`, na borda da leitura, para
+que nada depois dela mude: reescrever a regra de disparo (reconciliada
+contra planilha manual) só para acomodar uma limitação do export trocaria
+uma regra validada por uma heurística. O casamento é por **descrição
+inteira**, nunca por pedaço — "Restauração de Disparo" contém "Disparo", e
+casar por substring faria a volta ao normal inflar a contagem do próprio
+problema.
+
+O mapa embutido tem só o confirmado em export real; o catálogo completo da
+plataforma entra em `diag_descricoes` via
+`scripts/importar_catalogo_codigos.py`. Descrição não mapeada é **ignorada**
+(nunca chutada) e aparece no passo 6b do `debug_diagnostico.py`, que é como
+se descobre o que falta.
+
 **As colunas do export são achadas pelo cabeçalho, não por posição.** O
 layout é do portal; índice fixo quebraria calado no dia em que inserissem
 uma coluna no meio. Export sem cabeçalho reconhecível devolve lista vazia

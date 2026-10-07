@@ -298,7 +298,9 @@ def _texto_diagnostico(conteudo, *, conta, dias: int) -> str:
     o técnico lê como "está tudo certo" e vai embora. Aconteceu em
     produção com um painel que caía o dia inteiro. Quando o export tem
     evento e nada é interpretado, o bot assume a própria limitação."""
-    eventos = dom_tecnico.eventos_do_export(conteudo)
+    eventos = dom_tecnico.eventos_do_export(
+        conteudo, mapa_catalogo=settings_service.mapa_catalogo_eventos()
+    )
     if not eventos and dom_tecnico.contar_eventos_do_export(conteudo):
         logger.warning(
             "Bot: export da conta %s tem linhas mas nenhum evento legível.",

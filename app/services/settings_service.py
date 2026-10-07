@@ -120,6 +120,15 @@ DEFAULTS: dict[str, str] = {
     "diag_codigos_painel_ac": "E40,POW,N34,PET,RCV,X13",
     # TAM painel aberto · TPT teclado · UST usuário · PST sensor.
     "diag_codigos_painel_tamper": "TAM,TPT,UST,PST",
+    # Descrição do evento -> código, no formato `descrição=CÓDIGO`, um por
+    # linha. Existe porque o EXPORT NÃO TRAZ O CÓDIGO: a tela mostra
+    # "NYR - Falha no Teste Periódico", o arquivo guarda só a descrição.
+    # Sem a tradução, nenhuma regra funciona (disparo, arme e desarme
+    # dependem do código tanto quanto comunicação e painel).
+    # Vazio = usa o mapa padrão de `domain/catalogo_eventos.py`, que só
+    # tem o confirmado em export real. Para o catálogo completo da
+    # plataforma, use scripts/importar_catalogo_codigos.py.
+    "diag_descricoes": "",
     # --- Auditoria de Horários ---
     # A varredura é uma consulta por conta, em toda a base. 0 = sem pausa;
     # subir só se o portal reclamar do ritmo.
@@ -606,6 +615,14 @@ def config_diagnostico():
         codigos_painel_tamper=get_diag_codigos_painel_tamper(),
         zonas_ignoradas=get_disp_ignorar_zonas(),
     )
+
+
+def mapa_catalogo_eventos() -> dict[str, str]:
+    """Descrição -> código: o mapa padrão com o que estiver configurado por
+    cima (configuração vence, para corrigir sem mexer no sistema)."""
+    from app.domain import catalogo_eventos as dom_catalogo
+
+    return {**dom_catalogo.MAPA_PADRAO, **dom_catalogo.mapa_de_texto(get("diag_descricoes"))}
 
 
 def get_diag_codigos_todos() -> tuple[str, ...]:

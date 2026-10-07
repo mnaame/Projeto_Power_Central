@@ -1,3 +1,4 @@
+from app.domain import catalogo_eventos as dom_catalogo
 from app.domain import tecnico as dom_tecnico
 from app.domain.tecnico import (
     exportacao_recusada,
@@ -243,3 +244,49 @@ def test_eventos_do_export_alimentam_a_regra_de_disparos_sem_adaptacao():
     assert len(avaliados) == 1
     assert avaliados[0].zona == "PORTAO SOCIAL"
     assert avaliados[0].valido is True
+
+
+# Linha REAL da conta 118 (07/10): o export tem 11 colunas e a de evento
+# guarda só a descrição — sem "NYR - " na frente.
+EXPORT_SEM_CODIGO = """
+<table>
+<tr><th>Data e hora do evento</th><th>Fecha Proceso</th><th>Prioridade</th><th>Evento</th>
+    <th>Origem</th><th>Zona</th><th>Usuário</th></tr>
+<tr><td>07/10/2026 10:05:00</td><td>07/10/2026 10:05:31</td><td>6</td>
+    <td>Falha no Teste Periódico de Comunicação (Painel de Alarme Off-Line)</td>
+    <td>JOB : Tarea Programada</td><td></td><td>Trabalho</td></tr>
+<tr><td>07/10/2026 09:51:59</td><td>07/10/2026 09:52:01</td><td>7</td>
+    <td>Teste Periódico de Comunicação OK</td>
+    <td>IR: 7553 Intelbras - MIL</td><td></td><td></td></tr>
+</table>
+"""
+
+
+def test_export_sem_codigo_e_traduzido_pelo_catalogo():
+    """Era o caso que zerava tudo: 791 linhas, nenhum evento lido."""
+    eventos = dom_tecnico.eventos_do_export(EXPORT_SEM_CODIGO)
+
+    assert [e["rec_calarma"] for e in eventos] == ["NYR", "TST"]
+    assert eventos[0]["rec_tfechahora"] == "2026-10-07T10:05:00"
+
+
+def test_descricao_fora_do_catalogo_e_pulada_sem_derrubar_as_outras():
+    com_desconhecido = EXPORT_SEM_CODIGO.replace(
+        "Teste Periódico de Comunicação OK", "Evento Novo Que Ninguem Mapeou"
+    )
+
+    eventos = dom_tecnico.eventos_do_export(com_desconhecido)
+
+    assert [e["rec_calarma"] for e in eventos] == ["NYR"]
+
+
+def test_mapa_da_configuracao_complementa_o_padrao():
+    com_novo = EXPORT_SEM_CODIGO.replace(
+        "Teste Periódico de Comunicação OK", "Disparo de Zona"
+    )
+
+    eventos = dom_tecnico.eventos_do_export(
+        com_novo, mapa_catalogo={**dom_catalogo.MAPA_PADRAO, "disparo de zona": "BUR"}
+    )
+
+    assert [e["rec_calarma"] for e in eventos] == ["NYR", "BUR"]
