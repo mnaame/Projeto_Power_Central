@@ -20,11 +20,13 @@ COMANDO_RELATORIO = "relatorio"
 COMANDO_ZONA = "zona"
 COMANDO_AJUDA = "ajuda"
 COMANDO_CLIENTES = "clientes"
+COMANDO_DIAGNOSTICO = "diagnostico"
 COMANDOS_CONHECIDOS = (
     COMANDO_RELATORIO,
     COMANDO_ZONA,
     COMANDO_AJUDA,
     COMANDO_CLIENTES,
+    COMANDO_DIAGNOSTICO,
 )
 
 # Quantos clientes listar quando o nome é ambíguo — a resposta tem que
@@ -219,9 +221,16 @@ def formatar_ajuda(*, dias_padrao: int, cooldown_segundos: int = 0) -> str:
     linhas = [
         "COMANDOS DO BOT",
         "",
+        "/diagnostico <conta> [dias]",
+        "  O que está errado na conta, em texto: disparos recorrentes e",
+        "  em quais zonas, zona isolada demais, comunicação instável,",
+        "  bateria/energia/violação do painel.",
+        f"  Sem informar os dias, usa {dias_padrao}.",
+        "  Ex.: /diagnostico 95        /diagnostico 95 15",
+        "",
         "/relatorio <conta> [dias]",
-        "  Histórico de eventos da conta, em .xls (abre no PC, com as",
-        "  cores da plataforma) e .pdf (abre no celular).",
+        "  O mesmo diagnóstico acima E o histórico de eventos em .xls",
+        "  (abre no PC, com as cores da plataforma) e .pdf (no celular).",
         f"  Sem informar os dias, usa {dias_padrao}.",
         "  Ex.: /relatorio 95        /relatorio 95 15",
         "",

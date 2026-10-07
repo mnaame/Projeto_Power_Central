@@ -754,12 +754,18 @@ outro nem outro token.
 
 Comandos (o técnico manda direto pro bot ou num grupo onde ele esteja):
 
-- **`/relatorio <conta> [dias]`** — histórico de eventos da conta. Volta
-  **dois arquivos**: o `.xls` nativo (com as cores, abre no PC) e o `.pdf`
+- **`/relatorio <conta> [dias]`** — o diagnóstico (ver `/diagnostico`
+  abaixo) **mais** o histórico de eventos da conta. Volta **dois arquivos**: o `.xls` nativo (com as cores, abre no PC) e o `.pdf`
   (abre no celular sem precisar de app de planilha), mais um resumo na
   legenda. Ex.: `/relatorio 95` (usa os dias padrão) ou `/relatorio 95 15`.
 - **`/zona <conta ou nome>`** — zoneamento completo do cliente: número da
   zona, descrição e o alarme que ela gera.
+- **`/diagnostico <conta> [dias]`** — **o que está errado na conta, em
+  texto**, sem precisar abrir planilha: disparos recorrentes e em quais
+  zonas, zona isolada vezes demais (sinal de sensor com defeito),
+  comunicação instável, e bateria/falta de energia/violação do painel. Ex.:
+  `/diagnostico 95` ou `/diagnostico 95 15`. Quando não há nada a relatar,
+  ele diz isso — "sem problemas" também é resposta.
 - **`/clientes [filtro]`** — lista os clientes da base, já com as
   partições. Ex.: `/clientes` (tudo) ou `/clientes villefort`. A lista vem
   direto da PowerCentral a cada pedido, então conta cadastrada agora

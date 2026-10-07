@@ -198,6 +198,42 @@ Como distinguir: `scripts/debug_contas_faltando.py <conta>` mostra quantas
 contas a API entrega; se for menos do que a tela do portal mostra, é o
 intervalo, não o cache. Detalhe em `OPERACAO.md` §8.
 
+### 3.8 Diagnóstico automático
+
+O técnico em campo não abre planilha. Por isso o bot escreve o problema da
+conta em português, antes do arquivo: disparos recorrentes e em quais
+zonas, zona isolada demais, comunicação instável, bateria/energia/violação
+do painel. `/diagnostico <conta> [dias]` manda só o texto; `/relatorio`
+manda o texto e os arquivos.
+
+Três decisões que regem o módulo:
+
+**A regra de disparo não é reescrita aqui.** `domain/diagnostico.py` chama
+`disparos.avaliar_disparos_da_conta` (reconciliada linha a linha contra
+planilha manual) e só agrupa o resultado por zona. Uma contagem própria
+criaria um segundo número para a mesma pergunta, e no dia em que
+divergissem ninguém saberia qual acreditar.
+
+**Os eventos saem do próprio export, não de uma segunda consulta.** O
+`buscar_historico` não tem filtro de conta: usá-lo para diagnosticar uma
+loja puxaria o histórico de toda a base do dealer (foi um bug real, ver
+§3.5). `tecnico.eventos_do_export` relê o arquivo que já foi baixado e
+devolve os eventos no mesmo formato do ReporteHistorico, então a regra
+validada roda sem adaptação. Há teste garantindo que `/relatorio` faz
+**um** export e nenhuma chamada a `buscar_historico`.
+
+**As colunas do export são achadas pelo cabeçalho, não por posição.** O
+layout é do portal; índice fixo quebraria calado no dia em que inserissem
+uma coluna no meio. Export sem cabeçalho reconhecível devolve lista vazia
+em vez de adivinhar — diagnóstico errado é pior que diagnóstico ausente.
+
+Os códigos (comunicação, bateria, AC, tamper) vivem em `settings`
+(`diag_codigos_*`) porque o código exato depende do **modelo do painel** de
+cada cliente. `scripts/debug_diagnostico.py <conta>` mostra, contra um
+export real, como as colunas foram mapeadas e quais códigos apareceram —
+inclusive marcando os que estão fora das listas, que é como se descobre o
+que falta acrescentar.
+
 ## 4. Comandos
 
 | Comando | O que faz |

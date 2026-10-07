@@ -84,6 +84,29 @@ DEFAULTS: dict[str, str] = {
     # Confirmação do long polling: último update já processado. Evita
     # reprocessar comando antigo quando o serviço reinicia.
     "bot_update_offset": "",
+    # --- Diagnóstico automático da conta (bot) ---
+    # Limiares do que vira achado. Editáveis porque "muito disparo" numa
+    # loja de rua não é o mesmo que num condomínio.
+    "diag_disparos_limiar": "5",
+    "diag_bypass_limiar": "3",
+    "diag_comunicacao_limiar": "4",
+    # Códigos do catálogo `codigosalarmas` da plataforma (HAR 07/10), já
+    # filtrados para painel de alarme. Ficam em configuração porque o
+    # código exato depende do MODELO do painel de cada cliente: faltando
+    # algum, acrescente aqui sem mexer no sistema.
+    # EPC perda de comunicações · FST falha na supervisão do teste
+    # periódico · FCS sensores · FCR rádio não responde · FCW Wi-Fi ·
+    # PSC/PSP/PSG/PSS supervisão (sensor/pânico/PGM/sirene).
+    "diag_codigos_comunicacao": "EPC,FST,FCS,FCR,FCW,PSC,PSP,PSG,PSS",
+    # _BT/E41 bateria morta · BTF falha no teste · BTM ausente · N36 falta
+    # · BBF/BFS/PTS/PBC fraca (sem fio/sensor/teclado/controle) · P51 low
+    # battery report.
+    "diag_codigos_painel_bateria": "_BT,E41,BTF,BTM,N36,BBF,BFS,PTS,PBC,P51",
+    # E40/POW falha de energia · N34 falta · PET teclado sem fio ·
+    # RCV/X13 AC fail (painéis específicos).
+    "diag_codigos_painel_ac": "E40,POW,N34,PET,RCV,X13",
+    # TAM painel aberto · TPT teclado · UST usuário · PST sensor.
+    "diag_codigos_painel_tamper": "TAM,TPT,UST,PST",
     # --- Auditoria de Horários ---
     # A varredura é uma consulta por conta, em toda a base. 0 = sem pausa;
     # subir só se o portal reclamar do ritmo.
@@ -512,3 +535,70 @@ def get_central_whatsapp_template() -> str:
 
 def get_horarios_pausa_segundos() -> float:
     return float(get("horarios_pausa_segundos"))
+
+
+# --- Diagnóstico automático da conta (bot) ---
+
+
+def get_diag_disparos_limiar() -> int:
+    return int(get("diag_disparos_limiar"))
+
+
+def get_diag_bypass_limiar() -> int:
+    return int(get("diag_bypass_limiar"))
+
+
+def get_diag_comunicacao_limiar() -> int:
+    return int(get("diag_comunicacao_limiar"))
+
+
+def get_diag_codigos_comunicacao() -> tuple[str, ...]:
+    return _lista("diag_codigos_comunicacao")
+
+
+def get_diag_codigos_painel_bateria() -> tuple[str, ...]:
+    return _lista("diag_codigos_painel_bateria")
+
+
+def get_diag_codigos_painel_ac() -> tuple[str, ...]:
+    return _lista("diag_codigos_painel_ac")
+
+
+def get_diag_codigos_painel_tamper() -> tuple[str, ...]:
+    return _lista("diag_codigos_painel_tamper")
+
+
+def config_diagnostico():
+    """Monta a `ConfigDiagnostico` do domínio a partir das configurações —
+    o domínio não lê `settings` por conta própria (continua puro)."""
+    from app.domain.diagnostico import ConfigDiagnostico
+
+    return ConfigDiagnostico(
+        disparos_limiar=get_diag_disparos_limiar(),
+        bypass_limiar=get_diag_bypass_limiar(),
+        comunicacao_limiar=get_diag_comunicacao_limiar(),
+        codigos_comunicacao=get_diag_codigos_comunicacao(),
+        codigos_painel_bateria=get_diag_codigos_painel_bateria(),
+        codigos_painel_ac=get_diag_codigos_painel_ac(),
+        codigos_painel_tamper=get_diag_codigos_painel_tamper(),
+        zonas_ignoradas=get_disp_ignorar_zonas(),
+    )
+
+
+def get_diag_codigos_todos() -> tuple[str, ...]:
+    """Todos os códigos que o diagnóstico precisa ver no export, sem
+    repetir: disparo/arme/desarme/bypass do relatório, mais comunicação e
+    painel. É isso que vai no `codigos_alarme` da consulta — assim o
+    diagnóstico sai do MESMO arquivo que o técnico recebe, sem uma segunda
+    ida ao portal."""
+    from app.domain.diagnostico import CODIGO_BYPASS
+
+    codigos = [
+        *get_bot_relatorio_codigos(),
+        CODIGO_BYPASS,
+        *get_diag_codigos_comunicacao(),
+        *get_diag_codigos_painel_bateria(),
+        *get_diag_codigos_painel_ac(),
+        *get_diag_codigos_painel_tamper(),
+    ]
+    return tuple(dict.fromkeys(c.strip().upper() for c in codigos if c.strip()))

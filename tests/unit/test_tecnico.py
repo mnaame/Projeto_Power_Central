@@ -1,3 +1,4 @@
+from app.domain import tecnico as dom_tecnico
 from app.domain.tecnico import (
     exportacao_recusada,
     horario_da_tarefa,
@@ -161,3 +162,84 @@ def test_conta_eventos_export_vazio():
 
     html = "<table><tr><th>Data e hora do evento</th></tr></table>"
     assert contar_eventos_do_export(html) == 0
+
+
+# ----------------------------------------------------------------------
+# Export -> eventos (base do diagnóstico)
+#
+# As colunas são achadas pelo CABEÇALHO: o layout é do portal, e amarrar
+# em índice fixo quebraria calado no dia em que inserissem uma coluna.
+# ----------------------------------------------------------------------
+
+EXPORT_COM_ZONA = """
+<table>
+<tr><th>Data e hora do evento</th><th>Evento</th><th>Zona</th><th>Usuário</th></tr>
+<tr><td>01/10/2026 03:12:00</td><td>BUR - Disparo de zona</td><td>PORTAO SOCIAL</td><td></td></tr>
+<tr><td>01/10/2026 04:20:00</td><td>BYP - Zona isolada</td><td>SALA</td><td>Joao</td></tr>
+<tr><td>01/10/2026 05:00:00</td><td>POW - Falha de energia</td><td></td><td></td></tr>
+<tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
+</table>
+"""
+
+
+def test_eventos_do_export_le_codigo_data_e_zona():
+    eventos = dom_tecnico.eventos_do_export(EXPORT_COM_ZONA)
+
+    assert [e["rec_calarma"] for e in eventos] == ["BUR", "BYP", "POW"]
+    assert eventos[0]["_zon_cdescripcion"] == "PORTAO SOCIAL"
+    assert eventos[0]["rec_tfechahora"] == "2026-10-01T03:12:00"
+
+
+def test_eventos_do_export_acha_a_coluna_pelo_cabecalho_e_nao_pela_posicao():
+    trocado = EXPORT_COM_ZONA.replace(
+        "<th>Data e hora do evento</th><th>Evento</th><th>Zona</th>",
+        "<th>Zona</th><th>Data e hora do evento</th><th>Evento</th>",
+    ).replace(
+        "<td>01/10/2026 03:12:00</td><td>BUR - Disparo de zona</td><td>PORTAO SOCIAL</td>",
+        "<td>PORTAO SOCIAL</td><td>01/10/2026 03:12:00</td><td>BUR - Disparo de zona</td>",
+    )
+
+    eventos = dom_tecnico.eventos_do_export(trocado)
+
+    assert eventos[0]["rec_calarma"] == "BUR"
+    assert eventos[0]["_zon_cdescripcion"] == "PORTAO SOCIAL"
+
+
+def test_data_em_formato_desconhecido_nao_derruba_o_relatorio():
+    """Perder o refino de rotina é muito melhor que perder o relatório
+    inteiro — `parse_softguard_datetime` LEVANTA em formato estranho."""
+    estranho = EXPORT_COM_ZONA.replace("01/10/2026 03:12:00", "ontem de madrugada")
+
+    eventos = dom_tecnico.eventos_do_export(estranho)
+
+    assert eventos[0]["rec_calarma"] == "BUR"
+    assert eventos[0]["rec_tfechahora"] == ""
+
+
+def test_export_sem_cabecalho_devolve_vazio_em_vez_de_adivinhar():
+    """Diagnóstico errado é pior que diagnóstico ausente."""
+    sem_cabecalho = "<table><tr><td>01/10/2026 03:12:00</td><td>BUR - x</td></tr></table>"
+
+    assert dom_tecnico.eventos_do_export(sem_cabecalho) == []
+
+
+def test_linha_sem_codigo_reconhecivel_e_pulada():
+    com_lixo = EXPORT_COM_ZONA.replace(
+        "<td>POW - Falha de energia</td>", "<td>total de eventos: 3</td>"
+    )
+
+    assert [e["rec_calarma"] for e in dom_tecnico.eventos_do_export(com_lixo)] == ["BUR", "BYP"]
+
+
+def test_eventos_do_export_alimentam_a_regra_de_disparos_sem_adaptacao():
+    """O contrato que importa: o que sai daqui entra em
+    `avaliar_disparos_da_conta` como se tivesse vindo do ReporteHistorico."""
+    from app.domain import disparos as dom_disparos
+
+    avaliados = dom_disparos.avaliar_disparos_da_conta(
+        dom_tecnico.eventos_do_export(EXPORT_COM_ZONA)
+    )
+
+    assert len(avaliados) == 1
+    assert avaliados[0].zona == "PORTAO SOCIAL"
+    assert avaliados[0].valido is True

@@ -55,11 +55,13 @@ class FakeTelegram:
 
 
 class FakeSoftGuard:
-    def __init__(self, *, erro=None):
+    def __init__(self, *, erro=None, export=None):
         self.erro = erro
+        self.export = export  # HTML do export, quando o teste quer um próprio
         self.zonas_pedidas = []
         self.historicos = 0
         self.exports = 0
+        self.codigos_pedidos = ()
 
     def listar_todas_contas(self, **kwargs):
         return CONTAS
@@ -81,7 +83,8 @@ class FakeSoftGuard:
         if self.erro:
             raise self.erro
         self.exports += 1
-        return EXPORT_HTML
+        self.codigos_pedidos = tuple(kwargs.get("codigos_alarme") or ())
+        return self.export or EXPORT_HTML
 
 
 class SessaoFake:
@@ -683,3 +686,116 @@ def test_clientes_sempre_busca_a_base_do_portal(app, autorizado):
     _processar(app, "/clientes", sessao=sessao)
 
     assert sessao.recargas == 1
+
+
+# ----------------------------------------------------------------------
+# Diagnóstico automático
+#
+# O técnico em campo não abre planilha: o problema da conta tem que vir
+# escrito. O diagnóstico sai do MESMO export que já vira o arquivo — uma
+# consulta só, porque `buscar_historico` não filtra por conta e traria a
+# base inteira do dealer para diagnosticar uma loja.
+# ----------------------------------------------------------------------
+
+EXPORT_COM_PROBLEMAS = """
+<table>
+<tr><th>Data e hora do evento</th><th>Evento</th><th>Zona</th></tr>
+<tr><td>01/10/2026 02:10:00</td><td>BUR - Disparo</td><td>PORTAO SOCIAL</td></tr>
+<tr><td>01/10/2026 02:20:00</td><td>BUR - Disparo</td><td>PORTAO SOCIAL</td></tr>
+<tr><td>01/10/2026 02:30:00</td><td>BUR - Disparo</td><td>PORTAO SOCIAL</td></tr>
+<tr><td>02/10/2026 02:40:00</td><td>BUR - Disparo</td><td>PORTAO SOCIAL</td></tr>
+<tr><td>02/10/2026 02:50:00</td><td>BUR - Disparo</td><td>GARAGEM</td></tr>
+<tr><td>03/10/2026 03:00:00</td><td>BUR - Disparo</td><td>GARAGEM</td></tr>
+<tr><td>03/10/2026 04:00:00</td><td>POW - Falha de energia</td><td></td></tr>
+</table>
+"""
+
+
+def test_diagnostico_responde_so_texto_sem_arquivo(app, autorizado):
+    sessao = SessaoFake(FakeSoftGuard(export=EXPORT_COM_PROBLEMAS))
+
+    telegram, _ = _processar(app, "/diagnostico 95", sessao=sessao)
+
+    assert telegram.documentos == []  # nada de arquivo neste comando
+    corpo = telegram.texto_completo
+    assert "Diagnóstico" in corpo
+    assert "Disparos recorrentes" in corpo
+    assert "PORTAO SOCIAL (4)" in corpo
+    assert "Falta de energia (AC)" in corpo
+
+
+def test_relatorio_manda_o_diagnostico_antes_do_arquivo(app, autorizado):
+    sessao = SessaoFake(FakeSoftGuard(export=EXPORT_COM_PROBLEMAS))
+
+    telegram, _ = _processar(app, "/relatorio 95", sessao=sessao)
+
+    assert "Disparos recorrentes" in telegram.texto_completo
+    assert len(telegram.documentos) == 2  # .xls e .pdf continuam indo
+
+
+def test_relatorio_nao_faz_segunda_consulta_para_diagnosticar(app, autorizado):
+    """O diagnóstico sai do conteúdo já baixado — um export, e só."""
+    sessao = SessaoFake(FakeSoftGuard(export=EXPORT_COM_PROBLEMAS))
+
+    _processar(app, "/relatorio 95", sessao=sessao)
+
+    assert sessao.client().exports == 1
+    assert sessao.client().historicos == 0  # buscar_historico NUNCA é usado aqui
+
+
+def test_export_e_pedido_com_os_codigos_do_diagnostico(app, autorizado):
+    """Sem bypass/energia/comunicação no pedido, o arquivo não traria
+    esses eventos e o diagnóstico ficaria cego para eles."""
+    sessao = SessaoFake(FakeSoftGuard(export=EXPORT_COM_PROBLEMAS))
+
+    _processar(app, "/relatorio 95", sessao=sessao)
+
+    pedidos = sessao.client().codigos_pedidos
+    for codigo in ("BUR", "BYP", "POW", "TAM", "EPC"):
+        assert codigo in pedidos
+
+
+def test_conta_sem_problemas_diz_isso(app, autorizado):
+    limpo = """
+    <table>
+    <tr><th>Data e hora do evento</th><th>Evento</th><th>Zona</th></tr>
+    <tr><td>01/10/2026 08:00:00</td><td>CLO - Armado</td><td></td></tr>
+    </table>
+    """
+    sessao = SessaoFake(FakeSoftGuard(export=limpo))
+
+    telegram, _ = _processar(app, "/diagnostico 95", sessao=sessao)
+
+    assert "Sem problemas relevantes" in telegram.texto_completo
+
+
+def test_diagnostico_sem_conta_avisa(app, autorizado):
+    telegram, _ = _processar(app, "/diagnostico", sessao=SessaoFake(FakeSoftGuard()))
+
+    assert "Faltou a conta" in telegram.texto_completo
+
+
+def test_diagnostico_e_auditado(app, autorizado):
+    sessao = SessaoFake(FakeSoftGuard(export=EXPORT_COM_PROBLEMAS))
+
+    _processar(app, "/diagnostico 95", sessao=sessao)
+
+    entrada = AuditLog.query.filter_by(action="bot_diagnostico_pedido").one()
+    assert len(entrada.action) <= 48
+    assert entrada.result == "success"
+
+
+def test_diagnostico_de_quem_nao_tem_permissao_e_negado(app):
+    settings_service.set("bot_tecnicos_ids", "111")
+    sessao = SessaoFake(FakeSoftGuard(export=EXPORT_COM_PROBLEMAS))
+
+    telegram, _ = _processar(app, "/diagnostico 95", sessao=sessao, user_id=999)
+
+    assert "Sem permissão" in telegram.texto_completo
+    assert sessao.client().exports == 0
+
+
+def test_ajuda_cita_o_diagnostico(app, autorizado):
+    telegram, _ = _processar(app, "/ajuda")
+
+    assert "/diagnostico" in telegram.texto_completo

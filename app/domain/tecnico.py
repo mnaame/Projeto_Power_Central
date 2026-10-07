@@ -333,3 +333,151 @@ def montar_pdf_colorido(conteudo: bytes | str, *, titulo: str = "") -> bytes:
 
     documento.build(elementos)
     return saida.getvalue()
+
+
+# ----------------------------------------------------------------------
+# Export -> eventos (para o diagnóstico)
+#
+# O diagnóstico precisa dos MESMOS eventos que já vão no arquivo do
+# técnico. Reler o export em vez de consultar o portal de novo não é só
+# economia: `buscar_historico` não filtra por conta, então a "segunda
+# consulta" traria a base inteira do dealer para diagnosticar uma loja.
+#
+# As colunas são localizadas pelo CABEÇALHO, não por posição: o layout do
+# export é do portal, e amarrar em índice fixo quebra calado no dia em
+# que inserirem uma coluna no meio.
+# ----------------------------------------------------------------------
+
+# Pedaços de cabeçalho que identificam cada coluna (minúsculos, sem acento).
+_COLUNA_DATA = ("data e hora do evento", "data e hora", "data")
+_COLUNA_EVENTO = ("evento", "codigo", "alarme")
+_COLUNA_ZONA = ("zona", "setor", "particao")
+
+# Formatos que o export EXIBE (diferentes dos que a API devolve — por isso
+# `parse_softguard_datetime` sozinho não basta aqui).
+_FORMATOS_EXPORT = (
+    "%d/%m/%Y %H:%M:%S",
+    "%d/%m/%Y %H:%M",
+    "%Y-%m-%d %H:%M:%S",
+    "%d/%m %H:%M:%S",
+)
+
+# Código de evento: exatamente 3 caracteres (todo o catálogo da
+# plataforma é assim — BUR, BYP, POW, _BT, E41, P51...) e seguido de
+# separador ou fim da célula. Sem exigir o separador, uma linha de rodapé
+# como "total de eventos: 3" vira o "código" TOT.
+_RE_CODIGO = re.compile(r"^\s*([A-Z_][A-Z0-9]{2})(?:\s*[-–—:]|\s*$)")
+
+
+def _sem_acento(texto: str) -> str:
+    return "".join(
+        c for c in unicodedata.normalize("NFD", texto.lower())
+        if unicodedata.category(c) != "Mn"
+    )
+
+
+def _indice_coluna(
+    cabecalho: Sequence[CelulaExport],
+    pistas: Sequence[str],
+    *,
+    ignorar: Sequence[int] = (),
+) -> int | None:
+    """Coluna cujo título bate com uma das pistas.
+
+    Título EXATO ganha de título que só contém a pista — sem isso,
+    "Evento" casaria com "Data e hora do evento", que contém a palavra e
+    vem antes. `ignorar` tira do páreo as colunas já atribuídas, pela
+    mesma razão."""
+    titulos = [
+        (indice, _sem_acento(c.texto))
+        for indice, c in enumerate(cabecalho)
+        if indice not in set(ignorar)
+    ]
+    for pista in pistas:
+        for indice, titulo in titulos:
+            if titulo == pista:
+                return indice
+    for pista in pistas:
+        for indice, titulo in titulos:
+            if pista in titulo:
+                return indice
+    return None
+
+
+def _data_iso_do_export(texto: str) -> str:
+    """Data da linha no formato ISO que `parse_softguard_datetime` aceita,
+    ou string vazia.
+
+    Devolve TEXTO, não `datetime`, porque é isso que o consumidor espera:
+    `disparos._quando` passa o valor por `parse_softguard_datetime`, que
+    faz `str(valor)` — entregar um `datetime` aqui levantaria
+    `DataInvalidaError` e derrubaria o relatório inteiro.
+
+    **Nunca levanta**: formato inesperado vira vazio. Sem data o disparo
+    ainda é contado, só não dá para excluí-lo como rotina de entrada/saída
+    — perder o refino é bem melhor que perder o relatório."""
+    from datetime import datetime
+
+    bruto = (texto or "").strip()
+    if not bruto:
+        return ""
+    for formato in _FORMATOS_EXPORT:
+        try:
+            ingenuo = datetime.strptime(bruto, formato)
+        except ValueError:
+            continue
+        if ingenuo.year <= 1900:
+            return ""
+        return ingenuo.strftime("%Y-%m-%dT%H:%M:%S")
+    return ""
+
+
+def eventos_do_export(conteudo: bytes | str) -> list[dict[str, object]]:
+    """Linhas do export no formato de evento que `domain/disparos.py`
+    consome (mesmos nomes de campo do ReporteHistorico), para a regra
+    validada de disparo rodar sem alteração nenhuma.
+
+    Export sem cabeçalho reconhecível devolve lista vazia em vez de
+    adivinhar colunas — diagnóstico errado é pior que diagnóstico
+    ausente."""
+    linhas = linhas_do_export(conteudo)
+    cabecalho = next((l for l in linhas if linha_e_cabecalho(l)), None)
+    if cabecalho is None:
+        return []
+
+    # Ordem importa: a data tem o título mais específico, então é
+    # resolvida primeiro e sai do páreo das outras.
+    col_data = _indice_coluna(cabecalho, _COLUNA_DATA)
+    usados = [i for i in (col_data,) if i is not None]
+    col_evento = _indice_coluna(cabecalho, _COLUNA_EVENTO, ignorar=usados)
+    usados += [i for i in (col_evento,) if i is not None]
+    col_zona = _indice_coluna(cabecalho, _COLUNA_ZONA, ignorar=usados)
+    if col_evento is None:
+        return []
+
+    def _celula(linha: Sequence[CelulaExport], indice: int | None) -> str:
+        if indice is None or indice >= len(linha):
+            return ""
+        return linha[indice].texto
+
+    eventos: list[dict[str, object]] = []
+    for numero, linha in enumerate(linhas):
+        if linha_e_cabecalho(linha):
+            continue
+        texto_evento = _celula(linha, col_evento)
+        encontrado = _RE_CODIGO.match(texto_evento.upper())
+        if encontrado is None:
+            continue
+        eventos.append(
+            {
+                "rec_calarma": encontrado.group(1),
+                "rec_tfechahora": _data_iso_do_export(_celula(linha, col_data)),
+                "_zon_cdescripcion": _celula(linha, col_zona),
+                # O export não traz o id do evento nem o operador; o id
+                # serve só para deduplicar e buscar tempo de conclusão,
+                # nada disso é usado pelo diagnóstico.
+                "rec_iid": str(numero),
+                "rec_ioperador": "",
+            }
+        )
+    return eventos

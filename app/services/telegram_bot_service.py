@@ -28,6 +28,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from app.domain import bot_comandos as dom_bot
+from app.domain import diagnostico as dom_diag
 from app.domain import contas as dom_contas
 from app.domain import tecnico as dom_tecnico
 from app.domain import zoneamento as dom_zona
@@ -286,6 +287,53 @@ def _comando_clientes(argumentos, *, sessao, telegram, chat_id: str) -> str:
     return ""
 
 
+def _texto_diagnostico(conteudo, *, conta, dias: int) -> str:
+    """Lê os eventos do próprio export e devolve o bloco de diagnóstico.
+
+    Compartilhado por `/relatorio` e `/diagnostico` para os dois dizerem
+    exatamente a mesma coisa sobre a mesma conta."""
+    eventos = dom_tecnico.eventos_do_export(conteudo)
+    achados = dom_diag.diagnosticar(
+        eventos, cfg=settings_service.config_diagnostico(), dias=dias
+    )
+    return dom_diag.formatar_diagnostico(
+        achados,
+        numero_conta=conta.identificacao,
+        nome_cliente=conta.nome,
+        dias=dias,
+    )
+
+
+def _comando_diagnostico(argumentos, *, sessao, telegram, chat_id: str) -> str:
+    """Só o texto, sem arquivo — é o caminho rápido para o técnico decidir
+    se vale a pena abrir o relatório."""
+    termo, dias_pedidos = dom_bot.separar_conta_e_dias(argumentos)
+    if not termo:
+        _responder(telegram, chat_id, "Faltou a conta. Ex.: /diagnostico 95 15")
+        return ""
+
+    conta = _resolver_ou_avisar(
+        termo, sessao, telegram, chat_id, comando=dom_bot.COMANDO_DIAGNOSTICO
+    )
+    if conta is None:
+        return ""
+
+    dias = dias_pedidos or settings_service.get_bot_relatorio_dias_padrao()
+    hasta = datetime.now(FUSO_HORARIO)
+    conteudo = sessao.client().exportar_historico_html(
+        cue_iid=conta.cue_iid,
+        numero_conta=conta.numero,
+        nome_cliente=conta.nome,
+        desde=hasta - timedelta(days=dias),
+        hasta=hasta,
+        codigos_alarme=settings_service.get_diag_codigos_todos(),
+    )
+
+    _responder(telegram, chat_id, _texto_diagnostico(conteudo, conta=conta, dias=dias))
+    _responder(telegram, chat_id, dom_bot.aviso_uso_interno())
+    return conta.numero
+
+
 def _comando_relatorio(argumentos, *, sessao, telegram, chat_id: str) -> str:
     termo, dias_pedidos = dom_bot.separar_conta_e_dias(argumentos)
     if not termo:
@@ -299,7 +347,11 @@ def _comando_relatorio(argumentos, *, sessao, telegram, chat_id: str) -> str:
         return ""
 
     dias = dias_pedidos or settings_service.get_bot_relatorio_dias_padrao()
-    codigos = settings_service.get_bot_relatorio_codigos()
+    # Os códigos do relatório MAIS os do diagnóstico, numa requisição só.
+    # O arquivo passa a mostrar também falta de energia, tamper e falha de
+    # comunicação — informação que o técnico em campo quer ver de qualquer
+    # jeito — e o diagnóstico sai do MESMO conteúdo, sem segunda consulta.
+    codigos = settings_service.get_diag_codigos_todos()
     hasta = datetime.now(FUSO_HORARIO)
     desde = hasta - timedelta(days=dias)
 
@@ -316,6 +368,9 @@ def _comando_relatorio(argumentos, *, sessao, telegram, chat_id: str) -> str:
         hasta=hasta,
         codigos_alarme=codigos,
     )
+
+    # Diagnóstico ANTES do arquivo: é o que o técnico lê sem abrir nada.
+    _responder(telegram, chat_id, _texto_diagnostico(conteudo, conta=conta, dias=dias))
 
     identificacao = conta.identificacao
     resumo = dom_bot.formatar_resumo_relatorio(
@@ -408,11 +463,13 @@ def processar_update(update: dict, *, config, sessao, telegram) -> None:
         dom_bot.COMANDO_ZONA: "bot_zona_pedido",
         dom_bot.COMANDO_CLIENTES: "bot_clientes_pedido",
         dom_bot.COMANDO_RELATORIO: "bot_relatorio_pedido",
+        dom_bot.COMANDO_DIAGNOSTICO: "bot_diagnostico_pedido",
     }[comando.nome]
     executores = {
         dom_bot.COMANDO_ZONA: _comando_zona,
         dom_bot.COMANDO_CLIENTES: _comando_clientes,
         dom_bot.COMANDO_RELATORIO: _comando_relatorio,
+        dom_bot.COMANDO_DIAGNOSTICO: _comando_diagnostico,
     }
     executor = executores[comando.nome]
     try:
