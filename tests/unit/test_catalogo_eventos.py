@@ -46,3 +46,14 @@ def test_linha_malformada_na_configuracao_e_ignorada():
     mapa = dom.mapa_de_texto("sem sinal de igual\nDisparo=BUR\n=SEMDESCRICAO\n")
 
     assert mapa == {"disparo": "BUR"}
+
+
+def test_disparo_de_zona_e_bur():
+    """Texto exato confirmado no export da conta 118 — eram 7 disparos
+    sendo ignorados por falta deste mapeamento."""
+    assert dom.codigo_da_descricao("Disparo de Zona") == "BUR"
+
+
+def test_disparo_e_restauracao_nao_se_confundem():
+    assert dom.codigo_da_descricao("Disparo de Zona") == "BUR"
+    assert dom.codigo_da_descricao("Restauração de Disparo") == "RES"

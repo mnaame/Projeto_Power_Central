@@ -40,6 +40,7 @@ MAPA_PADRAO: dict[str, str] = {
     "alarme desarmado": "OPN",
     "desativacao enquanto o alarme tocava": "OPV",
     "restauracao de disparo": "RES",
+    "disparo de zona": "BUR",
 }
 
 _RE_ESPACOS = re.compile(r"\s+")
