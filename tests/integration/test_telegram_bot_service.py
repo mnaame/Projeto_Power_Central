@@ -800,3 +800,38 @@ def test_ajuda_cita_o_diagnostico(app, autorizado):
     telegram, _ = _processar(app, "/ajuda")
 
     assert "/diagnostico" in telegram.texto_completo
+
+
+def test_export_ilegivel_nao_pode_virar_sem_problemas(app, autorizado):
+    """A pior saída possível de um diagnóstico é o "tudo certo" falso: o
+    técnico lê e vai embora. Se o arquivo tem eventos e nenhum foi
+    interpretado, o bot assume a própria limitação."""
+    formato_desconhecido = """
+    <table>
+    <tr><th>Data e hora do evento</th><th>Evento</th><th>Zona</th></tr>
+    <tr><td>07/10/2026 08:55:00</td><td>Falha no Teste Periodico</td><td>-</td></tr>
+    <tr><td>07/10/2026 07:55:00</td><td>Falha no Teste Periodico</td><td>-</td></tr>
+    </table>
+    """
+    sessao = SessaoFake(FakeSoftGuard(export=formato_desconhecido))
+
+    telegram, _ = _processar(app, "/diagnostico 95", sessao=sessao)
+
+    corpo = telegram.texto_completo
+    assert "Sem problemas" not in corpo
+    assert "NÃO consegui ler" in corpo
+
+
+def test_export_realmente_vazio_continua_dizendo_sem_problemas(app, autorizado):
+    """Período sem evento nenhum é outra coisa: aí "sem problemas" é a
+    resposta certa, e não pode virar alarme falso."""
+    vazio = """
+    <table>
+    <tr><th>Data e hora do evento</th><th>Evento</th><th>Zona</th></tr>
+    </table>
+    """
+    sessao = SessaoFake(FakeSoftGuard(export=vazio))
+
+    telegram, _ = _processar(app, "/diagnostico 95", sessao=sessao)
+
+    assert "Sem problemas relevantes" in telegram.texto_completo

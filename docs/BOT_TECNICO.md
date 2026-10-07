@@ -245,6 +245,13 @@ devolve os eventos no mesmo formato do ReporteHistorico, então a regra
 validada roda sem adaptação. Há teste garantindo que `/relatorio` faz
 **um** export e nenhuma chamada a `buscar_historico`.
 
+**"Sem problemas" nunca sai de uma leitura que falhou.** Se o export tem
+linhas de evento e nenhuma é interpretada, o bot diz que não conseguiu ler
+o arquivo, em vez de dizer que a conta está bem. Um "tudo certo" falso é a
+pior saída possível de um diagnóstico: o técnico lê e vai embora. Essa
+distinção — arquivo ilegível × período realmente sem evento — tem teste nos
+dois sentidos.
+
 **As colunas do export são achadas pelo cabeçalho, não por posição.** O
 layout é do portal; índice fixo quebraria calado no dia em que inserissem
 uma coluna no meio. Export sem cabeçalho reconhecível devolve lista vazia

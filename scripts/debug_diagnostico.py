@@ -105,10 +105,26 @@ def main() -> None:
             print("       Veja no cabeçalho acima como ela se chama e me avise.")
 
         eventos = dom_tecnico.eventos_do_export(conteudo)
-        print(f"\n5) EVENTOS LIDOS: {len(eventos)}")
+        brutas = [l for l in linhas if not dom_tecnico.linha_e_cabecalho(l)]
+        print(f"\n5) EVENTOS LIDOS: {len(eventos)} (de {len(brutas)} linha(s) de dados)")
+
+        # As linhas CRUAS saem sempre, não só quando a leitura deu certo —
+        # é exatamente quando ela falha que elas são necessárias, e a
+        # primeira versão deste script só as imprimia em caso de sucesso.
+        print("\n   PRIMEIRAS LINHAS CRUAS (célula por célula):")
+        for linha in brutas[:3]:
+            print("   ---")
+            for indice, celula in enumerate(linha):
+                print(f"     [{indice}] {celula.texto!r}")
+
         if eventos:
-            exemplo = eventos[0]
-            print(f"   exemplo: {exemplo}")
+            print(f"\n   exemplo já convertido: {eventos[0]}")
+        elif brutas:
+            print(
+                "\n   >>> O arquivo TEM linhas, mas nenhuma virou evento: o\n"
+                "       código do evento não está onde eu procuro. Veja nas\n"
+                "       linhas cruas acima em qual coluna ele aparece e me avise."
+            )
 
         print("\n6) CÓDIGOS ENCONTRADOS (os que o diagnóstico NÃO conhece vão marcados)")
         conhecidos = set(codigos)

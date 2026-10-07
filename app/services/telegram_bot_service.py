@@ -291,8 +291,26 @@ def _texto_diagnostico(conteudo, *, conta, dias: int) -> str:
     """Lê os eventos do próprio export e devolve o bloco de diagnóstico.
 
     Compartilhado por `/relatorio` e `/diagnostico` para os dois dizerem
-    exatamente a mesma coisa sobre a mesma conta."""
+    exatamente a mesma coisa sobre a mesma conta.
+
+    **Arquivo com linhas e zero eventos lidos não é conta saudável — é
+    leitura falhando**, e dizer "sem problemas" aí é a pior saída possível:
+    o técnico lê como "está tudo certo" e vai embora. Aconteceu em
+    produção com um painel que caía o dia inteiro. Quando o export tem
+    evento e nada é interpretado, o bot assume a própria limitação."""
     eventos = dom_tecnico.eventos_do_export(conteudo)
+    if not eventos and dom_tecnico.contar_eventos_do_export(conteudo):
+        logger.warning(
+            "Bot: export da conta %s tem linhas mas nenhum evento legível.",
+            conta.numero,
+        )
+        return (
+            f"Diagnóstico — {conta.identificacao} {conta.nome}\n"
+            "- NÃO consegui ler os eventos deste arquivo, então NÃO posso "
+            "dizer se a conta está bem. Confira o relatório em anexo e avise "
+            "o suporte."
+        )
+
     achados = dom_diag.diagnosticar(
         eventos, cfg=settings_service.config_diagnostico(), dias=dias
     )
