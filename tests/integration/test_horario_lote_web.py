@@ -153,20 +153,34 @@ def test_marcar_alterar_de_verdade_grava_mesmo_em_simulacao(app, admin_client, m
     assert "Alterado na conta 118" in corpo
 
 
-def test_alterar_de_verdade_sem_conta_nao_grava_o_lote(app, admin_client, monkeypatch):
-    """A caixa libera UMA conta. Sem conta preenchida ela não vale, e o
-    lote inteiro ainda exige a palavra de confirmação."""
+def test_lote_inteiro_de_verdade_precisa_da_caixa_E_da_palavra(app, admin_client, monkeypatch):
+    """Dois atos deliberados, e nenhum deles deixa algo destravado para a
+    próxima vez."""
     portal = FakePortal()
     lote = _lote(app, portal)
     monkeypatch.setattr(svc, "_criar_cliente", lambda config: portal)
 
+    # só a caixa, sem a palavra: não executa
+    admin_client.post(
+        f"/horario-lote/{lote.id}/aplicar",
+        data={"gravar_de_verdade": "1"}, follow_redirects=True,
+    )
+    assert portal.puts == []
+
+    # só a palavra, sem a caixa: simula
+    admin_client.post(
+        f"/horario-lote/{lote.id}/aplicar",
+        data={"confirmacao": "APLICAR"}, follow_redirects=True,
+    )
+    assert portal.puts == []
+
+    # os dois: grava
     admin_client.post(
         f"/horario-lote/{lote.id}/aplicar",
         data={"gravar_de_verdade": "1", "confirmacao": "APLICAR"},
         follow_redirects=True,
     )
-
-    assert portal.puts == []
+    assert len(portal.puts) == 2
 
 
 def test_conta_inexistente_avisa_na_tela(app, admin_client, monkeypatch):

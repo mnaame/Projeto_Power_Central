@@ -221,14 +221,18 @@ def aplicar(
     uma varredura de minutos — e, pior, a tela mostrava "Aplicar" (que lê
     a configuração atual) enquanto o código simulava calado.
 
-    `gravar_de_verdade` libera a escrita real **só para o teste de uma
-    conta**, sem mexer na chave global. Sem isso, o passo 3 do caminho
-    seguro ("teste em 1 conta e confira na plataforma") era impossível de
-    dar sem antes armar o botão do lote inteiro — o oposto do que a
-    sequência existe para fazer."""
+    `gravar_de_verdade` libera a escrita real **nesta execução**, sem
+    mexer na chave global. É uma decisão por execução, e isso é de
+    propósito: a chave, uma vez desligada, fica desligada, e o próximo
+    "aplicar" grava na plataforma sem que ninguém tenha decidido nada
+    naquele momento. Marcar a caixa é um ato; esquecer a chave ligada
+    não é.
+
+    Para o lote inteiro a caixa não basta sozinha — a tela continua
+    exigindo a palavra de confirmação digitada."""
     client = softguard_client or _criar_cliente(config)
     simular = settings_service.horario_lote_simulacao()
-    if gravar_de_verdade and apenas_conta:
+    if gravar_de_verdade:
         simular = False
     # O lote guarda o modo com que foi EXECUTADO, para o histórico não
     # mentir sobre o que aconteceu.
@@ -283,7 +287,13 @@ def aplicar(
 
         for item in do_grupo:
             status = _aplicar_item(item, atuais=atuais, client=client, simular=simular)
-            item.status = status
+            # "simulado" NÃO é desfecho — é só uma nota do que aconteceria.
+            # Gravá-lo no item tirava a linha de `pendente`, e a seleção da
+            # execução real (que pega as pendentes) deixava de encontrá-la:
+            # simular o lote inteiro zerava o contador da tela e tornava a
+            # aplicação real um nada silencioso.
+            if status != "simulado":
+                item.status = status
             contagem[status] = contagem.get(status, 0) + 1
             if status == "aplicado":
                 audit_service.registrar(

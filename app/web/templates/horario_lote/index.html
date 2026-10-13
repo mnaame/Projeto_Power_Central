@@ -13,9 +13,12 @@
 
   {% if simulacao %}
   <div class="banner banner-info" role="status">
-    <span>Modo <strong>simulação</strong> — "aplicar" mostra o que
-    aconteceria e <strong>não grava nada</strong> na plataforma. Desligar
-    fica em Configurações (<code>horario_lote_simulacao</code>).</span>
+    <span>Modo <strong>simulação</strong> — por padrão, "aplicar" mostra o
+    que aconteceria e <strong>não grava nada</strong> na plataforma, e as
+    linhas continuam pendentes. Para gravar de verdade, marque
+    <strong>"alterar de verdade"</strong> logo acima do botão: vale só
+    para aquela execução, e não deixa nada destravado para a próxima
+    vez.</span>
   </div>
   {% else %}
   <div class="banner banner-critical" role="alert">
@@ -31,8 +34,9 @@
       <li><strong>Preparar</strong> — lê todas as contas e monta o de→para. Não grava nada.</li>
       <li><strong>Baixar backup</strong> — a planilha com o estado ANTES. É o seu desfazer.</li>
       <li><strong>Testar em 1 conta</strong> — digite a conta e marque "alterar
-        de verdade nesta conta". Aplica só nela, e você confere na plataforma.</li>
-      <li><strong>Aplicar no lote</strong> — só depois que o teste conferiu.</li>
+        de verdade". Aplica só nela, e você confere na plataforma.</li>
+      <li><strong>Aplicar no lote</strong> — só depois que o teste conferiu:
+        conta em branco, "alterar de verdade" marcado e a palavra digitada.</li>
     </ol>
     <form method="post" action="{{ url_for('horario_lote.preparar') }}" style="margin-top: var(--space-4);">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -99,20 +103,6 @@
         frente, tanto faz. Confira o resultado na plataforma antes de
         soltar no lote inteiro.
       </p>
-      {# Sem esta caixa, o passo "teste em 1 conta" era impossível de dar
-         em modo simulação: só desarmando a chave global — que arma o
-         botão do lote inteiro junto, o oposto do que a sequência existe
-         para fazer. #}
-      <label style="display: flex; gap: var(--space-2); align-items: flex-start;
-                    margin-top: var(--space-2); font-weight: normal;">
-        <input type="checkbox" name="gravar_de_verdade" value="1" style="margin-top: 3px;">
-        <span>
-          <strong>Alterar de verdade nesta conta</strong>, mesmo em modo
-          simulação. Vale só com a conta preenchida acima — o lote inteiro
-          continua protegido pela chave de Configurações. O backup (ANTES)
-          é o seu desfazer.
-        </span>
-      </label>
     </div>
 
     <div class="field">
@@ -125,9 +115,27 @@
       </p>
     </div>
 
+    {# A decisão de gravar é por EXECUÇÃO, não um modo que fica ligado.
+       Uma chave global desligada fica desligada, e o "aplicar" seguinte
+       grava sem que ninguém tenha decidido isso naquele momento. #}
+    <div class="field">
+      <label style="display: flex; gap: var(--space-2); align-items: flex-start;
+                    font-weight: normal;">
+        <input type="checkbox" name="gravar_de_verdade" value="1" style="margin-top: 3px;">
+        <span>
+          <strong>Alterar de verdade</strong> — grava na plataforma nesta
+          execução, mesmo com o modo simulação ligado. Vale para a conta
+          de teste e também para o lote inteiro; no lote, a palavra
+          <strong>{{ confirmacao }}</strong> continua obrigatória. O backup
+          (ANTES) é o seu desfazer.
+        </span>
+      </label>
+    </div>
+
     <button id="botao-aplicar" type="submit"
             class="btn {{ 'btn-ghost' if simulacao else 'btn-primary' }}"
-            data-simulacao="{{ '1' if simulacao else '0' }}">
+            data-simulacao="{{ '1' if simulacao else '0' }}"
+            data-pendentes="{{ resumo.pendente }}">
       {{ 'Simular aplicação' if simulacao else 'Aplicar' }}
     </button>
   </form>
@@ -202,7 +210,7 @@
 
   function vaiGravar() {
     var simulacao = botao.dataset.simulacao === '1';
-    return !simulacao || (deVerdade.checked && conta.value.trim() !== '');
+    return !simulacao || deVerdade.checked;
   }
 
   function atualizar() {
@@ -213,7 +221,9 @@
   }
 
   botao.addEventListener('click', function (evento) {
-    var alvo = conta.value.trim() ? 'a conta ' + conta.value.trim() : 'o lote inteiro';
+    var alvo = conta.value.trim()
+      ? 'a conta ' + conta.value.trim()
+      : 'O LOTE INTEIRO (' + botao.dataset.pendentes + ' linhas)';
     var pergunta = (vaiGravar() ? 'ALTERAR DE VERDADE ' : 'Simular ') + alvo + '?';
     if (!window.confirm(pergunta)) { evento.preventDefault(); }
   });

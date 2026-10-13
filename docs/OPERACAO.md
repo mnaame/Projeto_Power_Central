@@ -875,10 +875,11 @@ contas de uma vez, sem abrir conta por conta.
 2. **Baixar backup** — a planilha com o horário de **antes**. É o seu
    desfazer; guarde antes de seguir.
 3. **Testar em 1 conta** — digite a conta no campo, marque **"alterar de
-   verdade nesta conta"** e aplique. Confira na plataforma se ficou como
-   esperado. Pode digitar `0118` ou `118` — tanto faz.
-4. **Aplicar no lote** — só depois que o teste conferiu. Exige digitar
-   `APLICAR` na confirmação.
+   verdade"** e aplique. Confira na plataforma se ficou como esperado.
+   Pode digitar `0118` ou `118` — tanto faz.
+4. **Aplicar no lote** — só depois que o teste conferiu. Deixe o campo da
+   conta **em branco**, marque **"alterar de verdade"** e digite
+   `APLICAR` na confirmação. São os dois atos que liberam o lote.
 
 **Duas listas saem da preparação**, as duas em Excel:
 
@@ -888,15 +889,18 @@ contas de uma vez, sem abrir conta por conta.
   seguinte é decisão sobre a grade daquele cliente, não conta de somar.
   Esta é a sua lista de trabalho para ajustar à mão.
 
-**Enquanto a simulação estiver ligada** (padrão), "aplicar" só mostra o
-que aconteceria. Para o **lote inteiro** valer, um admin desliga em
-Configurações (`horario_lote_simulacao` = `false`); a tela avisa, em
-vermelho, quando está no modo que grava de verdade.
+**Por padrão nada é gravado** — "aplicar" só mostra o que aconteceria, e
+as linhas continuam pendentes. Quem libera a escrita é a caixa **"alterar
+de verdade"**, logo acima do botão. Ela vale **só para aquela execução**:
+não existe modo que fica ligado e grava sem querer na próxima vez.
 
-Para o **teste numa conta só** você não precisa mexer nessa chave: marque
-"alterar de verdade nesta conta" e só aquela conta é gravada. O botão
-muda para "Alterar de verdade" e pergunta o nome da conta antes de
-executar. O backup (ANTES) continua sendo o seu desfazer.
+O botão muda para "Alterar de verdade" assim que você marca, e a
+confirmação diz o alvo — "a conta 118" ou "O LOTE INTEIRO (755 linhas)".
+O backup (ANTES) continua sendo o seu desfazer.
+
+**Simular não gasta o lote.** Depois de uma simulação as linhas continuam
+pendentes e o contador continua mostrando quantas faltam — dá para
+simular quantas vezes quiser antes de soltar.
 
 **Se aparecer "Nenhuma linha pendente para a conta X"**, a conta não está
 na lista "Vão ser alteradas". Quase sempre ela caiu em **Manual (vira

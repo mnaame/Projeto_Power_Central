@@ -151,10 +151,12 @@ def exportar(lote_id: int):
 def aplicar(lote_id: int):
     lote = _lote_ou_404(lote_id)
     apenas_conta = (request.form.get("apenas_conta") or "").strip()
-    # Escrita real numa conta só, sem desarmar a simulação global. Vale
-    # exclusivamente com a conta preenchida: no lote inteiro, quem manda
-    # continua sendo a chave de Configurações.
-    gravar_de_verdade = bool(request.form.get("gravar_de_verdade")) and bool(apenas_conta)
+    # Escrita real nesta execução, sem desarmar nada em definitivo. Uma
+    # chave global desligada FICA desligada, e o próximo "aplicar" grava
+    # sem que ninguém tenha decidido isso naquele momento; marcar a caixa
+    # é um ato, esquecer a chave ligada não é. No lote inteiro a caixa
+    # não basta — a palavra de confirmação continua obrigatória abaixo.
+    gravar_de_verdade = bool(request.form.get("gravar_de_verdade"))
 
     # Confirmação datilografada só para o lote inteiro: o teste em uma
     # conta é justamente o passo barato que deve ser fácil de dar.
@@ -179,9 +181,9 @@ def aplicar(lote_id: int):
     onde = f"na conta {apenas_conta}" if apenas_conta else "no lote inteiro"
     if lote.simulacao:
         flash(
-            f"SIMULAÇÃO {onde} — nada foi gravado. "
-            f"{contagem.get('simulado', 0)} linha(s) passariam. Para alterar de "
-            'verdade numa conta só, marque "alterar de verdade nesta conta".',
+            f"SIMULAÇÃO {onde} — nada foi gravado, e as linhas continuam "
+            f"pendentes. {contagem.get('simulado', 0)} linha(s) passariam. "
+            'Para gravar de verdade, marque "alterar de verdade".',
             "info",
         )
     else:

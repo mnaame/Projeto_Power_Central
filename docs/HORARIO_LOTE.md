@@ -80,19 +80,35 @@ O teste em uma conta **não** exige a palavra de confirmação, de
 propósito: o passo barato e seguro tem que ser fácil de dar, senão
 ninguém dá e vai direto para o lote.
 
-### O passo 3 tem escrita própria
+### Gravar é decisão por execução, não um modo que fica ligado
 
-Em modo simulação nada é gravado — inclusive no teste de uma conta, o que
-tornava o passo 3 **impossível de dar**: para testar em uma conta era
-preciso desligar a chave global, que arma o botão do lote inteiro junto.
-O oposto do que a sequência existe para fazer.
+Antes, a única forma de gravar era desligar `horario_lote_simulacao` em
+Configurações — e essa chave **nem estava na tela de Configurações**, o
+que deixava o lote real inalcançável. Mas o problema de fundo era outro,
+e vale mesmo com a chave exposta: **uma chave desligada fica desligada**.
+O "aplicar" seguinte grava na plataforma sem que ninguém tenha decidido
+isso naquele momento. Marcar uma caixa é um ato; esquecer a chave ligada
+não é.
 
-Por isso existe a caixa **"alterar de verdade nesta conta"**: libera a
-escrita real para aquela conta só, sem mexer na chave. Ela vale apenas
-com a conta preenchida — no lote inteiro quem manda continua sendo
-`horario_lote_simulacao`, e o botão muda de rótulo para "Alterar de
-verdade" assim que a caixa é marcada, porque um botão escrito "Simular"
-que grava na plataforma seria pior que nenhum aviso.
+Por isso a escrita é liberada pela caixa **"alterar de verdade"**, que
+vale só para aquela execução e não deixa nada destravado para a próxima.
+Ela serve tanto para o teste de uma conta quanto para o lote inteiro — e
+no lote a palavra `APLICAR` continua obrigatória, então são dois atos
+deliberados. `horario_lote_simulacao` segue existindo como o **padrão**
+de quem não marca nada.
+
+O botão muda de rótulo para "Alterar de verdade" assim que a caixa é
+marcada, e a confirmação diz o alvo ("a conta 118" ou "O LOTE INTEIRO
+(755 linhas)"): um botão escrito "Simular" que grava na plataforma seria
+pior que nenhum aviso.
+
+### Simular não consome o lote
+
+`simulado` **não é desfecho** — é uma nota do que aconteceria. Gravá-lo
+no item tirava a linha de `pendente`, e a seleção da execução real (que
+pega as pendentes) deixava de encontrá-la: simular o lote inteiro zerava
+o contador da tela ("Vão ser alteradas: 0") e tornava a aplicação real um
+nada silencioso. Hoje a simulação conta, mostra e não encosta no status.
 
 ### A simulação é lida na execução, não no preparo
 

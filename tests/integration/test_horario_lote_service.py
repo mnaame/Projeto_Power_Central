@@ -121,7 +121,7 @@ def test_simulacao_ligada_por_padrao_nao_grava(app, admin_user):
     assert portal.puts == []
     assert contagem["simulado"] == 2
     # Simulado continua pendente: a execução real ainda tem o que fazer.
-    assert lote.itens.filter(AjusteHorarioItem.status == "simulado").count() == 2
+    assert lote.itens.filter(AjusteHorarioItem.status == "pendente").count() == 2
 
 
 def test_com_simulacao_desligada_grava_de_verdade(app, admin_user):
@@ -388,9 +388,11 @@ def test_teste_em_uma_conta_grava_de_verdade_mesmo_em_simulacao(app, admin_user)
     assert portal.horarios["9400"][0]["hor_choracierre"] == "19:30"  # a outra, intacta
 
 
-def test_gravar_de_verdade_sem_conta_nao_libera_o_lote_inteiro(app, admin_user):
-    """A liberação é para UMA conta. No lote inteiro quem manda continua
-    sendo a chave de Configurações."""
+def test_gravar_de_verdade_tambem_vale_para_o_lote_inteiro(app, admin_user):
+    """A decisão é por execução. Exigir uma chave global persistente para
+    o lote era um beco sem saída na tela — e pior: chave desligada FICA
+    desligada, e o "aplicar" seguinte grava sem ninguém ter decidido isso
+    naquele momento. A tela protege o lote com a palavra digitada."""
     portal = FakePortal()
     lote = _preparar(app, portal)
 
@@ -400,7 +402,7 @@ def test_gravar_de_verdade_sem_conta_nao_libera_o_lote_inteiro(app, admin_user):
     )
     db.session.commit()
 
-    assert portal.puts == []
+    assert len(portal.puts) == 2
 
 
 def test_simulacao_vale_a_do_momento_da_execucao_e_nao_a_do_preparo(app, admin_user):
@@ -420,3 +422,23 @@ def test_simulacao_vale_a_do_momento_da_execucao_e_nao_a_do_preparo(app, admin_u
 
     assert len(portal.puts) == 2
     assert lote.simulacao is False  # o histórico guarda o que de fato houve
+
+
+def test_simular_o_lote_inteiro_nao_consome_o_lote(app, admin_user):
+    """A simulação não resolve nada — ela só mostra. Marcando o item como
+    `simulado`, a seleção da execução real (que pega `pendente`) deixava
+    de encontrá-lo: simular o lote inteiro zerava o contador da tela e
+    tornava a aplicação real um nada silencioso."""
+    portal = FakePortal()
+    lote = _preparar(app, portal)
+    svc.aplicar(lote, config=app.config, user=admin_user, softguard_client=portal)
+    db.session.commit()
+
+    assert svc.resumo(lote)["pendente"] == 2  # a tela continua mostrando o que falta
+
+    settings_service.set("horario_lote_simulacao", "false")
+    db.session.commit()
+    svc.aplicar(lote, config=app.config, user=admin_user, softguard_client=portal)
+    db.session.commit()
+
+    assert len(portal.puts) == 2  # e a execução real ainda tem o que fazer
