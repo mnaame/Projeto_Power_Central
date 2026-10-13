@@ -80,6 +80,40 @@ O teste em uma conta **não** exige a palavra de confirmação, de
 propósito: o passo barato e seguro tem que ser fácil de dar, senão
 ninguém dá e vai direto para o lote.
 
+### O passo 3 tem escrita própria
+
+Em modo simulação nada é gravado — inclusive no teste de uma conta, o que
+tornava o passo 3 **impossível de dar**: para testar em uma conta era
+preciso desligar a chave global, que arma o botão do lote inteiro junto.
+O oposto do que a sequência existe para fazer.
+
+Por isso existe a caixa **"alterar de verdade nesta conta"**: libera a
+escrita real para aquela conta só, sem mexer na chave. Ela vale apenas
+com a conta preenchida — no lote inteiro quem manda continua sendo
+`horario_lote_simulacao`, e o botão muda de rótulo para "Alterar de
+verdade" assim que a caixa é marcada, porque um botão escrito "Simular"
+que grava na plataforma seria pior que nenhum aviso.
+
+### A simulação é lida na execução, não no preparo
+
+Ela não é propriedade do lote: o preparo só lê a plataforma, e quem
+decide se o PUT sai é o momento da execução. Lendo do lote, desligar a
+simulação em Configurações não surtia efeito nenhum sem repreparar tudo
+de novo — uma varredura de minutos — e, pior, a tela mostrava "Aplicar"
+(que lê a configuração atual) enquanto o código simulava calado. O lote
+passa a guardar o modo com que foi **executado**, para o histórico não
+mentir sobre o que aconteceu.
+
+### "118" e "0118" são a mesma conta
+
+A comparação do campo "testar em uma conta" era exata, e o exemplo do
+próprio campo (`ex.: 118`) levava a digitar sem os zeros que o portal
+usa. O filtro não casava com nada, nenhuma linha era tocada, e a tela
+respondia "0 linha(s)" — indistinguível de "o módulo não funciona". Hoje
+a normalização é a do resto do sistema (`contas.normalizar_numero`), e
+uma conta que não está no lote dá **erro explícito** dizendo que ela pode
+estar na lista "Manual (vira 00h)", em vez de um zero silencioso.
+
 ## 6. Configuração
 
 | Chave | Padrão | Para quê |

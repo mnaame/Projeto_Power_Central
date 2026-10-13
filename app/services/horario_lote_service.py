@@ -28,6 +28,7 @@ import logging
 import time
 from datetime import datetime, timezone
 
+from app.domain import contas as dom_contas
 from app.domain import horario_lote as dom
 from app.extensions import db
 from app.integrations.softguard_client import SoftGuardClient, SoftGuardError
@@ -205,22 +206,56 @@ def aplicar(
     config,
     user,
     apenas_conta: str = "",
+    gravar_de_verdade: bool = False,
     softguard_client=None,
 ) -> dict:
     """Executa as linhas pendentes do lote.
 
     `apenas_conta` restringe a uma conta — é o teste obrigatório antes de
-    soltar na base inteira. Respeita a simulação; em simulação nenhum PUT
-    é enviado e os itens ficam `simulado` (continuam pendentes para a
-    execução real)."""
+    soltar na base inteira.
+
+    A simulação é lida **agora**, não no preparo. Ela não é propriedade do
+    lote: o preparo só lê a plataforma, e quem decide se o PUT sai é o
+    momento da execução. Lendo do lote, desligar a simulação em
+    Configurações não surtia efeito nenhum sem repreparar tudo de novo —
+    uma varredura de minutos — e, pior, a tela mostrava "Aplicar" (que lê
+    a configuração atual) enquanto o código simulava calado.
+
+    `gravar_de_verdade` libera a escrita real **só para o teste de uma
+    conta**, sem mexer na chave global. Sem isso, o passo 3 do caminho
+    seguro ("teste em 1 conta e confira na plataforma") era impossível de
+    dar sem antes armar o botão do lote inteiro — o oposto do que a
+    sequência existe para fazer."""
     client = softguard_client or _criar_cliente(config)
-    simular = lote.simulacao
+    simular = settings_service.horario_lote_simulacao()
+    if gravar_de_verdade and apenas_conta:
+        simular = False
+    # O lote guarda o modo com que foi EXECUTADO, para o histórico não
+    # mentir sobre o que aconteceu.
+    lote.simulacao = simular
     pausa = settings_service.get_horario_lote_pausa_segundos()
 
     pendentes = lote.itens.filter(AjusteHorarioItem.status == "pendente")
     if apenas_conta:
-        pendentes = pendentes.filter(AjusteHorarioItem.conta == apenas_conta)
-    pendentes = pendentes.order_by(AjusteHorarioItem.conta).all()
+        # "118" e "0118" são a mesma conta. A comparação era exata, e o
+        # próprio exemplo do campo ("ex.: 118") levava a digitar sem os
+        # zeros: o filtro não casava com nada, nenhuma linha era tocada e
+        # a tela respondia "0 linha(s)" como se o módulo não funcionasse.
+        alvo = dom_contas.normalizar_numero(apenas_conta)
+        pendentes = [
+            item
+            for item in pendentes.order_by(AjusteHorarioItem.conta).all()
+            if dom_contas.normalizar_numero(item.conta) == alvo
+        ]
+    else:
+        pendentes = pendentes.order_by(AjusteHorarioItem.conta).all()
+
+    if apenas_conta and not pendentes:
+        raise HorarioLoteError(
+            f"Nenhuma linha pendente para a conta {apenas_conta} neste lote. "
+            "Confira o número nas listas abaixo — pode ser que ela esteja em "
+            '"Manual (vira 00h)", que o lote não altera.'
+        )
 
     lote.status = "aplicando"
     db.session.flush()

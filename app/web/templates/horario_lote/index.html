@@ -30,7 +30,8 @@
     <ol class="muted" style="margin: 0; padding-left: var(--space-5);">
       <li><strong>Preparar</strong> — lê todas as contas e monta o de→para. Não grava nada.</li>
       <li><strong>Baixar backup</strong> — a planilha com o estado ANTES. É o seu desfazer.</li>
-      <li><strong>Testar em 1 conta</strong> — aplica só nela e você confere na plataforma.</li>
+      <li><strong>Testar em 1 conta</strong> — digite a conta e marque "alterar
+        de verdade nesta conta". Aplica só nela, e você confere na plataforma.</li>
       <li><strong>Aplicar no lote</strong> — só depois que o teste conferiu.</li>
     </ol>
     <form method="post" action="{{ url_for('horario_lote.preparar') }}" style="margin-top: var(--space-4);">
@@ -92,11 +93,26 @@
 
     <div class="field">
       <label for="apenas_conta">Testar em uma conta (recomendado antes do lote)</label>
-      <input id="apenas_conta" type="text" name="apenas_conta" placeholder="ex.: 118">
+      <input id="apenas_conta" type="text" name="apenas_conta" placeholder="ex.: 0118 ou 118">
       <p class="muted" style="margin-top: var(--space-1);">
-        Preenchido, só essa conta é alterada. Confira o resultado na
-        plataforma antes de soltar no lote inteiro.
+        Preenchido, só essa conta é alterada. Com ou sem os zeros da
+        frente, tanto faz. Confira o resultado na plataforma antes de
+        soltar no lote inteiro.
       </p>
+      {# Sem esta caixa, o passo "teste em 1 conta" era impossível de dar
+         em modo simulação: só desarmando a chave global — que arma o
+         botão do lote inteiro junto, o oposto do que a sequência existe
+         para fazer. #}
+      <label style="display: flex; gap: var(--space-2); align-items: flex-start;
+                    margin-top: var(--space-2); font-weight: normal;">
+        <input type="checkbox" name="gravar_de_verdade" value="1" style="margin-top: 3px;">
+        <span>
+          <strong>Alterar de verdade nesta conta</strong>, mesmo em modo
+          simulação. Vale só com a conta preenchida acima — o lote inteiro
+          continua protegido pela chave de Configurações. O backup (ANTES)
+          é o seu desfazer.
+        </span>
+      </label>
     </div>
 
     <div class="field">
@@ -109,8 +125,9 @@
       </p>
     </div>
 
-    <button type="submit" class="btn {{ 'btn-ghost' if simulacao else 'btn-primary' }}"
-            onclick="return confirm('{{ 'Simular' if simulacao else 'ALTERAR DE VERDADE' }} o ajuste de horário?');">
+    <button id="botao-aplicar" type="submit"
+            class="btn {{ 'btn-ghost' if simulacao else 'btn-primary' }}"
+            data-simulacao="{{ '1' if simulacao else '0' }}">
       {{ 'Simular aplicação' if simulacao else 'Aplicar' }}
     </button>
   </form>
@@ -170,4 +187,39 @@
 </div>
 {% endif %}
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// O botão tem que dizer o que vai acontecer de verdade. Antes ele lia só
+// a chave global, então com "alterar de verdade nesta conta" marcado
+// continuava escrito "Simular aplicação" enquanto gravava na plataforma.
+(function () {
+  var botao = document.getElementById('botao-aplicar');
+  if (!botao) { return; }
+  var conta = document.getElementById('apenas_conta');
+  var deVerdade = document.querySelector('[name="gravar_de_verdade"]');
+
+  function vaiGravar() {
+    var simulacao = botao.dataset.simulacao === '1';
+    return !simulacao || (deVerdade.checked && conta.value.trim() !== '');
+  }
+
+  function atualizar() {
+    var gravando = vaiGravar();
+    botao.textContent = gravando ? 'Alterar de verdade' : 'Simular aplicação';
+    botao.classList.toggle('btn-primary', gravando);
+    botao.classList.toggle('btn-ghost', !gravando);
+  }
+
+  botao.addEventListener('click', function (evento) {
+    var alvo = conta.value.trim() ? 'a conta ' + conta.value.trim() : 'o lote inteiro';
+    var pergunta = (vaiGravar() ? 'ALTERAR DE VERDADE ' : 'Simular ') + alvo + '?';
+    if (!window.confirm(pergunta)) { evento.preventDefault(); }
+  });
+  deVerdade.addEventListener('change', atualizar);
+  conta.addEventListener('input', atualizar);
+  atualizar();
+})();
+</script>
 {% endblock %}

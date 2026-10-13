@@ -151,6 +151,10 @@ def exportar(lote_id: int):
 def aplicar(lote_id: int):
     lote = _lote_ou_404(lote_id)
     apenas_conta = (request.form.get("apenas_conta") or "").strip()
+    # Escrita real numa conta só, sem desarmar a simulação global. Vale
+    # exclusivamente com a conta preenchida: no lote inteiro, quem manda
+    # continua sendo a chave de Configurações.
+    gravar_de_verdade = bool(request.form.get("gravar_de_verdade")) and bool(apenas_conta)
 
     # Confirmação datilografada só para o lote inteiro: o teste em uma
     # conta é justamente o passo barato que deve ser fácil de dar.
@@ -164,6 +168,7 @@ def aplicar(lote_id: int):
             config=current_app.config,
             user=current_user,
             apenas_conta=apenas_conta,
+            gravar_de_verdade=gravar_de_verdade,
         )
     except (horario_lote_service.HorarioLoteError, SoftGuardError) as exc:
         db.session.rollback()
@@ -171,18 +176,21 @@ def aplicar(lote_id: int):
         return redirect(url_for("horario_lote.index"))
 
     db.session.commit()
+    onde = f"na conta {apenas_conta}" if apenas_conta else "no lote inteiro"
     if lote.simulacao:
         flash(
-            f"SIMULAÇÃO — nada foi gravado. {contagem.get('simulado', 0)} linha(s) "
-            "passariam. Desligue a simulação em Configurações para valer.",
+            f"SIMULAÇÃO {onde} — nada foi gravado. "
+            f"{contagem.get('simulado', 0)} linha(s) passariam. Para alterar de "
+            'verdade numa conta só, marque "alterar de verdade nesta conta".',
             "info",
         )
     else:
         flash(
-            f"{contagem.get('aplicado', 0)} alterada(s), "
+            f"Alterado {onde}: {contagem.get('aplicado', 0)} linha(s), "
             f"{contagem.get('ja_aplicado', 0)} já estava(m) no valor novo, "
             f"{contagem.get('divergente', 0)} divergente(s), "
-            f"{contagem.get('erro', 0)} com erro.",
-            "warning" if contagem.get("erro") or contagem.get("divergente") else "info",
+            f"{contagem.get('erro', 0)} com erro."
+            + (" Confira na plataforma antes de soltar no lote." if apenas_conta else ""),
+            "warning" if contagem.get("erro") or contagem.get("divergente") else "success",
         )
     return redirect(url_for("horario_lote.index"))

@@ -330,3 +330,93 @@ def test_simulacao_nao_gera_auditoria_de_alteracao(app, admin_user):
 
     assert AuditLog.query.filter_by(action="horario_lote_ajuste").count() == 0
     assert AuditLog.query.filter_by(action="horario_lote_execucao").count() == 1
+
+
+# ---------- o teste em uma conta ----------
+
+
+def test_conta_sem_os_zeros_da_frente_e_a_mesma_conta(app, admin_user):
+    """"118" e "0118" são a mesma conta — e o exemplo do próprio campo
+    mandava digitar sem os zeros. A comparação era exata: o filtro não
+    casava com nada, nenhuma linha era tocada, e a tela respondia "0
+    linha(s)" como se o módulo não funcionasse."""
+    settings_service.set("horario_lote_simulacao", "false")
+    db.session.commit()
+    portal = FakePortal()
+    lote = _preparar(app, portal)
+
+    svc.aplicar(
+        lote, config=app.config, user=admin_user,
+        apenas_conta="118", softguard_client=portal,
+    )
+    db.session.commit()
+
+    assert [str(p["Id"]) for p in portal.puts] == ["7201"]
+
+
+def test_conta_que_nao_esta_no_lote_avisa_em_vez_de_dizer_zero(app, admin_user):
+    """"0 linha(s)" é indistinguível de "o módulo não funciona"."""
+    portal = FakePortal()
+    lote = _preparar(app, portal)
+
+    try:
+        svc.aplicar(
+            lote, config=app.config, user=admin_user,
+            apenas_conta="9999", softguard_client=portal,
+        )
+    except svc.HorarioLoteError as exc:
+        assert "9999" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("deveria ter avisado que a conta não está no lote")
+
+
+def test_teste_em_uma_conta_grava_de_verdade_mesmo_em_simulacao(app, admin_user):
+    """Sem isto, o passo 3 do caminho seguro ("teste em 1 conta e confira
+    na plataforma") só era possível desarmando a chave global — que arma
+    o botão do lote inteiro junto."""
+    portal = FakePortal()
+    lote = _preparar(app, portal)
+    assert settings_service.horario_lote_simulacao() is True
+
+    svc.aplicar(
+        lote, config=app.config, user=admin_user,
+        apenas_conta="0118", gravar_de_verdade=True, softguard_client=portal,
+    )
+    db.session.commit()
+
+    assert [str(p["Id"]) for p in portal.puts] == ["7201"]
+    assert portal.horarios["9400"][0]["hor_choracierre"] == "19:30"  # a outra, intacta
+
+
+def test_gravar_de_verdade_sem_conta_nao_libera_o_lote_inteiro(app, admin_user):
+    """A liberação é para UMA conta. No lote inteiro quem manda continua
+    sendo a chave de Configurações."""
+    portal = FakePortal()
+    lote = _preparar(app, portal)
+
+    svc.aplicar(
+        lote, config=app.config, user=admin_user,
+        apenas_conta="", gravar_de_verdade=True, softguard_client=portal,
+    )
+    db.session.commit()
+
+    assert portal.puts == []
+
+
+def test_simulacao_vale_a_do_momento_da_execucao_e_nao_a_do_preparo(app, admin_user):
+    """A simulação não é propriedade do lote: o preparo só lê. Lendo do
+    lote, desligar a chave não surtia efeito sem repreparar tudo — uma
+    varredura de minutos — e a tela mostrava "Aplicar" enquanto o código
+    simulava calado."""
+    portal = FakePortal()
+    lote = _preparar(app, portal)
+    assert lote.simulacao is True
+
+    settings_service.set("horario_lote_simulacao", "false")
+    db.session.commit()
+
+    svc.aplicar(lote, config=app.config, user=admin_user, softguard_client=portal)
+    db.session.commit()
+
+    assert len(portal.puts) == 2
+    assert lote.simulacao is False  # o histórico guarda o que de fato houve

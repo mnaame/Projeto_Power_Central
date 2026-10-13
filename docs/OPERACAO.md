@@ -874,8 +874,9 @@ contas de uma vez, sem abrir conta por conta.
    grava nada. Leva alguns minutos (uma consulta por conta).
 2. **Baixar backup** — a planilha com o horário de **antes**. É o seu
    desfazer; guarde antes de seguir.
-3. **Testar em 1 conta** — digite uma conta no campo e aplique. Confira na
-   plataforma se ficou como esperado.
+3. **Testar em 1 conta** — digite a conta no campo, marque **"alterar de
+   verdade nesta conta"** e aplique. Confira na plataforma se ficou como
+   esperado. Pode digitar `0118` ou `118` — tanto faz.
 4. **Aplicar no lote** — só depois que o teste conferiu. Exige digitar
    `APLICAR` na confirmação.
 
@@ -888,9 +889,18 @@ contas de uma vez, sem abrir conta por conta.
   Esta é a sua lista de trabalho para ajustar à mão.
 
 **Enquanto a simulação estiver ligada** (padrão), "aplicar" só mostra o
-que aconteceria. Para valer, um admin desliga em Configurações
-(`horario_lote_simulacao` = `false`). A tela avisa, em vermelho, quando
-está no modo que grava de verdade.
+que aconteceria. Para o **lote inteiro** valer, um admin desliga em
+Configurações (`horario_lote_simulacao` = `false`); a tela avisa, em
+vermelho, quando está no modo que grava de verdade.
+
+Para o **teste numa conta só** você não precisa mexer nessa chave: marque
+"alterar de verdade nesta conta" e só aquela conta é gravada. O botão
+muda para "Alterar de verdade" e pergunta o nome da conta antes de
+executar. O backup (ANTES) continua sendo o seu desfazer.
+
+**Se aparecer "Nenhuma linha pendente para a conta X"**, a conta não está
+na lista "Vão ser alteradas". Quase sempre ela caiu em **Manual (vira
+00h)** — o sistema não mexe nessas. Confira nas listas da própria tela.
 
 **Rodar duas vezes não soma duas horas.** Antes de gravar cada linha o
 sistema relê o valor atual: se já está no valor novo, pula; se virou outra

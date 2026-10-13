@@ -134,3 +134,50 @@ def test_tela_avisa_quando_a_simulacao_esta_desligada(app, admin_client):
     corpo = admin_client.get("/horario-lote").get_data(as_text=True)
 
     assert "SIMULAÇÃO DESLIGADA" in corpo
+
+
+def test_marcar_alterar_de_verdade_grava_mesmo_em_simulacao(app, admin_client, monkeypatch):
+    """O caminho que estava bloqueado: testar numa conta sem desarmar a
+    chave global, que armaria o botão do lote inteiro junto."""
+    portal = FakePortal()
+    lote = _lote(app, portal)
+    monkeypatch.setattr(svc, "_criar_cliente", lambda config: portal)
+
+    corpo = admin_client.post(
+        f"/horario-lote/{lote.id}/aplicar",
+        data={"apenas_conta": "118", "gravar_de_verdade": "1"},
+        follow_redirects=True,
+    ).get_data(as_text=True)
+
+    assert [str(p["Id"]) for p in portal.puts] == ["7201"]
+    assert "Alterado na conta 118" in corpo
+
+
+def test_alterar_de_verdade_sem_conta_nao_grava_o_lote(app, admin_client, monkeypatch):
+    """A caixa libera UMA conta. Sem conta preenchida ela não vale, e o
+    lote inteiro ainda exige a palavra de confirmação."""
+    portal = FakePortal()
+    lote = _lote(app, portal)
+    monkeypatch.setattr(svc, "_criar_cliente", lambda config: portal)
+
+    admin_client.post(
+        f"/horario-lote/{lote.id}/aplicar",
+        data={"gravar_de_verdade": "1", "confirmacao": "APLICAR"},
+        follow_redirects=True,
+    )
+
+    assert portal.puts == []
+
+
+def test_conta_inexistente_avisa_na_tela(app, admin_client, monkeypatch):
+    portal = FakePortal()
+    lote = _lote(app, portal)
+    monkeypatch.setattr(svc, "_criar_cliente", lambda config: portal)
+
+    corpo = admin_client.post(
+        f"/horario-lote/{lote.id}/aplicar",
+        data={"apenas_conta": "9999"}, follow_redirects=True,
+    ).get_data(as_text=True)
+
+    assert "9999" in corpo
+    assert "Manual" in corpo  # diz onde a conta pode estar
