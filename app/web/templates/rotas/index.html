@@ -1,121 +1,154 @@
 {% extends "base.html" %}
 
-{% block title %}Rotas de Visita{% endblock %}
-
-{% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
-{% endblock %}
+{% block title %}Visitas por Bairro{% endblock %}
 
 {% block content %}
 <div class="section">
   <div class="section-title">
-    <h2>Rotas de Visita Preventiva</h2>
+    <h2>Visita Preventiva por Bairro</h2>
     {% if resultado %}
     <a class="btn btn-ghost" href="{{ url_for('rotas.exportar') }}">Baixar Excel</a>
     {% endif %}
   </div>
   <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
     Agrupa os clientes <strong>base</strong> (fora Villefort, Super Nosso e
-    Apoio) por proximidade, para agendar as preventivas por região. Só
-    leitura — não altera nada na PowerCentral nem na Auvo.
+    Apoio) por bairro, para agendar as preventivas por região. Só leitura —
+    não altera nada na PowerCentral nem na Auvo.
   </p>
 
   <form method="post" action="{{ url_for('rotas.gerar') }}" class="card"
-        style="display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: flex-end;">
+        style="display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: center;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div class="field" style="margin-bottom: 0;">
-      <label for="raio_km">Raio do agrupamento (km)</label>
-      <input id="raio_km" type="number" name="raio_km" step="0.1" min="0.1"
-             value="{{ resultado.resumo.raio_km if resultado else raio_km }}" style="width: 120px;">
-    </div>
-    <button type="submit" class="btn btn-primary">Gerar rotas</button>
+    <button type="submit" class="btn btn-primary">Gerar catálogo</button>
     <span class="muted">
-      Raio maior = menos rotas, cada uma mais espalhada. Pode gerar de novo
-      quantas vezes quiser.
+      Consulta a PowerCentral e a Auvo. Leva alguns minutos.
     </span>
   </form>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Endereços importados</h2></div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    O bairro vem do endereço cadastrado. Quando a API não entrega esse
+    campo, a planilha entrega: exporte os <strong>clientes da Auvo</strong>
+    (.xlsx) ou o <strong>relatório de contas da PowerCentral</strong> (.xls)
+    e envie aqui. Qual é qual o sistema descobre sozinho, e cada envio
+    substitui o anterior daquela mesma origem.
+  </p>
+
+  <div class="card">
+    <form method="post" action="{{ url_for('rotas.importar') }}"
+          enctype="multipart/form-data"
+          style="display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: center;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="file" name="arquivo" accept=".xlsx,.xls" required>
+      <button type="submit" class="btn btn-secondary">Importar planilha</button>
+    </form>
+
+    {% if importacoes %}
+    <div class="table-wrap" style="margin-top: var(--space-3);">
+      <table>
+        <thead><tr><th>Origem</th><th>Linhas</th><th>Com bairro</th><th>Importado em</th></tr></thead>
+        <tbody>
+          {% for item in importacoes %}
+          <tr>
+            <td>{{ item.fonte }}</td>
+            <td class="is-numeric">{{ item.linhas }}</td>
+            <td class="is-numeric">{{ item.com_bairro }}</td>
+            <td>{{ item.importado_em|data_local }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="muted" style="margin-top: var(--space-3);">
+      Nenhuma planilha importada ainda — o catálogo vai usar só o que as
+      APIs devolverem.
+    </p>
+    {% endif %}
+  </div>
 </div>
 
 {% if not resultado %}
 <div class="section">
   <div class="card empty-state">
-    <h3>Nenhuma rota gerada ainda</h3>
-    <p class="muted">Clique em "Gerar rotas" — consulta a PowerCentral e a Auvo.</p>
+    <h3>Nenhum catálogo gerado ainda</h3>
+    <p class="muted">Clique em "Gerar catálogo" — consulta a PowerCentral e a Auvo.</p>
   </div>
 </div>
 {% else %}
 <div class="section">
   <div class="stat-grid">
     <div class="stat-tile">
-      <div class="stat-tile-label">Rotas</div>
-      <div class="stat-tile-value">{{ resultado.resumo.clusters }}</div>
-      <div class="stat-tile-hint">raio de {{ resultado.resumo.raio_km }} km</div>
+      <div class="stat-tile-label">Bairros</div>
+      <div class="stat-tile-value">{{ resultado.resumo.regioes }}</div>
+      <div class="stat-tile-hint">regiões de visita</div>
     </div>
     <div class="stat-tile">
       <div class="stat-tile-label">Clientes base</div>
       <div class="stat-tile-value">{{ resultado.resumo.base }}</div>
-      <div class="stat-tile-hint">{{ resultado.resumo.com_coord }} com coordenada</div>
+      <div class="stat-tile-hint">{{ resultado.resumo.com_bairro }} com bairro</div>
     </div>
     <div class="stat-tile">
-      <div class="stat-tile-label">Sem coordenada</div>
-      <div class="stat-tile-value {{ 'is-critical' if resultado.resumo.sem_coord else 'is-ok' }}">
-        {{ resultado.resumo.sem_coord }}
+      <div class="stat-tile-label">Sem bairro</div>
+      <div class="stat-tile-value {{ 'is-critical' if resultado.resumo.sem_bairro else 'is-ok' }}">
+        {{ resultado.resumo.sem_bairro }}
       </div>
-      <div class="stat-tile-hint">Fora das rotas até cadastrar</div>
+      <div class="stat-tile-hint">
+        {% if resultado.resumo.sem_regiao %}
+        {{ resultado.resumo.sem_regiao }} sem nem a cidade
+        {% else %}
+        agrupados só pela cidade
+        {% endif %}
+      </div>
     </div>
     <div class="stat-tile">
-      <div class="stat-tile-label">Origem da coordenada</div>
-      <div class="stat-tile-value" style="font-size: 1.1rem;">
-        {{ resultado.resumo.de_auvo }} Auvo · {{ resultado.resumo.da_power }} Power
-      </div>
-      <div class="stat-tile-hint">Auvo é a fonte preferida</div>
+      <div class="stat-tile-label">Clientes na Auvo</div>
+      <div class="stat-tile-value">{{ resultado.resumo.auvo_clientes }}</div>
+      <div class="stat-tile-hint">lidos da API</div>
     </div>
   </div>
-  {# Sem esta linha, um "0 Auvo" na tela não distingue Auvo fora do ar de
-     nome que não casou de cadastro sem lat/long — foi exatamente o que
-     aconteceu na primeira rodada. #}
+  {# De onde veio o endereço de cada cliente. Sem isto, um resultado
+     magro não distingue "a API não entrega" de "o cadastro está vazio"
+     — foi o que travou o diagnóstico nas primeiras rodadas. #}
+  {% if resultado.resumo.fontes %}
   <p class="muted" style="margin-top: var(--space-2);">
-    Caminho da Auvo: {{ resultado.resumo.auvo_clientes }} cliente(s) na
-    Auvo, {{ resultado.resumo.auvo_com_coord }} com lat/long na região,
-    {{ resultado.resumo.auvo_casados }} casado(s) com uma conta base.
+    Origem do endereço:
+    {% for fonte, quantidade in resultado.resumo.fontes.items() %}
+    {{ quantidade }} {{ fonte }}{{ ", " if not loop.last }}
+    {% endfor %}
   </p>
+  {% endif %}
 </div>
 
 <div class="section">
-  <div class="section-title"><h2>Mapa</h2></div>
-  <div class="card" style="padding: 0; overflow: hidden;">
-    <div id="mapa-rotas" style="height: 540px;"
-         data-rotas="{{ resultado.rotas|tojson|forceescape }}"></div>
-  </div>
-  <p class="muted" style="margin-top: var(--space-2);">
-    Cada cor é uma rota; o número no marcador é a ordem de visita sugerida.
-    Clique para ver conta, cliente e cidade.
-  </p>
-</div>
-
-<div class="section">
-  <div class="section-title"><h2>Rotas</h2></div>
-  {% for rota in resultado.rotas %}
+  <div class="section-title"><h2>Regiões</h2></div>
+  {% for regiao in resultado.regioes %}
   <details class="card" style="margin-bottom: var(--space-3);" {{ 'open' if loop.first }}>
     <summary style="cursor: pointer;">
-      <strong>Rota {{ rota.indice }}</strong> — {{ rota.tamanho }} cliente(s)
-      {% if rota.extensao_km %}· {{ rota.extensao_km }} km de percurso{% endif %}
-      <span class="muted">{{ rota.cidades }}</span>
+      <strong>{{ regiao.rotulo }}</strong> — {{ regiao.tamanho }} cliente(s)
+      {% if not regiao.tem_bairro %}
+      <span class="chip chip-warning">sem bairro no cadastro</span>
+      {% endif %}
     </summary>
     <div class="table-wrap" style="margin-top: var(--space-3);">
       <table>
         <thead>
-          <tr><th>Ordem</th><th>Conta</th><th>Cliente</th><th>Cidade</th><th>Coordenada</th><th>Fonte</th></tr>
+          <tr><th>Conta</th><th>Cliente</th><th>Bairro</th><th>Cidade</th><th>Origem</th></tr>
         </thead>
         <tbody>
-          {% for ponto in rota.pontos %}
+          {% for cliente in regiao.clientes %}
           <tr>
-            <td class="is-numeric">{{ ponto.ordem }}</td>
-            <td class="is-numeric">{{ ponto.conta }}</td>
-            <td>{{ ponto.nome }}</td>
-            <td>{{ ponto.cidade or '—' }}</td>
-            <td class="is-numeric">{{ '%.5f'|format(ponto.lat) }}, {{ '%.5f'|format(ponto.lon) }}</td>
-            <td><span class="chip chip-neutral">{{ ponto.fonte }}</span></td>
+            <td class="is-numeric">{{ cliente.conta }}</td>
+            <td>{{ cliente.nome }}</td>
+            <td>{{ cliente.bairro or '—' }}</td>
+            <td>{{ cliente.cidade or '—' }}</td>
+            <td>
+              {% if cliente.fonte %}
+              <span class="chip chip-neutral">{{ cliente.fonte }}</span>
+              {% else %}—{% endif %}
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -124,38 +157,5 @@
   </details>
   {% endfor %}
 </div>
-
-{% if resultado.sem_coord %}
-<div class="section">
-  <div class="section-title"><h2>Sem coordenada — cadastrar na Auvo</h2></div>
-  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
-    Estes clientes <strong>não entram em rota nenhuma</strong> enquanto não
-    tiverem lat/long. É a lista de trabalho do cadastro, e sai no Excel.
-  </p>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Conta</th><th>Cliente</th><th>Cidade</th><th>Motivo</th></tr></thead>
-      <tbody>
-        {% for item in resultado.sem_coord %}
-        <tr>
-          <td class="is-numeric">{{ item.conta }}</td>
-          <td>{{ item.nome }}</td>
-          <td>{{ item.cidade or '—' }}</td>
-          <td class="muted">{{ item.motivo }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  <p class="muted" style="margin-top: var(--space-3);">{{ resultado.sem_coord|length }} cliente(s).</p>
-</div>
-{% endif %}
-{% endif %}
-{% endblock %}
-
-{% block scripts %}
-{% if resultado %}
-<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
-<script src="{{ url_for('static', filename='js/mapa_rotas.js') }}"></script>
 {% endif %}
 {% endblock %}

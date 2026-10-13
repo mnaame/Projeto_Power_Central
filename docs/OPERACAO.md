@@ -899,38 +899,46 @@ alteração fica na auditoria com o antes e o depois.
 
 Detalhe técnico em [`HORARIO_LOTE.md`](HORARIO_LOTE.md).
 
-### 5.2.11 Rotas de Visita Preventiva
+### 5.2.11 Visitas por Bairro
 
-Agrupa os clientes **base** por proximidade no mapa, para você agendar as
-preventivas por região em vez de atravessar a cidade entre uma visita e
-outra. Só leitura — não altera nada na PowerCentral nem na Auvo.
+Cataloga os clientes **base** por bairro, para você agendar as preventivas
+por região em vez de atravessar a cidade entre uma visita e outra. Só
+leitura — não altera nada na PowerCentral nem na Auvo.
 
-**Como usar:** aba **Rotas de Visita** → ajuste o raio se quiser (padrão
-**1,5 km**) → "Gerar rotas". Sai um resumo, o mapa com as rotas coloridas,
-a lista de cada rota na ordem de visita, e o botão de Excel.
+**Como usar:** aba **Visitas por Bairro** → "Gerar catálogo". Sai um
+resumo, a lista de cada bairro com os clientes que estão nele, e o botão
+de Excel.
 
-- **Raio maior** = menos rotas, cada uma mais espalhada. Pode gerar quantas
-  vezes quiser até achar o tamanho que cabe no seu dia.
-- **O número no marcador** é a ordem de visita sugerida; a linha liga os
-  pontos nessa ordem (é referência, não trajeto de rua).
 - **Base** aqui significa: fora Villefort, Super Nosso e Apoio — e fora as
   contas internas de teste.
+- Cada bairro aparece **com a cidade** ("Centro — Belo Horizonte"), porque
+  "Centro" existe em BH, em Contagem e em Betim, a trinta quilômetros um
+  do outro.
+- As regiões saem **da maior para a menor**: é a ordem em que vale decidir
+  o que fazer, porque a região com mais clientes rende mais numa saída só.
 
-**A lista "sem coordenada" é a parte importante.** Cliente sem lat/long
-cadastrado **não entra em rota nenhuma** — ele simplesmente não aparece no
-mapa. A tela e o Excel mostram quem são, para a equipe completar o cadastro
-na Auvo. Quanto menor essa lista, melhor a rota.
+**Se vier pouca coisa, importe as planilhas.** O bairro vem do endereço
+cadastrado, e nem sempre a API das plataformas entrega esse campo. Na
+mesma tela, em **Endereços importados**:
 
-A coordenada vem da **Auvo** quando existe (é o app de campo, mais
-confiável) e, na falta, da "Localização da conta" da PowerCentral — esta
-última só quando aponta para a região; algumas vêm erradas, apontando para
-outro estado, e seriam piores que nenhuma: puxariam a rota inteira para o
-lugar errado.
+1. Na Auvo, exporte os **clientes** (arquivo `.xlsx`) — é de onde vem o
+   bairro.
+2. Na PowerCentral, baixe o **relatório de contas** (arquivo `.xls`) — é
+   de onde vem a cidade de quem não casou com a Auvo.
+3. Envie os dois no mesmo campo, um de cada vez. O sistema descobre
+   sozinho qual é qual, e cada envio substitui o anterior daquela mesma
+   origem.
+4. Clique em "Gerar catálogo" de novo.
 
-O mapa funciona sem internet? Parcialmente: a biblioteca do mapa está
-instalada junto com o sistema, mas as imagens do mapa (ruas) vêm da
-internet. Sem conexão o fundo fica cinza, mas as tabelas e o Excel
-continuam normais.
+Dá para repetir sempre que o cadastro mudar. A planilha da PowerCentral
+precisa ser enviada **como ela é baixada** — se você abrir e salvar pelo
+Excel, o arquivo muda de formato e o sistema recusa, explicando isso.
+
+**A lista "(sem bairro)" é a parte importante.** São clientes que o
+cadastro não diz em que bairro ficam; eles aparecem agrupados só pela
+cidade, no fim da lista, e saem numa aba própria do Excel. Quanto menor
+essa lista, melhor o catálogo — e o conserto é preencher o endereço do
+cliente na Auvo.
 
 Detalhe técnico em [`ROTAS_VISITA.md`](ROTAS_VISITA.md).
 

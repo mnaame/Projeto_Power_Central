@@ -68,10 +68,10 @@ COLUNAS_BI_CRONICOS = (
     "DISPAROS/DIA ATUAL",
 )
 COLUNAS_ROTAS_CLIENTES = (
-    "ROTA", "ORDEM", "CONTA", "CLIENTE", "CIDADE", "LATITUDE", "LONGITUDE", "FONTE",
+    "REGIÃO", "CONTA", "CLIENTE", "BAIRRO", "CIDADE", "FONTE DO ENDEREÇO",
 )
-COLUNAS_ROTAS_RESUMO = ("ROTA", "CLIENTES", "CIDADES", "EXTENSÃO (KM)")
-COLUNAS_ROTAS_SEM_COORD = ("CONTA", "CLIENTE", "CIDADE", "MOTIVO")
+COLUNAS_ROTAS_RESUMO = ("REGIÃO", "CLIENTES", "CIDADE", "TEM BAIRRO")
+COLUNAS_ROTAS_SEM_BAIRRO = ("CONTA", "CLIENTE", "CIDADE")
 COLUNAS_HORARIO_BACKUP = (
     "CONTA", "NOME", "ID HORARIO", "DIA ABERTURA", "ABERTURA",
     "DIA FECHAMENTO", "FECHAMENTO (ANTES)",
@@ -310,19 +310,19 @@ def gerar_xlsx_rotas(
     *,
     clientes: Sequence[Sequence[object]],
     resumo: Sequence[Sequence[object]],
-    sem_coordenada: Sequence[Sequence[object]],
+    sem_bairro: Sequence[Sequence[object]],
 ) -> None:
-    """Três abas: os clientes na ordem de visita, um resumo por rota e os
-    que ficaram de fora.
+    """Três abas: os clientes por bairro, um resumo por região e os que
+    ficaram sem bairro.
 
-    "Sem coordenada" não é sobra — é a lista de trabalho do cadastro.
-    Enquanto um cliente estiver nela, ele não entra em rota nenhuma, e
-    quem monta a agenda precisa ver isso."""
+    "Sem bairro" não é sobra — é a lista de trabalho do cadastro. Quem
+    está nela aparece no catálogo só pela cidade, e quem monta a agenda
+    precisa ver isso para pedir o endereço."""
     wb = Workbook()
     wb.remove(wb.active)
-    _montar_aba(wb.create_sheet("Clientes por rota"), COLUNAS_ROTAS_CLIENTES, clientes)
-    _montar_aba(wb.create_sheet("Resumo por rota"), COLUNAS_ROTAS_RESUMO, resumo)
-    _montar_aba(wb.create_sheet("Sem coordenada"), COLUNAS_ROTAS_SEM_COORD, sem_coordenada)
+    _montar_aba(wb.create_sheet("Clientes por bairro"), COLUNAS_ROTAS_CLIENTES, clientes)
+    _montar_aba(wb.create_sheet("Resumo por região"), COLUNAS_ROTAS_RESUMO, resumo)
+    _montar_aba(wb.create_sheet("Sem bairro"), COLUNAS_ROTAS_SEM_BAIRRO, sem_bairro)
 
     caminho.parent.mkdir(parents=True, exist_ok=True)
     wb.save(caminho)

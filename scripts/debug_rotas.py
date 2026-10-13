@@ -1,18 +1,16 @@
-"""Mostra de onde a coordenada de cada cliente base vem — ou por que não vem.
+"""Mostra de onde vem o bairro de cada cliente base — ou por que não vem.
 
-Contexto: a primeira rodada em produção devolveu "105 clientes base, 0 com
-coordenada, 0 Auvo · 0 Power". Zero absoluto, sem um erro na tela. A causa
-foi nome de campo chutado: o código procurava a localização da conta em
-`cue_clocalizacion`, que não é o nome do campo. Nenhum log acusava, porque
-"campo ausente" e "campo vazio" são a mesma coisa para um `.get()`.
+Contexto: este módulo já queimou duas rodadas em produção porque o código
+procurava campo de API pelo nome que a gente *achava* que ele tinha. Na
+primeira foi `cue_clocalizacion` para a coordenada; o resultado foi "105
+clientes base, 0 com coordenada", zero absoluto e nenhum erro na tela,
+porque para um `.get()` "campo com outro nome" e "campo vazio" são a
+mesma coisa.
 
-Agora `dom.coordenada_do_registro` reconhece a coordenada pela FORMA (dois
-decimais dentro da caixa de MG/BH), não pelo nome. Este script é a prova
-contra as plataformas de verdade: imprime os nomes de campo que cada lado
-realmente devolve, quantas coordenadas aparecem em cada etapa e, no fim, a
-lista de quem ficou sem — que é a fila de trabalho do cadastro.
-
-Só leitura: nada é escrito na PowerCentral nem na Auvo.
+Este script existe para que ninguém precise adivinhar de novo: ele
+imprime **os nomes de campo que cada plataforma devolve de verdade** e
+quantos clientes sobrevivem a cada etapa. Só leitura — nada é escrito na
+PowerCentral nem na Auvo.
 
 Uso (PowerShell, na pasta do projeto):
 
@@ -25,7 +23,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app  # noqa: E402
-from app.domain import disparos_geral as dom_disp  # noqa: E402
+from app.domain import endereco as dom_end  # noqa: E402
 from app.domain import rotas as dom  # noqa: E402
 from app.integrations.softguard_client import SoftGuardClient  # noqa: E402
 from app.services import auvo_service, rotas_service  # noqa: E402
@@ -35,8 +33,6 @@ LIMITE_LISTA = 40
 
 
 def _campos(registros, quantos=3):
-    """Nomes de campo que a plataforma devolve de verdade — é o dado que
-    faltava quando o módulo saiu chutando nome."""
     nomes = []
     for registro in registros[:quantos]:
         if isinstance(registro, dict):
@@ -44,6 +40,16 @@ def _campos(registros, quantos=3):
                 if chave not in nomes:
                     nomes.append(chave)
     return nomes
+
+
+def _amostra_endereco(registros, quantos=3):
+    """O que o detector enxerga como endereço em cada registro — é a
+    diferença entre "a API não manda" e "a API manda e eu não leio"."""
+    linhas = []
+    for registro in registros[:quantos]:
+        lido = rotas_service._endereco_do_registro(registro)
+        linhas.append(f"      {lido}")
+    return linhas
 
 
 def main() -> int:
@@ -54,78 +60,68 @@ def main() -> int:
         contas = client.listar_todas_contas()
         print(f"{len(contas)} conta(s) no dealer")
         print("campos:", ", ".join(_campos(contas)))
+        print("endereço lido das 3 primeiras:")
+        for linha in _amostra_endereco(contas):
+            print(linha)
 
         base = rotas_service._contas_base(contas)
         print(f"{len(base)} base (fora Villefort/Super Nosso/Apoio/interna)")
 
-        com_power = [c for c in base if dom.coordenada_do_registro(c) is not None]
-        print(f"{len(com_power)} com coordenada válida no cadastro da Power")
-
         print("\n== Auvo ==")
         auvo = auvo_service.criar_cliente(app.config)
+        clientes = []
         if auvo is None:
             print("Auvo não configurada (sem chave/token em Configurações).")
-            clientes = []
         else:
             clientes = auvo.listar_clientes()
             print(f"{len(clientes)} cliente(s)")
             print("campos:", ", ".join(_campos(clientes)))
-            com_auvo = [c for c in clientes if dom.coordenada_do_registro(c) is not None]
-            print(f"{len(com_auvo)} com lat/long dentro da caixa de MG/BH")
+            print("endereço lido dos 3 primeiros:")
+            for linha in _amostra_endereco(clientes):
+                print(linha)
+            com_bairro = sum(
+                1
+                for c in clientes
+                if rotas_service._endereco_do_registro(c).bairro
+            )
+            print(f"{com_bairro} com bairro legível pela API")
 
-        print("\n== Casamento ==")
-        depara = rotas_service._depara_por_conta()
-        por_id = rotas_service._mapa_auvo_por_id(clientes)
-        nomes = {
-            dom.normalizar(str(rotas_service._primeiro(c, rotas_service.CAMPOS_NOME_AUVO))): c
-            for c in clientes
-        }
-        print(f"{len(depara)} linha(s) de de-para com status OK")
+        print("\n== Planilhas importadas ==")
+        importacoes = rotas_service.resumo_importacoes()
+        if not importacoes:
+            print("nenhuma — o catálogo depende só do que as APIs derem.")
+        for item in importacoes:
+            print(
+                f"  {item['fonte']}: {item['linhas']} linha(s), "
+                f"{item['com_bairro']} com bairro, de {item['importado_em']:%d/%m/%Y %H:%M}"
+            )
 
-        por_depara = por_nome = de_auvo = da_power = 0
-        sem = []
-        for linha in base:
-            conta = str(linha.get("cue_ncuenta") or "").strip()
-            nome = str(linha.get("cue_cnombre") or "").strip()
+        print("\n== Catálogo ==")
+        resultado = rotas_service.montar_catalogo(config=app.config)
+        resumo = resultado["resumo"]
+        print(
+            f"base={resumo['base']}  com_bairro={resumo['com_bairro']}  "
+            f"sem_bairro={resumo['sem_bairro']}  bairros={resumo['regioes']}"
+        )
+        print("origem do endereço:", resumo["fontes"])
 
-            cliente = por_id.get(depara.get(conta.lstrip("0"), ""))
-            if cliente is not None:
-                por_depara += 1
-            elif nomes:
-                casado = dom.melhor_nome(nome, list(nomes))
-                cliente = nomes.get(casado) if casado else None
-                if cliente is not None:
-                    por_nome += 1
-
-            if cliente is not None and dom.coordenada_do_registro(cliente) is not None:
-                de_auvo += 1
-                continue
-            if dom.coordenada_do_registro(linha) is not None:
-                da_power += 1
-                continue
-            sem.append((conta, nome, cliente is not None))
-
-        print(f"casaram pelo de-para: {por_depara}")
-        print(f"casaram por nome:     {por_nome}")
-        print(f"\ncoordenada da Auvo:   {de_auvo}")
-        print(f"coordenada da Power:  {da_power}")
-        print(f"sem coordenada:       {len(sem)}")
-
+        sem = [
+            c
+            for regiao in resultado["regioes"]
+            if not regiao.tem_bairro
+            for c in regiao.clientes
+        ]
         if sem:
-            print("\n-- fila de trabalho do cadastro --")
-            for conta, nome, casou in sem[:LIMITE_LISTA]:
-                onde = (
-                    "está na Auvo, mas sem lat/long lá"
-                    if casou
-                    else "não casou com nenhum cliente da Auvo"
-                )
-                print(f"  {conta:>6}  {nome[:44]:<44} {onde}")
+            print("\n-- sem bairro (fila do cadastro) --")
+            for cliente in sem[:LIMITE_LISTA]:
+                cidade = dom_end.titulo(cliente.cidade) or "sem nem a cidade"
+                print(f"  {cliente.conta:>6}  {cliente.nome[:44]:<44} {cidade}")
             if len(sem) > LIMITE_LISTA:
                 print(f"  ... e mais {len(sem) - LIMITE_LISTA}")
 
-        # Grupos, só para conferir que o recorte de "base" está certo —
-        # uma conta classificada errado some da lista sem aviso.
         print("\n== Conferência do recorte ==")
+        from app.domain import disparos_geral as dom_disp
+
         contagem: dict[str, int] = {}
         for conta in contas:
             nome = str(conta.get("cue_cnombre") or "").strip()

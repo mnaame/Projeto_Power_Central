@@ -1,43 +1,46 @@
-"""Rotas — junção PowerCentral + Auvo + de-para.
+"""Catálogo por bairro — junção PowerCentral + Auvo + planilhas.
 
-O risco deste módulo não é escrever errado (ele não escreve), é **ligar o
-cliente à coordenada errada** e mandar o técnico para o endereço de outra
-pessoa.
+O risco deste módulo não é escrever errado (ele não escreve), é **colocar
+o cliente no bairro de outro** e mandar o técnico para a região errada.
 """
+
+import io
+import zipfile
+
+import pytest
 
 from app.extensions import db
 from app.integrations.softguard_client import SoftGuardError
 from app.models.auvo import AuvoDepara
+from app.models.rotas import RotasEndereco
 from app.services import rotas_service as svc
 
-PRACA_SETE = (-19.9191, -43.9386)
-VIZINHO = (-19.9195, -43.9380)
-LONGE = (-19.9320, -44.0540)
+ENDERECO_SAVASSI = "Rua Antônio de Albuquerque, 100,,Savassi,Belo Horizonte,MG,30112010"
+ENDERECO_BURITIS = "Rua Engenheiro Zoroastro, 50,,Buritis,Belo Horizonte,MG,30575100"
+
+NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 
 
-def _conta(numero, nome, *, cidade="BELO HORIZONTE", localizacao=None):
+def _conta(numero, nome, *, cidade=None, endereco=None):
     linha = {
         "cue_iid": f"9{numero}",
         "cue_ncuenta": numero,
         "cue_cnombre": nome,
-        "city": cidade,
     }
-    if localizacao is not None:
-        # Nome de campo deliberadamente improvável: a primeira versão
-        # procurava a "Localização da conta" por um nome chutado
-        # (`cue_clocalizacion`), errou, e devolveu 105 contas sem
-        # coordenada sem um único erro na tela. A detecção é pela forma do
-        # valor, então ela tem que achar a coordenada aqui também.
-        linha["campo_cujo_nome_eu_nao_sei"] = localizacao
+    if cidade is not None:
+        # Nome de campo deliberadamente improvável: chutar nome de campo
+        # já custou uma rodada inteira deste módulo (105 contas, zero
+        # resultado, nenhum erro na tela).
+        linha["campo_cujo_nome_eu_nao_sei"] = cidade
+    if endereco is not None:
+        linha["outro_campo_qualquer"] = endereco
     return linha
 
 
-def _cliente_auvo(id_auvo, nome, coord=None):
+def _cliente_auvo(id_auvo, nome, endereco=None):
     cliente = {"id": id_auvo, "description": nome}
-    if coord:
-        # Como o export da Auvo entrega: texto com vírgula decimal.
-        cliente["latitude"] = str(coord[0]).replace(".", ",")
-        cliente["longitude"] = str(coord[1]).replace(".", ",")
+    if endereco:
+        cliente["address"] = endereco
     return cliente
 
 
@@ -62,16 +65,15 @@ class FakeAuvo:
         return self.clientes
 
 
-def _montar(app, monkeypatch, *, contas, clientes_auvo=None, erro_auvo=None, raio=1.5):
-    monkeypatch.setattr(
-        svc, "SoftGuardClient", lambda *a, **k: FakeSoftGuard(contas)
-    )
+def _montar(app, monkeypatch, *, contas, clientes_auvo=None, erro_auvo=None):
+    monkeypatch.setattr(svc, "SoftGuardClient", lambda *a, **k: FakeSoftGuard(contas))
     monkeypatch.setattr(svc, "credenciais_softguard", lambda config: None)
     monkeypatch.setattr(
-        svc.auvo_service, "criar_cliente",
+        svc.auvo_service,
+        "criar_cliente",
         lambda config: FakeAuvo(clientes_auvo, erro=erro_auvo),
     )
-    return svc.montar_rotas(config=app.config, raio_km=raio)
+    return svc.montar_catalogo(config=app.config)
 
 
 # ---------- quem é base ----------
@@ -90,7 +92,6 @@ def test_villefort_super_nosso_e_apoio_ficam_de_fora(app, monkeypatch):
     resultado = _montar(app, monkeypatch, contas=contas)
 
     assert resultado["resumo"]["base"] == 1
-    assert [s["nome"] for s in resultado["sem_coord"]] == ["PADARIA DO ZE"]
 
 
 def test_contas_internas_ficam_de_fora(app, monkeypatch):
@@ -103,178 +104,253 @@ def test_contas_internas_ficam_de_fora(app, monkeypatch):
     assert _montar(app, monkeypatch, contas=contas)["resumo"]["base"] == 1
 
 
-# ---------- de onde vem a coordenada ----------
+# ---------- de onde vem o bairro ----------
 
 
-def test_coordenada_vem_da_auvo_pelo_depara(app, monkeypatch):
-    db.session.add(AuvoDepara(conta_power="95", id_auvo=500, status="OK", nome_power="PADARIA"))
+def test_bairro_vem_da_auvo_pelo_depara(app, monkeypatch):
+    db.session.add(
+        AuvoDepara(conta_power="95", id_auvo=500, status="OK", nome_power="PADARIA")
+    )
     db.session.commit()
     contas = [_conta("0095", "PADARIA DO ZE")]
-    clientes = [_cliente_auvo(500, "NOME TOTALMENTE DIFERENTE", PRACA_SETE)]
+    clientes = [_cliente_auvo(500, "NOME TOTALMENTE DIFERENTE", ENDERECO_SAVASSI)]
 
     resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=clientes)
 
-    assert resultado["resumo"]["de_auvo"] == 1
-    assert resultado["rotas"][0].pontos[0].lat == PRACA_SETE[0]
+    assert resultado["regioes"][0].rotulo == "Savassi — Belo Horizonte"
 
 
 def test_depara_em_revisar_nao_e_usado(app, monkeypatch):
-    """REVISAR é casamento não confirmado por humano — usá-lo mandaria o
-    técnico para o endereço de outro cliente."""
-    db.session.add(AuvoDepara(conta_power="95", id_auvo=500, status="REVISAR", nome_power="X"))
+    """REVISAR é casamento não confirmado por humano — usá-lo colocaria o
+    cliente no bairro de outro."""
+    db.session.add(
+        AuvoDepara(conta_power="95", id_auvo=500, status="REVISAR", nome_power="X")
+    )
     db.session.commit()
     contas = [_conta("0095", "PADARIA DO ZE")]
-    clientes = [_cliente_auvo(500, "OUTRO NOME QUALQUER", PRACA_SETE)]
+    clientes = [_cliente_auvo(500, "OUTRO NOME QUALQUER", ENDERECO_SAVASSI)]
 
     resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=clientes)
 
-    assert resultado["resumo"]["com_coord"] == 0
+    assert resultado["resumo"]["com_bairro"] == 0
 
 
 def test_sem_depara_casa_por_nome(app, monkeypatch):
     contas = [_conta("0095", "PADARIA DO ZE")]
-    clientes = [_cliente_auvo(500, "Padaria do Zé", PRACA_SETE)]
+    clientes = [_cliente_auvo(500, "Padaria do Zé", ENDERECO_SAVASSI)]
 
     resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=clientes)
 
-    assert resultado["resumo"]["de_auvo"] == 1
+    assert resultado["resumo"]["com_bairro"] == 1
 
 
-def test_nome_que_nao_casa_nao_inventa_coordenada(app, monkeypatch):
+def test_nome_que_nao_casa_nao_inventa_bairro(app, monkeypatch):
     contas = [_conta("0095", "PADARIA DO ZE")]
-    clientes = [_cliente_auvo(500, "ACADEMIA CORPO E MENTE", PRACA_SETE)]
+    clientes = [_cliente_auvo(500, "ACADEMIA CORPO E MENTE", ENDERECO_SAVASSI)]
 
     resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=clientes)
 
-    assert resultado["resumo"]["com_coord"] == 0
-    assert resultado["sem_coord"][0]["conta"] == "0095"
+    assert resultado["resumo"]["com_bairro"] == 0
 
 
-def test_localizacao_da_power_e_a_reserva(app, monkeypatch):
-    contas = [_conta("0095", "PADARIA DO ZE", localizacao="-19.9191,-43.9386")]
+def test_endereco_e_achado_mesmo_em_campo_de_nome_desconhecido(app, monkeypatch):
+    """A aposta no nome do campo já falhou neste módulo. O endereço se
+    prova sozinho: tem UF e CEP."""
+    cliente = {"id": 500, "description": "PADARIA DO ZE", "campo_exotico": ENDERECO_SAVASSI}
+    contas = [_conta("0095", "PADARIA DO ZE")]
+
+    resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=[cliente])
+
+    assert resultado["regioes"][0].rotulo == "Savassi — Belo Horizonte"
+
+
+def test_texto_qualquer_nao_passa_por_endereco(app, monkeypatch):
+    """Sem UF nem CEP não é endereço — é observação, nome, o que for."""
+    cliente = {
+        "id": 500,
+        "description": "PADARIA DO ZE",
+        "observacao": "cliente antigo, chave na portaria, falar com o Joao",
+    }
+    contas = [_conta("0095", "PADARIA DO ZE")]
+
+    resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=[cliente])
+
+    assert resultado["resumo"]["com_bairro"] == 0
+
+
+# ---------- planilha importada ----------
+
+
+def _xlsx_auvo(linhas):
+    corpo = []
+    for n, linha in enumerate(linhas, start=1):
+        celulas = "".join(
+            f'<c r="{chr(65 + i)}{n}" t="inlineStr"><is><t>{v}</t></is></c>'
+            for i, v in enumerate(linha)
+        )
+        corpo.append(f'<row r="{n}">{celulas}</row>')
+    sheet = (
+        f'<?xml version="1.0"?><worksheet xmlns="{NS}"><sheetData>'
+        + "".join(corpo)
+        + "</sheetData></worksheet>"
+    )
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as z:
+        z.writestr("xl/worksheets/sheet1.xml", sheet)
+    return buffer.getvalue()
+
+
+def _html_power(linhas):
+    corpo = "".join(
+        "<tr>" + "".join(f"<td>{c}</td>" for c in linha) + "</tr>" for linha in linhas
+    )
+    return f"<html><body><table>{corpo}</table></body></html>".encode("latin-1")
+
+
+def test_planilha_da_auvo_da_o_bairro_quando_a_api_nao_da(app, monkeypatch):
+    """É a razão de a importação existir: o catálogo não pode depender de
+    a API expor o campo com o nome que a gente espera."""
+    svc.importar_planilha(
+        _xlsx_auvo(
+            [
+                ["Código", "Nome", "Endereço"],
+                ["500", "PADARIA DO ZE", ENDERECO_SAVASSI],
+            ]
+        )
+    )
+    db.session.commit()
+    contas = [_conta("0095", "PADARIA DO ZE")]
 
     resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=[])
 
-    assert resultado["resumo"]["da_power"] == 1
-    assert resultado["rotas"][0].pontos[0].fonte == "PowerCentral"
+    assert resultado["regioes"][0].rotulo == "Savassi — Belo Horizonte"
+    assert resultado["regioes"][0].clientes[0].fonte == "Auvo (planilha)"
 
 
-def test_auvo_tem_prioridade_sobre_a_power(app, monkeypatch):
-    """A Auvo é o app de campo: a coordenada dela foi conferida por quem
-    esteve no local."""
-    contas = [_conta("0095", "PADARIA DO ZE", localizacao="-19.9320,-44.0540")]
-    clientes = [_cliente_auvo(500, "PADARIA DO ZE", PRACA_SETE)]
-
-    resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=clientes)
-
-    assert resultado["rotas"][0].pontos[0].fonte == "Auvo"
-    assert resultado["rotas"][0].pontos[0].lat == PRACA_SETE[0]
-
-
-def test_localizacao_da_power_fora_da_regiao_e_descartada(app, monkeypatch):
-    """Parte das coordenadas da Power aponta para outro estado — e uma
-    coordenada errada distorce o centroide da rota inteira."""
-    contas = [_conta("0095", "PADARIA DO ZE", localizacao="-23.5505,-46.6333")]
+def test_planilha_da_power_da_a_cidade_de_quem_nao_casou_na_auvo(app, monkeypatch):
+    """Das 148 contas do relatório real, a coluna "Rua" tinha bairro em
+    uma — mas a cidade vinha em 147. Sem ela, quem não casa com a Auvo
+    não teria nem região."""
+    svc.importar_planilha(
+        _html_power(
+            [
+                ["Dealer / Conta", "Nome", "Localidade"],
+                ["MIL-0095", "PADARIA DO ZE", "CONTAGEM"],
+            ]
+        )
+    )
+    db.session.commit()
+    contas = [_conta("0095", "PADARIA DO ZE")]
 
     resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=[])
 
-    assert resultado["resumo"]["com_coord"] == 0
-    assert len(resultado["sem_coord"]) == 1
+    assert resultado["regioes"][0].rotulo == "(sem bairro) — Contagem"
+    assert resultado["resumo"]["sem_regiao"] == 0
 
 
-def test_cliente_auvo_com_lat_long_zerada_vai_para_sem_coordenada(app, monkeypatch):
-    """Boa parte do cadastro da Auvo está com 0/0 — é campo vazio, e o
-    motivo tem que dizer que é lá que falta preencher."""
+def test_api_tem_prioridade_sobre_a_planilha(app, monkeypatch):
+    """A planilha é um retrato datado; a API é o cadastro de agora."""
+    svc.importar_planilha(
+        _xlsx_auvo(
+            [["Código", "Nome", "Endereço"], ["500", "PADARIA DO ZE", ENDERECO_BURITIS]]
+        )
+    )
+    db.session.commit()
     contas = [_conta("0095", "PADARIA DO ZE")]
-    clientes = [{"id": 500, "description": "PADARIA DO ZE", "latitude": "0", "longitude": "0"}]
+    clientes = [_cliente_auvo(500, "PADARIA DO ZE", ENDERECO_SAVASSI)]
 
     resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=clientes)
 
-    assert resultado["resumo"]["com_coord"] == 0
-    assert "sem lat/long" in resultado["sem_coord"][0]["motivo"]
+    assert resultado["regioes"][0].rotulo == "Savassi — Belo Horizonte"
+    assert resultado["regioes"][0].clientes[0].fonte == "Auvo"
 
 
-def test_motivo_distingue_quem_nao_casou_de_quem_casou_sem_coordenada(app, monkeypatch):
-    contas = [_conta("0095", "PADARIA DO ZE")]
-    clientes = [_cliente_auvo(500, "ACADEMIA CORPO E MENTE", PRACA_SETE)]
+def test_reimportar_substitui_a_fonte_inteira(app, monkeypatch):
+    """A planilha é o retrato completo daquele lado. Misturar com o lote
+    anterior deixaria no sistema o endereço de quem já mudou."""
+    svc.importar_planilha(
+        _xlsx_auvo(
+            [
+                ["Código", "Nome", "Endereço"],
+                ["500", "PADARIA DO ZE", ENDERECO_SAVASSI],
+                ["501", "CLIENTE QUE SAIU", ENDERECO_BURITIS],
+            ]
+        )
+    )
+    db.session.commit()
 
-    resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=clientes)
+    svc.importar_planilha(
+        _xlsx_auvo(
+            [["Código", "Nome", "Endereço"], ["500", "PADARIA DO ZE", ENDERECO_BURITIS]]
+        )
+    )
+    db.session.commit()
 
-    assert "Não casou" in resultado["sem_coord"][0]["motivo"]
-
-
-def test_resumo_mostra_em_que_etapa_a_coordenada_da_auvo_se_perdeu(app, monkeypatch):
-    """Sem estes contadores, um "0 Auvo" na tela não distingue Auvo fora
-    do ar de nome que não casou de cadastro sem lat/long — foi exatamente
-    o que aconteceu na primeira rodada em produção."""
-    contas = [_conta("0095", "PADARIA DO ZE"), _conta("0096", "ACADEMIA X")]
-    clientes = [
-        _cliente_auvo(500, "PADARIA DO ZE", PRACA_SETE),
-        {"id": 501, "description": "ACADEMIA X", "latitude": "0", "longitude": "0"},
-        _cliente_auvo(502, "CLIENTE QUE NAO ESTA NA POWER", VIZINHO),
-    ]
-
-    resumo = _montar(app, monkeypatch, contas=contas, clientes_auvo=clientes)["resumo"]
-
-    assert resumo["auvo_clientes"] == 3
-    assert resumo["auvo_com_coord"] == 2  # o de 0/0 não conta
-    assert resumo["auvo_casados"] == 2
-    assert resumo["de_auvo"] == 1
+    linhas = RotasEndereco.query.filter_by(fonte="auvo").all()
+    assert len(linhas) == 1
+    assert linhas[0].bairro == "Buritis"
 
 
-# ---------- agrupamento ponta a ponta ----------
+def test_importar_a_power_nao_apaga_a_auvo(app, monkeypatch):
+    """Cada envio substitui só a sua própria origem."""
+    svc.importar_planilha(
+        _xlsx_auvo([["Código", "Nome", "Endereço"], ["500", "PADARIA", ENDERECO_SAVASSI]])
+    )
+    svc.importar_planilha(
+        _html_power([["Dealer / Conta", "Nome", "Localidade"], ["MIL-0095", "P", "BH"]])
+    )
+    db.session.commit()
+
+    assert RotasEndereco.query.filter_by(fonte="auvo").count() == 1
+    assert RotasEndereco.query.filter_by(fonte="power").count() == 1
 
 
-def test_clientes_proximos_entram_na_mesma_rota(app, monkeypatch):
-    contas = [_conta("1", "A"), _conta("2", "B"), _conta("3", "C")]
-    clientes = [
-        _cliente_auvo(1, "A", PRACA_SETE),
-        _cliente_auvo(2, "B", VIZINHO),
-        _cliente_auvo(3, "C", LONGE),
-    ]
+def test_importacao_guarda_o_endereco_bruto_para_conferencia(app):
+    """Sem o original, "o bairro saiu errado" não tem como ser apurado."""
+    svc.importar_planilha(
+        _xlsx_auvo([["Código", "Nome", "Endereço"], ["500", "PADARIA", ENDERECO_SAVASSI]])
+    )
+    db.session.commit()
 
-    resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=clientes)
-
-    assert resultado["resumo"]["clusters"] == 2
-    assert resultado["rotas"][0].tamanho == 2
+    assert RotasEndereco.query.one().endereco_bruto == ENDERECO_SAVASSI
 
 
-def test_raio_maior_junta_tudo(app, monkeypatch):
-    contas = [_conta("1", "A"), _conta("2", "C")]
-    clientes = [_cliente_auvo(1, "A", PRACA_SETE), _cliente_auvo(2, "C", LONGE)]
+def test_planilha_irreconhecivel_e_recusada_sem_apagar_o_que_havia(app):
+    svc.importar_planilha(
+        _xlsx_auvo([["Código", "Nome", "Endereço"], ["500", "PADARIA", ENDERECO_SAVASSI]])
+    )
+    db.session.commit()
 
-    resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=clientes, raio=20)
+    with pytest.raises(svc.dom_pl.PlanilhaInvalida):
+        svc.importar_planilha(b"isto nao e planilha nenhuma")
+    db.session.rollback()
 
-    assert resultado["resumo"]["clusters"] == 1
+    assert RotasEndereco.query.count() == 1
 
 
 # ---------- resiliência ----------
 
 
 def test_auvo_fora_do_ar_nao_cancela_tudo(app, monkeypatch):
-    """Sem a Auvo sobra a coordenada da Power: entregar metade é melhor
-    que entregar nada — e o resumo diz que faltou."""
-    contas = [_conta("0095", "PADARIA", localizacao="-19.9191,-43.9386")]
+    """Sem a Auvo sobram a planilha e a PowerCentral: entregar parte é
+    melhor que não entregar nada — e o resumo diz que faltou."""
+    contas = [_conta("0095", "PADARIA", cidade="BELO HORIZONTE")]
 
     resultado = _montar(
         app, monkeypatch, contas=contas, erro_auvo=RuntimeError("Auvo fora")
     )
 
-    assert resultado["resumo"]["com_coord"] == 1
     assert "Auvo fora" in resultado["resumo"]["erro_auvo"]
+    assert resultado["resumo"]["base"] == 1
 
 
 def test_auvo_nao_configurada_e_avisada_sem_derrubar(app, monkeypatch):
-    contas = [_conta("0095", "PADARIA", localizacao="-19.9191,-43.9386")]
-    monkeypatch.setattr(
-        svc, "SoftGuardClient", lambda *a, **k: FakeSoftGuard(contas)
-    )
+    monkeypatch.setattr(svc, "SoftGuardClient", lambda *a, **k: FakeSoftGuard([]))
     monkeypatch.setattr(svc, "credenciais_softguard", lambda config: None)
     monkeypatch.setattr(svc.auvo_service, "criar_cliente", lambda config: None)
 
-    resultado = svc.montar_rotas(config=app.config, raio_km=1.5)
+    resultado = svc.montar_catalogo(config=app.config)
 
-    assert resultado["resumo"]["com_coord"] == 1
     assert "não configurada" in resultado["resumo"]["erro_auvo"]
 
 
@@ -285,26 +361,21 @@ def test_power_fora_do_ar_aborta_com_erro_proprio(app, monkeypatch):
     monkeypatch.setattr(svc, "credenciais_softguard", lambda config: None)
     monkeypatch.setattr(svc.auvo_service, "criar_cliente", lambda config: FakeAuvo([]))
 
-    try:
-        svc.montar_rotas(config=app.config, raio_km=1.5)
-    except svc.RotasError as exc:
-        assert "portal fora" in str(exc)
-    else:  # pragma: no cover
-        raise AssertionError("deveria ter levantado RotasError")
+    with pytest.raises(svc.RotasError, match="portal fora"):
+        svc.montar_catalogo(config=app.config)
 
 
 def test_geracao_e_auditada_so_com_contadores(app, monkeypatch, admin_user):
     from app.models.audit import AuditLog
 
-    contas = [_conta("0095", "PADARIA SIGILOSA", localizacao="-19.9191,-43.9386")]
+    contas = [_conta("0095", "PADARIA SIGILOSA", cidade="BELO HORIZONTE")]
     monkeypatch.setattr(svc, "SoftGuardClient", lambda *a, **k: FakeSoftGuard(contas))
     monkeypatch.setattr(svc, "credenciais_softguard", lambda config: None)
     monkeypatch.setattr(svc.auvo_service, "criar_cliente", lambda config: FakeAuvo([]))
 
-    svc.montar_rotas(config=app.config, raio_km=1.5, user=admin_user)
+    svc.montar_catalogo(config=app.config, user=admin_user)
     db.session.commit()
 
-    entrada = AuditLog.query.filter_by(action="rotas_geradas").one()
+    entrada = AuditLog.query.filter_by(action="rotas_catalogo_gerado").one()
     assert len(entrada.action) <= 48
-    assert entrada.details == {"base": 1, "com_coord": 1, "clusters": 1, "raio_km": 1.5}
     assert "PADARIA SIGILOSA" not in str(entrada.details)

@@ -137,12 +137,6 @@ DEFAULTS: dict[str, str] = {
     "horario_lote_simulacao": "true",
     "horario_lote_delta_min": "60",
     "horario_lote_pausa_segundos": "0",
-    # --- Rotas de visita preventiva ---
-    # Raio do agrupamento, em km. 1,5 foi o validado com a base real (106
-    # clientes base -> 35 rotas); é configurável porque o raio certo
-    # depende de quantas visitas cabem num dia, e isso quem sabe é quem
-    # agenda.
-    "rotas_raio_km": "1.5",
     # --- Auditoria de Horários ---
     # A varredura é uma consulta por conta, em toda a base. 0 = sem pausa;
     # subir só se o portal reclamar do ritmo.
@@ -675,10 +669,3 @@ def get_horario_lote_delta_min() -> int:
 
 def get_horario_lote_pausa_segundos() -> float:
     return float(get("horario_lote_pausa_segundos"))
-
-
-# --- Rotas de visita preventiva ---
-
-
-def get_rotas_raio_km() -> float:
-    return float(get("rotas_raio_km"))
