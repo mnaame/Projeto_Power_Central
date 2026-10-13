@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.build_info import info_build
 from app.extensions import db, login_manager
 from app.models.user import User
 
@@ -19,6 +20,13 @@ def register_context(app) -> None:
         # Checado a cada request: basta salvar o arquivo da logo em
         # app/web/static/img/logo.png que ela aparece, sem reiniciar.
         return {"logo_disponivel": logo_path.exists()}
+
+    @app.context_processor
+    def inject_build():
+        # A cada request de propósito: o commit no disco muda no `git
+        # pull`, e é justamente a diferença entre o disco e o processo que
+        # precisa aparecer na hora. Ver `app/build_info.py`.
+        return {"build": info_build()}
 
 
 def register_blueprints(app) -> None:

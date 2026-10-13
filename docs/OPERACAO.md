@@ -981,6 +981,28 @@ manhã de diagnóstico em cima de código que nem estava em execução.
 Se só quiser recarregar o código, sem migração nem dependência nova,
 `Restart-Service PowerCentral` basta.
 
+### Como saber qual código está no ar
+
+O **rodapé de todas as telas** mostra o commit em execução e desde quando
+o processo está de pé:
+
+```
+Power Central · uso interno — Novo Millenium · código 347b388 (claude/…) · no ar desde 13/10/2026 14:25
+```
+
+E se o commit no disco for mais novo que o processo — ou seja, `git pull`
+feito e restart esquecido — aparece uma faixa amarela no topo de todas as
+páginas dizendo exatamente isso, com a hora de cada um dos dois.
+
+Isso existe porque "o pull foi feito" e "o processo carregou o código
+novo" são indistinguíveis de fora: nos dois casos a tela mostra o
+comportamento antigo, e o passo seguinte (errado) é procurar outro bug.
+Já aconteceu três vezes neste sistema. Agora a tela responde.
+
+Antes de abrir um diagnóstico de "a correção não funcionou", **confira o
+rodapé**: se o commit não é o que você acabou de puxar, não há bug nenhum
+a investigar — há um restart a dar.
+
 ## 8. Troubleshooting
 
 **O painel não abre no navegador**

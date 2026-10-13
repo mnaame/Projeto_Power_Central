@@ -166,6 +166,20 @@
 
     <div class="app-content">
       <main class="app-main">
+        {# O `git pull` troca os arquivos; o processo só troca de código no
+           restart. Sem este aviso as duas situações são idênticas de
+           fora, e já custaram três rodadas de diagnóstico atrás de bugs
+           que estavam corrigidos no disco. #}
+        {% if build.desatualizado %}
+        <div class="banner banner-warning" role="status">
+          <strong>O serviço está rodando código antigo.</strong>
+          O commit <code>{{ build.commit }}</code> chegou ao disco em
+          {{ build.atualizado_em|data_local }}, mas este processo subiu antes, em
+          {{ build.iniciado_em|data_local }}. Rode <code>Restart-Service PowerCentral</code>
+          — até lá, a tela mostra o comportamento da versão anterior.
+        </div>
+        {% endif %}
+
         {% with mensagens = get_flashed_messages(with_categories=true) %}
           {% if mensagens %}
             {% for categoria, mensagem in mensagens %}
@@ -179,6 +193,10 @@
 
       <footer class="app-footer">
         Power Central · uso interno — Novo Millenium
+        {% if build.commit %}
+        · código <code>{{ build.commit }}</code>{% if build.branch %} ({{ build.branch }}){% endif %}
+        · no ar desde {{ build.iniciado_em|data_local }}
+        {% endif %}
       </footer>
     </div>
   </div>
