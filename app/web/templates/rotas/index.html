@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Rotas de Visita{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title">
+    <h2>Rotas de Visita Preventiva</h2>
+    {% if resultado %}
+    <a class="btn btn-ghost" href="{{ url_for('rotas.exportar') }}">Baixar Excel</a>
+    {% endif %}
+  </div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Agrupa os clientes <strong>base</strong> (fora Villefort, Super Nosso e
+    Apoio) por proximidade, para agendar as preventivas por região. Só
+    leitura — não altera nada na PowerCentral nem na Auvo.
+  </p>
+
+  <form method="post" action="{{ url_for('rotas.gerar') }}" class="card"
+        style="display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: flex-end;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field" style="margin-bottom: 0;">
+      <label for="raio_km">Raio do agrupamento (km)</label>
+      <input id="raio_km" type="number" name="raio_km" step="0.1" min="0.1"
+             value="{{ resultado.resumo.raio_km if resultado else raio_km }}" style="width: 120px;">
+    </div>
+    <button type="submit" class="btn btn-primary">Gerar rotas</button>
+    <span class="muted">
+      Raio maior = menos rotas, cada uma mais espalhada. Pode gerar de novo
+      quantas vezes quiser.
+    </span>
+  </form>
+</div>
+
+{% if not resultado %}
+<div class="section">
+  <div class="card empty-state">
+    <h3>Nenhuma rota gerada ainda</h3>
+    <p class="muted">Clique em "Gerar rotas" — consulta a PowerCentral e a Auvo.</p>
+  </div>
+</div>
+{% else %}
+<div class="section">
+  <div class="stat-grid">
+    <div class="stat-tile">
+      <div class="stat-tile-label">Rotas</div>
+      <div class="stat-tile-value">{{ resultado.resumo.clusters }}</div>
+      <div class="stat-tile-hint">raio de {{ resultado.resumo.raio_km }} km</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Clientes base</div>
+      <div class="stat-tile-value">{{ resultado.resumo.base }}</div>
+      <div class="stat-tile-hint">{{ resultado.resumo.com_coord }} com coordenada</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Sem coordenada</div>
+      <div class="stat-tile-value {{ 'is-critical' if resultado.resumo.sem_coord else 'is-ok' }}">
+        {{ resultado.resumo.sem_coord }}
+      </div>
+      <div class="stat-tile-hint">Fora das rotas até cadastrar</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Origem da coordenada</div>
+      <div class="stat-tile-value" style="font-size: 1.1rem;">
+        {{ resultado.resumo.de_auvo }} Auvo · {{ resultado.resumo.da_power }} Power
+      </div>
+      <div class="stat-tile-hint">Auvo é a fonte preferida</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Mapa</h2></div>
+  <div class="card" style="padding: 0; overflow: hidden;">
+    <div id="mapa-rotas" style="height: 540px;"
+         data-rotas="{{ resultado.rotas|tojson|forceescape }}"></div>
+  </div>
+  <p class="muted" style="margin-top: var(--space-2);">
+    Cada cor é uma rota; o número no marcador é a ordem de visita sugerida.
+    Clique para ver conta, cliente e cidade.
+  </p>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Rotas</h2></div>
+  {% for rota in resultado.rotas %}
+  <details class="card" style="margin-bottom: var(--space-3);" {{ 'open' if loop.first }}>
+    <summary style="cursor: pointer;">
+      <strong>Rota {{ rota.indice }}</strong> — {{ rota.tamanho }} cliente(s)
+      {% if rota.extensao_km %}· {{ rota.extensao_km }} km de percurso{% endif %}
+      <span class="muted">{{ rota.cidades }}</span>
+    </summary>
+    <div class="table-wrap" style="margin-top: var(--space-3);">
+      <table>
+        <thead>
+          <tr><th>Ordem</th><th>Conta</th><th>Cliente</th><th>Cidade</th><th>Coordenada</th><th>Fonte</th></tr>
+        </thead>
+        <tbody>
+          {% for ponto in rota.pontos %}
+          <tr>
+            <td class="is-numeric">{{ ponto.ordem }}</td>
+            <td class="is-numeric">{{ ponto.conta }}</td>
+            <td>{{ ponto.nome }}</td>
+            <td>{{ ponto.cidade or '—' }}</td>
+            <td class="is-numeric">{{ '%.5f'|format(ponto.lat) }}, {{ '%.5f'|format(ponto.lon) }}</td>
+            <td><span class="chip chip-neutral">{{ ponto.fonte }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% endfor %}
+</div>
+
+{% if resultado.sem_coord %}
+<div class="section">
+  <div class="section-title"><h2>Sem coordenada — cadastrar na Auvo</h2></div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Estes clientes <strong>não entram em rota nenhuma</strong> enquanto não
+    tiverem lat/long. É a lista de trabalho do cadastro, e sai no Excel.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Conta</th><th>Cliente</th><th>Cidade</th><th>Motivo</th></tr></thead>
+      <tbody>
+        {% for item in resultado.sem_coord %}
+        <tr>
+          <td class="is-numeric">{{ item.conta }}</td>
+          <td>{{ item.nome }}</td>
+          <td>{{ item.cidade or '—' }}</td>
+          <td class="muted">{{ item.motivo }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted" style="margin-top: var(--space-3);">{{ resultado.sem_coord|length }} cliente(s).</p>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if resultado %}
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ url_for('static', filename='js/mapa_rotas.js') }}"></script>
+{% endif %}
+{% endblock %}

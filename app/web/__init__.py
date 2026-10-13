@@ -32,6 +32,7 @@ def register_blueprints(app) -> None:
     from app.web.dashboard.routes import bp as dashboard_bp
     from app.web.horario_lote.routes import bp as horario_lote_bp
     from app.web.reports.routes import bp as reports_bp
+    from app.web.rotas.routes import bp as rotas_bp
     from app.web.tarefas.routes import bp as tarefas_bp
     from app.web.tecnico.routes import bp as tecnico_bp
 
@@ -47,3 +48,4 @@ def register_blueprints(app) -> None:
     app.register_blueprint(tarefas_bp)
     app.register_blueprint(auditoria_horarios_bp)
     app.register_blueprint(horario_lote_bp)
+    app.register_blueprint(rotas_bp)

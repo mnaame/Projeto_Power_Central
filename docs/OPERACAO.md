@@ -899,6 +899,41 @@ alteração fica na auditoria com o antes e o depois.
 
 Detalhe técnico em [`HORARIO_LOTE.md`](HORARIO_LOTE.md).
 
+### 5.2.11 Rotas de Visita Preventiva
+
+Agrupa os clientes **base** por proximidade no mapa, para você agendar as
+preventivas por região em vez de atravessar a cidade entre uma visita e
+outra. Só leitura — não altera nada na PowerCentral nem na Auvo.
+
+**Como usar:** aba **Rotas de Visita** → ajuste o raio se quiser (padrão
+**1,5 km**) → "Gerar rotas". Sai um resumo, o mapa com as rotas coloridas,
+a lista de cada rota na ordem de visita, e o botão de Excel.
+
+- **Raio maior** = menos rotas, cada uma mais espalhada. Pode gerar quantas
+  vezes quiser até achar o tamanho que cabe no seu dia.
+- **O número no marcador** é a ordem de visita sugerida; a linha liga os
+  pontos nessa ordem (é referência, não trajeto de rua).
+- **Base** aqui significa: fora Villefort, Super Nosso e Apoio — e fora as
+  contas internas de teste.
+
+**A lista "sem coordenada" é a parte importante.** Cliente sem lat/long
+cadastrado **não entra em rota nenhuma** — ele simplesmente não aparece no
+mapa. A tela e o Excel mostram quem são, para a equipe completar o cadastro
+na Auvo. Quanto menor essa lista, melhor a rota.
+
+A coordenada vem da **Auvo** quando existe (é o app de campo, mais
+confiável) e, na falta, da "Localização da conta" da PowerCentral — esta
+última só quando aponta para a região; algumas vêm erradas, apontando para
+outro estado, e seriam piores que nenhuma: puxariam a rota inteira para o
+lugar errado.
+
+O mapa funciona sem internet? Parcialmente: a biblioteca do mapa está
+instalada junto com o sistema, mas as imagens do mapa (ruas) vêm da
+internet. Sem conexão o fundo fica cinza, mas as tabelas e o Excel
+continuam normais.
+
+Detalhe técnico em [`ROTAS_VISITA.md`](ROTAS_VISITA.md).
+
 ## 6. Backup
 
 O banco de dados inteiro é **um único arquivo**:

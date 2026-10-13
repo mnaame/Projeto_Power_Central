@@ -67,6 +67,11 @@ COLUNAS_BI_CRONICOS = (
     "ÚLTIMA CLASSIFICAÇÃO",
     "DISPAROS/DIA ATUAL",
 )
+COLUNAS_ROTAS_CLIENTES = (
+    "ROTA", "ORDEM", "CONTA", "CLIENTE", "CIDADE", "LATITUDE", "LONGITUDE", "FONTE",
+)
+COLUNAS_ROTAS_RESUMO = ("ROTA", "CLIENTES", "CIDADES", "EXTENSÃO (KM)")
+COLUNAS_ROTAS_SEM_COORD = ("CONTA", "CLIENTE", "CIDADE", "MOTIVO")
 COLUNAS_HORARIO_BACKUP = (
     "CONTA", "NOME", "ID HORARIO", "DIA ABERTURA", "ABERTURA",
     "DIA FECHAMENTO", "FECHAMENTO (ANTES)",
@@ -122,6 +127,16 @@ _LARGURAS = {
     "ANTES": 10,
     "DEPOIS": 10,
     "SITUAÇÃO": 40,
+    "ROTA": 8,
+    "ORDEM": 8,
+    "CLIENTE": 40,
+    "CIDADE": 22,
+    "LATITUDE": 14,
+    "LONGITUDE": 14,
+    "FONTE": 14,
+    "CLIENTES": 10,
+    "CIDADES": 40,
+    "EXTENSÃO (KM)": 16,
 }
 _COLUNAS_COM_QUEBRA = {
     "SITUAÇÃO",
@@ -285,6 +300,29 @@ def gerar_xlsx_horario_lote(
     wb.remove(wb.active)
     _montar_aba(wb.create_sheet("APLICAR"), COLUNAS_HORARIO_LOTE, aplicar)
     _montar_aba(wb.create_sheet("MANUAL (vira 00h)"), COLUNAS_HORARIO_LOTE, manual)
+
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(caminho)
+
+
+def gerar_xlsx_rotas(
+    caminho: Path,
+    *,
+    clientes: Sequence[Sequence[object]],
+    resumo: Sequence[Sequence[object]],
+    sem_coordenada: Sequence[Sequence[object]],
+) -> None:
+    """Três abas: os clientes na ordem de visita, um resumo por rota e os
+    que ficaram de fora.
+
+    "Sem coordenada" não é sobra — é a lista de trabalho do cadastro.
+    Enquanto um cliente estiver nela, ele não entra em rota nenhuma, e
+    quem monta a agenda precisa ver isso."""
+    wb = Workbook()
+    wb.remove(wb.active)
+    _montar_aba(wb.create_sheet("Clientes por rota"), COLUNAS_ROTAS_CLIENTES, clientes)
+    _montar_aba(wb.create_sheet("Resumo por rota"), COLUNAS_ROTAS_RESUMO, resumo)
+    _montar_aba(wb.create_sheet("Sem coordenada"), COLUNAS_ROTAS_SEM_COORD, sem_coordenada)
 
     caminho.parent.mkdir(parents=True, exist_ok=True)
     wb.save(caminho)
