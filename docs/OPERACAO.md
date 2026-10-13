@@ -859,61 +859,7 @@ sozinho.
 Detalhe técnico e validação contra o portal em
 [`AUDITORIA_HORARIOS.md`](AUDITORIA_HORARIOS.md).
 
-### 5.2.10 Ajuste de Horário em Lote (só admin)
-
-Soma um tempo (padrão **+1h**) ao horário de **fechamento** de todas as
-contas de uma vez, sem abrir conta por conta.
-
-> ⚠️ **É a única parte do sistema que ESCREVE na PowerCentral**, e escreve
-> em todas as contas. Tudo o mais só lê. Por isso ela vem com simulação
-> ligada e pede confirmação — leia os quatro passos abaixo antes de usar.
-
-**O caminho seguro, na ordem:**
-
-1. **Preparar** — lê todas as contas e monta a lista do que mudaria. Não
-   grava nada. Leva alguns minutos (uma consulta por conta).
-2. **Baixar backup** — a planilha com o horário de **antes**. É o seu
-   desfazer; guarde antes de seguir.
-3. **Testar em 1 conta** — digite a conta no campo, marque **"alterar de
-   verdade"** e aplique. Confira na plataforma se ficou como esperado.
-   Pode digitar `0118` ou `118` — tanto faz.
-4. **Aplicar no lote** — só depois que o teste conferiu. Deixe o campo da
-   conta **em branco**, marque **"alterar de verdade"** e digite
-   `APLICAR` na confirmação. São os dois atos que liberam o lote.
-
-**Duas listas saem da preparação**, as duas em Excel:
-
-- **Vão ser alteradas** — o que o sistema faz sozinho.
-- **Manual (vira 00h)** — as que, somando 1h, passariam da meia-noite. O
-  sistema **não** mexe nelas de propósito: mudar o fechamento para o dia
-  seguinte é decisão sobre a grade daquele cliente, não conta de somar.
-  Esta é a sua lista de trabalho para ajustar à mão.
-
-**Por padrão nada é gravado** — "aplicar" só mostra o que aconteceria, e
-as linhas continuam pendentes. Quem libera a escrita é a caixa **"alterar
-de verdade"**, logo acima do botão. Ela vale **só para aquela execução**:
-não existe modo que fica ligado e grava sem querer na próxima vez.
-
-O botão muda para "Alterar de verdade" assim que você marca, e a
-confirmação diz o alvo — "a conta 118" ou "O LOTE INTEIRO (755 linhas)".
-O backup (ANTES) continua sendo o seu desfazer.
-
-**Simular não gasta o lote.** Depois de uma simulação as linhas continuam
-pendentes e o contador continua mostrando quantas faltam — dá para
-simular quantas vezes quiser antes de soltar.
-
-**Se aparecer "Nenhuma linha pendente para a conta X"**, a conta não está
-na lista "Vão ser alteradas". Quase sempre ela caiu em **Manual (vira
-00h)** — o sistema não mexe nessas. Confira nas listas da própria tela.
-
-**Rodar duas vezes não soma duas horas.** Antes de gravar cada linha o
-sistema relê o valor atual: se já está no valor novo, pula; se virou outra
-coisa (alguém mexeu no meio), não toca e marca como divergente. Cada
-alteração fica na auditoria com o antes e o depois.
-
-Detalhe técnico em [`HORARIO_LOTE.md`](HORARIO_LOTE.md).
-
-### 5.2.11 Visitas por Bairro
+### 5.2.10 Visitas por Bairro
 
 Cataloga os clientes **base** por bairro, para você agendar as preventivas
 por região em vez de atravessar a cidade entre uma visita e outra. Só
@@ -955,6 +901,23 @@ essa lista, melhor o catálogo — e o conserto é preencher o endereço do
 cliente na Auvo.
 
 Detalhe técnico em [`ROTAS_VISITA.md`](ROTAS_VISITA.md).
+
+### 5.3 O que o sistema NÃO faz na PowerCentral
+
+**Nada é escrito na plataforma.** Todos os módulos só leem.
+
+Houve uma exceção, e ela acabou: o **Ajuste de Horário em Lote** somava
+1h ao fechamento de todas as contas. Ele cumpriu o serviço em 13/10/2026
+e foi **removido** — manter uma rota de escrita viva para uma operação
+que não se repete é risco sem contrapartida. Saiu a tela, saiu o código,
+e saiu junto o `atualizar_horario` do client, que era a única chamada de
+escrita existente.
+
+O **histórico do que ele alterou continua no banco** (tabelas
+`ajuste_horario_lotes` e `ajuste_horario_itens`): guarda o fechamento que
+cada conta tinha antes das 755 linhas alteradas. Nenhuma tela lê isso
+hoje; se precisar consultar, é direto no banco. Para refazer um ajuste em
+lote algum dia, o módulo inteiro está no histórico do git.
 
 ## 6. Backup
 

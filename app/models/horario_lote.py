@@ -1,3 +1,22 @@
+"""Histórico dos ajustes de horário em lote — **módulo aposentado**.
+
+O Ajuste de Horário em Lote foi removido em 13/10/2026, depois de
+cumprir o que tinha para fazer: somar 1h ao fechamento da base inteira.
+Era o único código do sistema que escrevia na PowerCentral, e manter uma
+rota de escrita viva para uma operação que não se repete é risco sem
+contrapartida — o `atualizar_horario` do client saiu junto.
+
+**Estas tabelas ficam de propósito.** Elas guardam o fechamento que cada
+conta tinha ANTES de ser alterada: é o registro de uma operação que mexeu
+em 755 linhas da base, e apagá-lo deixaria a planilha de backup baixada
+na época como única memória do que havia antes. Nada no sistema escreve
+ou lê aqui hoje; o conteúdo se consulta direto no banco, ou pela cópia
+`instance\\power_central.db`.
+
+Se o ajuste em lote voltar a ser necessário, o módulo inteiro está no
+histórico do git, no commit anterior à remoção.
+"""
+
 from app.extensions import db
 from app.models.types import TZDateTime
 from app.utils.time import utcnow

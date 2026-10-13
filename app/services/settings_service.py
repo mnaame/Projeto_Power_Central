@@ -129,14 +129,6 @@ DEFAULTS: dict[str, str] = {
     # tem o confirmado em export real. Para o catálogo completo da
     # plataforma, use scripts/importar_catalogo_codigos.py.
     "diag_descricoes": "",
-    # --- Ajuste de horário em lote (escreve na plataforma!) ---
-    # Simulação LIGADA por padrão: este é o único módulo que escreve no
-    # cadastro, e em TODAS as contas. Desligar é decisão explícita, feita
-    # por um admin que já conferiu a pré-visualização e o teste em uma
-    # conta. O padrão nunca pode ser "escrever".
-    "horario_lote_simulacao": "true",
-    "horario_lote_delta_min": "60",
-    "horario_lote_pausa_segundos": "0",
     # --- Auditoria de Horários ---
     # A varredura é uma consulta por conta, em toda a base. 0 = sem pausa;
     # subir só se o portal reclamar do ritmo.
@@ -650,22 +642,3 @@ def get_diag_codigos_todos() -> tuple[str, ...]:
         *get_diag_codigos_painel_tamper(),
     ]
     return tuple(dict.fromkeys(c.strip().upper() for c in codigos if c.strip()))
-
-
-# --- Ajuste de horário em lote ---
-
-
-def horario_lote_simulacao() -> bool:
-    """Qualquer valor que não seja exatamente "false" mantém a simulação.
-
-    O sentido do padrão é invertido de propósito em relação às outras
-    flags: aqui, na dúvida, NÃO escreve."""
-    return get("horario_lote_simulacao").strip().lower() != "false"
-
-
-def get_horario_lote_delta_min() -> int:
-    return int(get("horario_lote_delta_min"))
-
-
-def get_horario_lote_pausa_segundos() -> float:
-    return float(get("horario_lote_pausa_segundos"))

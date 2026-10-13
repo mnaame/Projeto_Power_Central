@@ -21,12 +21,6 @@ TIMELINE_PATH = "/Rest/search/EventoTimeLineFull"
 EXPORT_HISTORICO_PATH = "/handler/ExportReporteHistoricoExcel"
 ZONA_PATH = "/Rest/Zona/"
 HORARIO_PATH = "/rest/search/Horario"
-# Escrita do horário: PUT /Rest/Horario/<Id> (confirmado no HAR 08/10).
-HORARIO_UPDATE_PATH = "/Rest/Horario/"
-# Escrita é uma chamada curta, mas é a que não pode ficar pela metade por
-# impaciência: 60s dá folga sem prender a operação por minutos.
-TIMEOUT_ESCRITA_SEGUNDOS = 60
-
 # Uma conta tem poucas faixas de horário (abertura/fechamento por dia da
 # semana); 50 cobre com folga sem pedir página grande à toa.
 PAGE_SIZE_HORARIOS = 50
@@ -304,27 +298,6 @@ class SoftGuardClient:
             {"filter": json.dumps(filtro)},
             page_size=page_size,
         )
-
-    def atualizar_horario(self, corpo: dict[str, Any]) -> dict[str, Any]:
-        """**A única chamada de ESCRITA do sistema.** `PUT /Rest/Horario/<Id>`
-        com a linha inteira; a resposta 200 ecoa o objeto salvo.
-
-        Quem monta o corpo é `domain/horario_lote.corpo_do_put`, a partir
-        da linha recém-lida — aqui não se decide nada, só se envia. Erro
-        vira `SoftGuardError` para quem chama tratar linha a linha: numa
-        operação que percorre a base inteira, uma linha que falha não pode
-        derrubar as outras."""
-        identificador = corpo.get("Id")
-        if identificador in (None, ""):
-            raise SoftGuardError("Horário sem Id — não há o que atualizar.")
-
-        resposta = self._request_reautenticando(
-            "PUT",
-            urljoin(self._credentials.base_url, f"{HORARIO_UPDATE_PATH}{identificador}"),
-            json=corpo,
-            timeout=TIMEOUT_ESCRITA_SEGUNDOS,
-        )
-        return self._json(resposta)
 
     def exportar_historico_html(
         self,
