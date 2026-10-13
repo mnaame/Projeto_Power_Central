@@ -106,6 +106,13 @@
           </svg>
           Central do Cliente
         </a>
+        <a class="sidebar-link {{ 'is-active' if request.path.startswith('/horario-lote') }}" href="{{ url_for('horario_lote.index') }}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M12 7v5l3 2M16 3l2 2"></path>
+          </svg>
+          Ajuste de Horário
+        </a>
         <a class="sidebar-link {{ 'is-active' if request.endpoint == 'admin.usuarios' }}" href="{{ url_for('admin.usuarios') }}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="9" cy="7" r="4"></circle><path d="M2 21v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2"></path>

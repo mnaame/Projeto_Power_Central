@@ -67,6 +67,13 @@ COLUNAS_BI_CRONICOS = (
     "ÚLTIMA CLASSIFICAÇÃO",
     "DISPAROS/DIA ATUAL",
 )
+COLUNAS_HORARIO_BACKUP = (
+    "CONTA", "NOME", "ID HORARIO", "DIA ABERTURA", "ABERTURA",
+    "DIA FECHAMENTO", "FECHAMENTO (ANTES)",
+)
+COLUNAS_HORARIO_LOTE = (
+    "CONTA", "NOME", "ID HORARIO", "DIA FECHAMENTO", "ANTES", "DEPOIS", "SITUAÇÃO",
+)
 COLUNAS_HORARIOS_SEM = ("CONTA", "NOME")
 COLUNAS_HORARIOS_COM = ("CONTA", "NOME", "RESUMO")
 
@@ -107,6 +114,14 @@ _LARGURAS = {
     "STATUS": 14,
     "NOME": 40,
     "RESUMO": 26,
+    "ID HORARIO": 12,
+    "DIA ABERTURA": 14,
+    "ABERTURA": 12,
+    "DIA FECHAMENTO": 16,
+    "FECHAMENTO (ANTES)": 20,
+    "ANTES": 10,
+    "DEPOIS": 10,
+    "SITUAÇÃO": 40,
 }
 _COLUNAS_COM_QUEBRA = {
     "SITUAÇÃO",
@@ -236,6 +251,40 @@ def gerar_xlsx_auditoria_horarios(
     wb.remove(wb.active)
     _montar_aba(wb.create_sheet("SEM horário"), COLUNAS_HORARIOS_SEM, sem)
     _montar_aba(wb.create_sheet("COM horário"), COLUNAS_HORARIOS_COM, com)
+
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(caminho)
+
+
+def gerar_xlsx_horario_backup(caminho: Path, *, linhas: Sequence[Sequence[object]]) -> None:
+    """Estado ANTES de qualquer escrita — é o desfazer do ajuste em lote.
+
+    Aba única e crua de propósito: quem precisar restaurar vai ler isto
+    sob pressão, e nessa hora uma planilha simples vale mais que uma
+    bonita."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "ANTES"
+    _montar_aba(ws, COLUNAS_HORARIO_BACKUP, linhas)
+
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(caminho)
+
+
+def gerar_xlsx_horario_lote(
+    caminho: Path,
+    *,
+    aplicar: Sequence[Sequence[object]],
+    manual: Sequence[Sequence[object]],
+) -> None:
+    """Duas abas: o que o sistema altera e o que fica para a mão.
+
+    "MANUAL (vira 00h)" é a lista de trabalho de quem for ajustar conta a
+    conta — por isso sai no mesmo arquivo, e não escondida numa tela."""
+    wb = Workbook()
+    wb.remove(wb.active)
+    _montar_aba(wb.create_sheet("APLICAR"), COLUNAS_HORARIO_LOTE, aplicar)
+    _montar_aba(wb.create_sheet("MANUAL (vira 00h)"), COLUNAS_HORARIO_LOTE, manual)
 
     caminho.parent.mkdir(parents=True, exist_ok=True)
     wb.save(caminho)

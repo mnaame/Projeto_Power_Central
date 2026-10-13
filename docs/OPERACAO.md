@@ -859,6 +859,46 @@ sozinho.
 Detalhe técnico e validação contra o portal em
 [`AUDITORIA_HORARIOS.md`](AUDITORIA_HORARIOS.md).
 
+### 5.2.10 Ajuste de Horário em Lote (só admin)
+
+Soma um tempo (padrão **+1h**) ao horário de **fechamento** de todas as
+contas de uma vez, sem abrir conta por conta.
+
+> ⚠️ **É a única parte do sistema que ESCREVE na PowerCentral**, e escreve
+> em todas as contas. Tudo o mais só lê. Por isso ela vem com simulação
+> ligada e pede confirmação — leia os quatro passos abaixo antes de usar.
+
+**O caminho seguro, na ordem:**
+
+1. **Preparar** — lê todas as contas e monta a lista do que mudaria. Não
+   grava nada. Leva alguns minutos (uma consulta por conta).
+2. **Baixar backup** — a planilha com o horário de **antes**. É o seu
+   desfazer; guarde antes de seguir.
+3. **Testar em 1 conta** — digite uma conta no campo e aplique. Confira na
+   plataforma se ficou como esperado.
+4. **Aplicar no lote** — só depois que o teste conferiu. Exige digitar
+   `APLICAR` na confirmação.
+
+**Duas listas saem da preparação**, as duas em Excel:
+
+- **Vão ser alteradas** — o que o sistema faz sozinho.
+- **Manual (vira 00h)** — as que, somando 1h, passariam da meia-noite. O
+  sistema **não** mexe nelas de propósito: mudar o fechamento para o dia
+  seguinte é decisão sobre a grade daquele cliente, não conta de somar.
+  Esta é a sua lista de trabalho para ajustar à mão.
+
+**Enquanto a simulação estiver ligada** (padrão), "aplicar" só mostra o
+que aconteceria. Para valer, um admin desliga em Configurações
+(`horario_lote_simulacao` = `false`). A tela avisa, em vermelho, quando
+está no modo que grava de verdade.
+
+**Rodar duas vezes não soma duas horas.** Antes de gravar cada linha o
+sistema relê o valor atual: se já está no valor novo, pula; se virou outra
+coisa (alguém mexeu no meio), não toca e marca como divergente. Cada
+alteração fica na auditoria com o antes e o depois.
+
+Detalhe técnico em [`HORARIO_LOTE.md`](HORARIO_LOTE.md).
+
 ## 6. Backup
 
 O banco de dados inteiro é **um único arquivo**:

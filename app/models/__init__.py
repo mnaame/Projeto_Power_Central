@@ -11,6 +11,7 @@ from app.models.cofre import Segredo
 from app.models.central_cliente import CentralClienteLote, CentralClienteLink
 from app.models.tarefa import Tarefa
 from app.models.horarios import AuditoriaHorarioSnapshot
+from app.models.horario_lote import AjusteHorarioItem, AjusteHorarioLote
 
 __all__ = [
     "User",
@@ -32,4 +33,6 @@ __all__ = [
     "CentralClienteLink",
     "Tarefa",
     "AuditoriaHorarioSnapshot",
+    "AjusteHorarioLote",
+    "AjusteHorarioItem",
 ]

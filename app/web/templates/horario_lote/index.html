@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}Ajuste de Horário em Lote{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title"><h2>Ajuste de Horário em Lote</h2></div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Soma <strong>{{ delta_min }} min</strong> ao horário de
+    <strong>fechamento</strong> de todas as contas, sem abrir conta por
+    conta. A abertura, os dias e tudo mais ficam intactos.
+  </p>
+
+  {% if simulacao %}
+  <div class="banner banner-info" role="status">
+    <span>Modo <strong>simulação</strong> — "aplicar" mostra o que
+    aconteceria e <strong>não grava nada</strong> na plataforma. Desligar
+    fica em Configurações (<code>horario_lote_simulacao</code>).</span>
+  </div>
+  {% else %}
+  <div class="banner banner-critical" role="alert">
+    <span><strong>SIMULAÇÃO DESLIGADA — escrita real.</strong> "Aplicar"
+    altera o cadastro de verdade, em todas as contas da lista. Baixe o
+    backup e teste em uma conta antes.</span>
+  </div>
+  {% endif %}
+
+  <div class="card" style="max-width: 820px;">
+    <h3 style="margin-top: 0;">Como fazer com segurança</h3>
+    <ol class="muted" style="margin: 0; padding-left: var(--space-5);">
+      <li><strong>Preparar</strong> — lê todas as contas e monta o de→para. Não grava nada.</li>
+      <li><strong>Baixar backup</strong> — a planilha com o estado ANTES. É o seu desfazer.</li>
+      <li><strong>Testar em 1 conta</strong> — aplica só nela e você confere na plataforma.</li>
+      <li><strong>Aplicar no lote</strong> — só depois que o teste conferiu.</li>
+    </ol>
+    <form method="post" action="{{ url_for('horario_lote.preparar') }}" style="margin-top: var(--space-4);">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-primary">Preparar (só leitura)</button>
+      <span class="muted" style="margin-left: var(--space-2);">
+        Consulta o portal uma vez por conta — leva alguns minutos.
+      </span>
+    </form>
+  </div>
+</div>
+
+{% if not lote %}
+<div class="section">
+  <div class="card empty-state">
+    <h3>Nenhum lote preparado</h3>
+    <p class="muted">Clique em "Preparar" para montar o de→para.</p>
+  </div>
+</div>
+{% else %}
+<div class="section">
+  <div class="section-title">
+    <h2>Lote #{{ lote.id }}</h2>
+    <div style="display: flex; gap: var(--space-2);">
+      <a class="btn btn-primary" href="{{ url_for('horario_lote.backup', lote_id=lote.id) }}">Baixar backup (ANTES)</a>
+      <a class="btn btn-ghost" href="{{ url_for('horario_lote.exportar', lote_id=lote.id) }}">Baixar listas</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-tile">
+      <div class="stat-tile-label">Vão ser alteradas</div>
+      <div class="stat-tile-value">{{ resumo.pendente }}</div>
+      <div class="stat-tile-hint">+{{ lote.delta_min }} min no fechamento</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Manual (vira 00h)</div>
+      <div class="stat-tile-value {{ 'is-critical' if resumo.manual else '' }}">{{ resumo.manual }}</div>
+      <div class="stat-tile-hint">Ajustar à mão — baixe as listas</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Já aplicadas</div>
+      <div class="stat-tile-value">{{ resumo.aplicado + resumo.ja_aplicado }}</div>
+      <div class="stat-tile-hint">{{ resumo.divergente }} divergente(s) · {{ resumo.erro }} erro(s)</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Preparado em</div>
+      <div class="stat-tile-value" style="font-size: 1.1rem;">{{ lote.criado_em|data_local }}</div>
+      <div class="stat-tile-hint">{{ lote.contas_varridas }} conta(s) varrida(s)</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Executar</h2></div>
+  <form method="post" action="{{ url_for('horario_lote.aplicar', lote_id=lote.id) }}" class="card"
+        style="max-width: 820px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="field">
+      <label for="apenas_conta">Testar em uma conta (recomendado antes do lote)</label>
+      <input id="apenas_conta" type="text" name="apenas_conta" placeholder="ex.: 118">
+      <p class="muted" style="margin-top: var(--space-1);">
+        Preenchido, só essa conta é alterada. Confira o resultado na
+        plataforma antes de soltar no lote inteiro.
+      </p>
+    </div>
+
+    <div class="field">
+      <label for="confirmacao">Confirmação (só para o lote inteiro)</label>
+      <input id="confirmacao" type="text" name="confirmacao" placeholder="digite {{ confirmacao }}"
+             autocomplete="off">
+      <p class="muted" style="margin-top: var(--space-1);">
+        Deixando a conta em branco, isto altera <strong>{{ resumo.pendente }}</strong>
+        linha(s) de horário. Digite <strong>{{ confirmacao }}</strong> para liberar.
+      </p>
+    </div>
+
+    <button type="submit" class="btn {{ 'btn-ghost' if simulacao else 'btn-primary' }}"
+            onclick="return confirm('{{ 'Simular' if simulacao else 'ALTERAR DE VERDADE' }} o ajuste de horário?');">
+      {{ 'Simular aplicação' if simulacao else 'Aplicar' }}
+    </button>
+  </form>
+</div>
+
+{% macro tabela(itens, vazio) %}
+  {% if itens %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Conta</th><th>Nome</th><th>Dia</th><th>De → Para</th><th>Situação</th></tr></thead>
+      <tbody>
+        {% for item in itens %}
+        <tr>
+          <td class="is-numeric">{{ item.conta }}</td>
+          <td>{{ item.nome }}</td>
+          <td>{{ item.dia_fechamento }}</td>
+          <td class="is-numeric">{{ item.antes }}{% if item.depois %} → {{ item.depois }}{% endif %}</td>
+          <td>
+            <span class="chip {{ 'chip-critical' if item.status in ('erro', 'divergente') else 'chip-neutral' }}">{{ item.status }}</span>
+            {% if item.erro_mensagem %}<div class="account-name">{{ item.erro_mensagem }}</div>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted" style="margin-top: var(--space-3);">{{ itens|length }} linha(s).</p>
+  {% else %}
+  <div class="card empty-state"><p class="muted">{{ vazio }}</p></div>
+  {% endif %}
+{% endmacro %}
+
+<div class="section">
+  <div class="section-title"><h2>Vão ser alteradas</h2></div>
+  {{ tabela(aplicar, "Nenhuma linha a alterar.") }}
+</div>
+
+<div class="section">
+  <div class="section-title"><h2>Manual — vira 00h</h2></div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Somando os {{ lote.delta_min }} min, estas passariam da meia-noite. O
+    sistema <strong>não</strong> mexe nelas: mudar o dia do fechamento é
+    decisão sobre a grade do cliente, não conta de somar. Esta é a sua
+    lista de trabalho.
+  </p>
+  {{ tabela(manual, "Nenhuma linha vira 00h.") }}
+</div>
+
+{% if invalidos %}
+<div class="section">
+  <div class="section-title"><h2>Horário ilegível</h2></div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    O valor cadastrado não é uma hora reconhecível. Não é alterado — não
+    se escreve por cima do que não se entende.
+  </p>
+  {{ tabela(invalidos, "") }}
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}
