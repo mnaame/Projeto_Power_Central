@@ -24,6 +24,7 @@ tivesse coordenada.
 from __future__ import annotations
 
 import math
+import re
 import unicodedata
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
@@ -134,14 +135,74 @@ def coordenada_valida(lat: object, lon: object) -> tuple[float, float] | None:
     return latitude, longitude
 
 
+# Dois números decimais — e só dois. Casa tanto "-19.91,-43.94" (ponto
+# decimal, vírgula separando) quanto "-19,91,-43,94" (vírgula nos dois
+# papéis), que o `partition(",")` da primeira versão quebrava.
+_RE_PAR_DECIMAL = re.compile(r"-?\d+[.,]\d+")
+
+
 def coordenada_de_texto(bruto: object) -> tuple[float, float] | None:
-    """Lê o formato `"lat,long"` da "Localização da conta" da
-    PowerCentral, já validado pela região."""
-    texto = str(bruto or "").strip()
-    if "," not in texto:
+    """Lê um par "lat,long" de um texto, já validado pela região."""
+    numeros = _RE_PAR_DECIMAL.findall(str(bruto or ""))
+    if len(numeros) != 2:
         return None
-    lat, _, lon = texto.partition(",")
-    return coordenada_valida(lat, lon)
+    return coordenada_valida(numeros[0], numeros[1])
+
+
+# Nomes de campo tentados quando a coordenada vem em DOIS campos.
+CHAVES_LAT = ("latitude", "lat")
+CHAVES_LON = ("longitude", "lng", "lon")
+
+
+def coordenada_do_registro(registro) -> tuple[float, float] | None:
+    """Acha a coordenada em qualquer registro, **sem depender do nome do
+    campo**.
+
+    Isto existe porque chutar nome de campo já custou caro: a primeira
+    versão procurava `cue_clocalizacion` na conta da PowerCentral, o campo
+    tem outro nome, e o resultado foi 105 contas sem coordenada — zero,
+    sem nenhum erro aparecendo. Um par de coordenadas se identifica
+    sozinho (dois decimais, ou um par lat/lon), então é por aí que ele é
+    procurado, em vez de por nome.
+
+    Ordem: primeiro os campos com nome de latitude/longitude, depois
+    qualquer campo de texto que contenha um par "lat,long", e por fim os
+    sub-registros (a Auvo aninha endereço). A caixa da região é validada
+    em todos os caminhos — é ela que impede um par de números qualquer
+    (um valor monetário, um CEP) de passar por coordenada."""
+    if not isinstance(registro, dict):
+        return None
+
+    normalizados = {str(k).strip().lower(): v for k, v in registro.items()}
+    for chave_lat in CHAVES_LAT:
+        if chave_lat not in normalizados:
+            continue
+        for chave_lon in CHAVES_LON:
+            if chave_lon in normalizados:
+                achado = coordenada_valida(
+                    normalizados[chave_lat], normalizados[chave_lon]
+                )
+                if achado is not None:
+                    return achado
+
+    for valor in registro.values():
+        if isinstance(valor, str):
+            achado = coordenada_de_texto(valor)
+            if achado is not None:
+                return achado
+
+    for valor in registro.values():
+        achado = None
+        if isinstance(valor, dict):
+            achado = coordenada_do_registro(valor)
+        elif isinstance(valor, (list, tuple)):
+            for item in valor:
+                achado = coordenada_do_registro(item)
+                if achado is not None:
+                    break
+        if achado is not None:
+            return achado
+    return None
 
 
 def distancia_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -159,11 +220,18 @@ def distancia_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def centroide(pontos: Sequence[PontoCliente]) -> tuple[float, float]:
+    """Média das coordenadas, somada com `math.fsum`.
+
+    O `fsum` não é preciosismo: soma de float comum **depende da ordem**
+    das parcelas, então a mesma rota com os registros chegando em outra
+    ordem dava um centroide diferente nos últimos bits — o bastante para
+    trocar o ponto de partida da visita num empate apertado. O `fsum` é
+    exatamente arredondado e, portanto, independente da ordem."""
     if not pontos:
         return (0.0, 0.0)
     return (
-        sum(p.lat for p in pontos) / len(pontos),
-        sum(p.lon for p in pontos) / len(pontos),
+        math.fsum(p.lat for p in pontos) / len(pontos),
+        math.fsum(p.lon for p in pontos) / len(pontos),
     )
 
 
@@ -209,7 +277,12 @@ def ordenar_visita(pontos: Sequence[PontoCliente]) -> list[PontoCliente]:
     o objetivo é evitar o zigue-zague óbvio de uma lista em ordem
     alfabética. Quem dirige ajusta o resto."""
     restantes = list(pontos)
-    if len(restantes) <= 2:
+    # Era `<= 2`, devolvendo a dupla na ordem em que ela chegou — e com a
+    # base real isso fez 4 rotas de dois clientes saírem invertidas
+    # dependendo da ordem da plataforma. Dois pontos passam pelo mesmo
+    # caminho de todos os outros: equidistantes do centroide, o desempate
+    # é a conta.
+    if len(restantes) <= 1:
         return restantes
 
     # Empate de distância é comum (clientes equidistantes numa avenida) e

@@ -23,14 +23,21 @@ def _conta(numero, nome, *, cidade="BELO HORIZONTE", localizacao=None):
         "city": cidade,
     }
     if localizacao is not None:
-        linha["cue_clocalizacion"] = localizacao
+        # Nome de campo deliberadamente improvável: a primeira versão
+        # procurava a "Localização da conta" por um nome chutado
+        # (`cue_clocalizacion`), errou, e devolveu 105 contas sem
+        # coordenada sem um único erro na tela. A detecção é pela forma do
+        # valor, então ela tem que achar a coordenada aqui também.
+        linha["campo_cujo_nome_eu_nao_sei"] = localizacao
     return linha
 
 
 def _cliente_auvo(id_auvo, nome, coord=None):
     cliente = {"id": id_auvo, "description": nome}
     if coord:
-        cliente["latitude"], cliente["longitude"] = coord
+        # Como o export da Auvo entrega: texto com vírgula decimal.
+        cliente["latitude"] = str(coord[0]).replace(".", ",")
+        cliente["longitude"] = str(coord[1]).replace(".", ",")
     return cliente
 
 
@@ -173,6 +180,46 @@ def test_localizacao_da_power_fora_da_regiao_e_descartada(app, monkeypatch):
 
     assert resultado["resumo"]["com_coord"] == 0
     assert len(resultado["sem_coord"]) == 1
+
+
+def test_cliente_auvo_com_lat_long_zerada_vai_para_sem_coordenada(app, monkeypatch):
+    """Boa parte do cadastro da Auvo está com 0/0 — é campo vazio, e o
+    motivo tem que dizer que é lá que falta preencher."""
+    contas = [_conta("0095", "PADARIA DO ZE")]
+    clientes = [{"id": 500, "description": "PADARIA DO ZE", "latitude": "0", "longitude": "0"}]
+
+    resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=clientes)
+
+    assert resultado["resumo"]["com_coord"] == 0
+    assert "sem lat/long" in resultado["sem_coord"][0]["motivo"]
+
+
+def test_motivo_distingue_quem_nao_casou_de_quem_casou_sem_coordenada(app, monkeypatch):
+    contas = [_conta("0095", "PADARIA DO ZE")]
+    clientes = [_cliente_auvo(500, "ACADEMIA CORPO E MENTE", PRACA_SETE)]
+
+    resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=clientes)
+
+    assert "Não casou" in resultado["sem_coord"][0]["motivo"]
+
+
+def test_resumo_mostra_em_que_etapa_a_coordenada_da_auvo_se_perdeu(app, monkeypatch):
+    """Sem estes contadores, um "0 Auvo" na tela não distingue Auvo fora
+    do ar de nome que não casou de cadastro sem lat/long — foi exatamente
+    o que aconteceu na primeira rodada em produção."""
+    contas = [_conta("0095", "PADARIA DO ZE"), _conta("0096", "ACADEMIA X")]
+    clientes = [
+        _cliente_auvo(500, "PADARIA DO ZE", PRACA_SETE),
+        {"id": 501, "description": "ACADEMIA X", "latitude": "0", "longitude": "0"},
+        _cliente_auvo(502, "CLIENTE QUE NAO ESTA NA POWER", VIZINHO),
+    ]
+
+    resumo = _montar(app, monkeypatch, contas=contas, clientes_auvo=clientes)["resumo"]
+
+    assert resumo["auvo_clientes"] == 3
+    assert resumo["auvo_com_coord"] == 2  # o de 0/0 não conta
+    assert resumo["auvo_casados"] == 2
+    assert resumo["de_auvo"] == 1
 
 
 # ---------- agrupamento ponta a ponta ----------

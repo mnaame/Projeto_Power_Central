@@ -29,13 +29,15 @@ from app.services.collector import credenciais_softguard
 
 logger = logging.getLogger("rotas")
 
-# Campos tentados em ordem — a Auvo varia o nome conforme a versão.
-CAMPOS_LAT = ("latitude", "Latitude", "lat")
-CAMPOS_LON = ("longitude", "Longitude", "lng", "lon")
 CAMPOS_NOME_AUVO = ("description", "name", "customerDescription", "nome")
 CAMPOS_CIDADE = ("city", "cidade", "cityName")
-# "Localização da conta" do cadastro da PowerCentral, no formato "lat,long".
-CAMPOS_LOCALIZACAO_POWER = ("cue_clocalizacion", "cue_cLocalizacion", "localizacion")
+
+# Nenhuma lista de campos de coordenada aqui, de propósito: a primeira
+# versão procurava a localização da conta por nome de campo
+# (`cue_clocalizacion`), errou o nome e devolveu 105 contas sem
+# coordenada — zero, sem um único erro na tela. Quem acha a coordenada
+# agora é `dom.coordenada_do_registro`, que a reconhece pela forma (dois
+# decimais dentro da caixa da região) em vez do nome.
 
 
 class RotasError(Exception):
@@ -50,10 +52,14 @@ def _primeiro(linha, campos, padrao=""):
     return padrao
 
 
-def _coordenada_auvo(cliente) -> tuple[float, float] | None:
-    return dom.coordenada_valida(
-        _primeiro(cliente, CAMPOS_LAT, None), _primeiro(cliente, CAMPOS_LON, None)
-    )
+def _motivo_sem_coordenada(cliente, *, achou_auvo: bool) -> str:
+    """O motivo é a instrução de conserto: esta lista é a fila de trabalho
+    do cadastro, e "sem coordenada" sozinho não diz onde mexer."""
+    if not achou_auvo:
+        return "Auvo indisponível e sem localização válida na PowerCentral"
+    if cliente is None:
+        return "Não casou com nenhum cliente da Auvo e sem localização válida na PowerCentral"
+    return "Cliente da Auvo sem lat/long (ou fora da região) e sem localização válida na PowerCentral"
 
 
 def _contas_base(linhas_contas) -> list[dict]:
@@ -126,6 +132,7 @@ def montar_rotas(*, config, raio_km: float, user=None) -> dict:
 
     pontos: list[dom.PontoCliente] = []
     sem_coord: list[dict] = []
+    casados = 0
 
     for linha in base:
         conta = str(linha.get("cue_ncuenta") or "").strip()
@@ -137,12 +144,11 @@ def montar_rotas(*, config, raio_km: float, user=None) -> dict:
             casado = dom.melhor_nome(nome, list(nomes_auvo))
             cliente = nomes_auvo.get(casado) if casado else None
 
-        coordenada = _coordenada_auvo(cliente) if cliente else None
+        casados += 1 if cliente else 0
+        coordenada = dom.coordenada_do_registro(cliente) if cliente else None
         fonte = dom.FONTE_AUVO
         if coordenada is None:
-            coordenada = dom.coordenada_de_texto(
-                _primeiro(linha, CAMPOS_LOCALIZACAO_POWER)
-            )
+            coordenada = dom.coordenada_do_registro(linha)
             fonte = dom.FONTE_POWER
 
         if coordenada is None:
@@ -151,7 +157,7 @@ def montar_rotas(*, config, raio_km: float, user=None) -> dict:
                     "conta": conta,
                     "nome": nome,
                     "cidade": cidade,
-                    "motivo": "Sem lat/long na Auvo e sem localização válida na PowerCentral",
+                    "motivo": _motivo_sem_coordenada(cliente, achou_auvo=bool(nomes_auvo)),
                 }
             )
             continue
@@ -173,6 +179,15 @@ def montar_rotas(*, config, raio_km: float, user=None) -> dict:
         "de_auvo": sum(1 for p in pontos if p.fonte == dom.FONTE_AUVO),
         "da_power": sum(1 for p in pontos if p.fonte == dom.FONTE_POWER),
         "erro_auvo": erro_auvo,
+        # Diagnóstico do caminho da Auvo. Sem estes três, um "0 Auvo" na
+        # tela não diz NADA: pode ser Auvo fora, pode ser nome que não
+        # casou, pode ser cadastro sem lat/long. Com eles, dá para ver em
+        # qual etapa a coordenada se perdeu.
+        "auvo_clientes": len(clientes_auvo),
+        "auvo_com_coord": sum(
+            1 for c in clientes_auvo if dom.coordenada_do_registro(c) is not None
+        ),
+        "auvo_casados": casados,
     }
 
     audit_service.registrar(

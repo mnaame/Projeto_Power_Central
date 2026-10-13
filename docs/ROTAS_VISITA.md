@@ -27,6 +27,31 @@ foi confirmado por uma pessoa, o nome é palpite calculado. `REVISAR` nunca
 entra — casamento não confirmado mandaria o técnico para o endereço de
 outro cliente.
 
+### A coordenada é achada pela forma, não pelo nome do campo
+
+`rotas.coordenada_do_registro` varre o registro inteiro: primeiro campos
+chamados `latitude`/`longitude` (e `lat`/`lng`), depois qualquer campo de
+texto com um par `"lat,long"`, depois os sub-registros. Aceita vírgula
+como decimal (`-19,8435179`, que é como a Auvo entrega) e vírgula nos dois
+papéis (`-19,9191,-43,9386`).
+
+Isso **não** é flexibilidade decorativa, é a correção de um bug que
+custou uma rodada inteira. A primeira versão procurava a localização da
+conta em `cue_clocalizacion` — nome chutado, errado — e o resultado foi
+*105 clientes base, 0 com coordenada, 0 Auvo · 0 Power*: zero absoluto,
+sem um único erro na tela, porque para um `.get()` "campo ausente" e
+"campo vazio" são a mesma coisa. Um par de coordenadas se identifica
+sozinho; o nome do campo é detalhe de cada plataforma.
+
+Quem impede um par de números qualquer (um CEP, um valor) de passar por
+coordenada é a caixa da região, logo abaixo — não o nome do campo.
+
+O resumo da tela mostra as três etapas do caminho da Auvo (clientes
+lidos → com lat/long na região → casados com uma conta base). Sem elas,
+um "0 Auvo" não distingue Auvo fora do ar de nome que não casou de
+cadastro sem lat/long, que foi exatamente o que travou o diagnóstico na
+primeira rodada.
+
 ### Por que validar a região
 
 Parte das coordenadas do cadastro aponta para outro estado. Uma coordenada
@@ -40,7 +65,10 @@ descartado; tratá-la como coordenada colocaria o cliente no Atlântico.
 
 Cliente sem coordenada em nenhuma fonte vai para a lista **"sem
 coordenada"**, que é a lista de trabalho do cadastro: enquanto estiver
-nela, o cliente não entra em rota nenhuma.
+nela, o cliente não entra em rota nenhuma. O motivo de cada linha diz
+onde consertar — não casou na Auvo, casou mas o cadastro lá está sem
+lat/long, ou a Auvo estava fora. "Sem coordenada" sozinho não é
+acionável.
 
 ## 3. Agrupamento (`app/domain/rotas.py`, puro)
 
@@ -62,6 +90,18 @@ nela, o cliente não entra em rota nenhuma.
   conta. Sem isso, a mesma base saía em ordens diferentes conforme a
   plataforma devolvesse os registros, e a equipe não conseguiria conferir
   nada. Há teste comparando o resultado com a entrada invertida.
+
+  Dois vazamentos só apareceram rodando contra a base real, e os dois
+  estão fechados com teste próprio:
+
+  1. `ordenar_visita` devolvia uma rota de **dois** clientes na ordem em
+     que ela chegou (curto-circuito `len <= 2`). Quatro rotas saíam
+     invertidas. Hoje a dupla passa pelo mesmo caminho das outras.
+  2. O centroide somava com `sum`, e **soma de float depende da ordem**
+     das parcelas: a mesma rota em outra ordem dava um centroide
+     diferente nos últimos bits, o bastante para trocar o ponto de
+     partida num empate apertado. Hoje é `math.fsum`, que é exatamente
+     arredondado e independente da ordem.
 
 ## 4. Mapa
 
@@ -91,5 +131,40 @@ tela.
 |---|---|---|
 | `rotas_raio_km` | `1.5` | Raio do agrupamento. Maior = menos rotas, mais espalhadas |
 
-Validado com a base real (13/10): 106 clientes base, 100 com coordenada →
-35 rotas a 1,5 km.
+### Conferir contra as plataformas de verdade
+
+```
+.venv\Scripts\python.exe scripts\debug_rotas.py
+```
+
+Imprime os **nomes de campo que cada plataforma realmente devolve**,
+quantas coordenadas sobrevivem a cada etapa (de-para → nome → Auvo →
+Power) e a fila de trabalho do cadastro. É só leitura. Foi escrito depois
+do bug do nome de campo chutado: quando um número da tela não fizer
+sentido, é por aqui que se descobre em qual etapa ele se perde, em vez de
+adivinhar.
+
+## 7. Validação com a base real (13/10)
+
+Simulação do pipeline inteiro contra o export de clientes da Auvo (579
+clientes) e o relatório de contas da PowerCentral (148 contas):
+
+| | |
+|---|---|
+| Clientes base | **106** |
+| Casaram com um cliente da Auvo (nome, corte 0,88) | 79 |
+| Coordenada vinda da Auvo | **77** |
+| Coordenada vinda da PowerCentral | **23** |
+| Sem coordenada em nenhuma fonte | **6** |
+
+Dos 6, cinco não casaram com nenhum cliente da Auvo e um casou mas está
+sem lat/long lá.
+
+Rotas por raio: 51 a 1 km · **35 a 1,5 km** · 15 a 3 km · 7 a 5 km. De 3
+km para cima uma rota única engole 79 dos 100 clientes — é o sinal de que
+o raio passou do ponto de ser uma "saída".
+
+Sobre a caixa da região: das 104 contas base que têm par de coordenadas
+no cadastro da PowerCentral, **13 caem fora de MG/BH** (apontam para
+o interior de São Paulo). Sem o descarte, cada uma dessas arrastaria o
+centroide da sua rota.

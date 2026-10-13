@@ -72,6 +72,92 @@ def test_localizacao_sem_virgula_nao_e_coordenada():
     assert dom.coordenada_de_texto("") is None
 
 
+def test_virgula_como_decimal_E_separador():
+    """`-19,9191,-43,9386` — a vírgula nos dois papéis. O `partition(",")`
+    da primeira versão lia isso como lat="-19" e long="9191,-43,9386"."""
+    assert dom.coordenada_de_texto("-19,9191,-43,9386") == (-19.9191, -43.9386)
+
+
+def test_texto_com_um_numero_so_ou_com_tres_nao_e_coordenada():
+    """Exatamente dois decimais. Um endereço com número e um CEP juntos
+    não podem virar coordenada por acidente."""
+    assert dom.coordenada_de_texto("-19.9191") is None
+    assert dom.coordenada_de_texto("-19.9191,-43.9386,120.5") is None
+
+
+# ---------- achar a coordenada sem saber o nome do campo ----------
+#
+# Chutar nome de campo custou 105 contas sem coordenada numa rodada
+# inteira — zero, sem um erro na tela. Agora a coordenada é reconhecida
+# pela forma.
+
+
+def test_registro_com_latitude_e_longitude():
+    assert dom.coordenada_do_registro(
+        {"id": 1, "latitude": -19.9191, "longitude": -43.9386}
+    ) == (-19.9191, -43.9386)
+
+
+def test_registro_com_nomes_em_caixa_alta_e_virgula_decimal():
+    """É o formato que o export da Auvo entrega: `-19,8435179`."""
+    assert dom.coordenada_do_registro(
+        {"Latitude": "-19,9191", "Longitude": "-43,9386"}
+    ) == (-19.9191, -43.9386)
+
+
+def test_registro_com_lat_lng_abreviados():
+    assert dom.coordenada_do_registro({"lat": -19.9191, "lng": -43.9386}) == (
+        -19.9191,
+        -43.9386,
+    )
+
+
+def test_registro_com_lat_long_zeradas_nao_tem_coordenada():
+    """Grande parte do cadastro da Auvo está com 0/0 — é cadastro vazio,
+    não é a ilha nula do Atlântico."""
+    assert dom.coordenada_do_registro({"latitude": "0", "longitude": "0"}) is None
+
+
+def test_coordenada_e_achada_em_campo_de_nome_desconhecido():
+    """O ponto do módulo: o campo da "Localização da conta" da
+    PowerCentral pode se chamar qualquer coisa."""
+    assert dom.coordenada_do_registro(
+        {"cue_cnombre": "PADARIA DO ZE", "campo_qualquer": "-19.9191,-43.9386"}
+    ) == (-19.9191, -43.9386)
+
+
+def test_coordenada_e_achada_em_sub_registro():
+    assert dom.coordenada_do_registro(
+        {"id": 1, "address": {"latitude": "-19.9191", "longitude": "-43.9386"}}
+    ) == (-19.9191, -43.9386)
+
+
+def test_endereco_e_telefone_nao_viram_coordenada():
+    """A caixa da região é o que impede um par de números qualquer de
+    passar por coordenada."""
+    assert (
+        dom.coordenada_do_registro(
+            {
+                "rua": "AV. AFONSO PENA, 1.500",
+                "cep": "30.130-110",
+                "telefone": "(31) 3333-4444",
+                "valor": "1.234,56",
+            }
+        )
+        is None
+    )
+
+
+def test_coordenada_de_fora_da_regiao_no_registro_e_descartada():
+    """Boa parte da "Localização da conta" aponta para outro estado."""
+    assert dom.coordenada_do_registro({"loc": "-23.9500,-46.2700"}) is None
+
+
+def test_registro_que_nao_e_dicionario():
+    assert dom.coordenada_do_registro(None) is None
+    assert dom.coordenada_do_registro("-19.9191,-43.9386") is None
+
+
 # ---------- agrupamento ----------
 
 
@@ -133,6 +219,26 @@ def test_mesmo_conjunto_gera_sempre_o_mesmo_resultado():
 
     assert [[p.conta for p in r.pontos] for r in primeira] == \
            [[p.conta for p in r.pontos] for r in segunda]
+
+
+def test_rota_de_dois_clientes_tambem_sai_sempre_na_mesma_ordem():
+    """Regressão: `ordenar_visita` devolvia uma dupla na ordem em que ela
+    chegou, e com a base real isso fez quatro rotas de dois clientes
+    saírem invertidas conforme a ordem da plataforma."""
+    a = _ponto("0101", -19.9191, -43.9386)
+    b = _ponto("0108", -19.9195, -43.9380)
+
+    assert [p.conta for p in dom.ordenar_visita([a, b])] == \
+           [p.conta for p in dom.ordenar_visita([b, a])]
+
+
+def test_centroide_nao_depende_da_ordem_das_parcelas():
+    """Soma de float depende da ordem; a mesma rota em outra ordem dava um
+    centroide diferente nos últimos bits, o bastante para trocar o ponto
+    de partida num empate apertado."""
+    pontos = [_ponto(str(i), -19.9191 + i / 97, -43.9386 - i / 89) for i in range(12)]
+
+    assert dom.centroide(pontos) == dom.centroide(list(reversed(pontos)))
 
 
 def test_lista_vazia_nao_gera_rota():

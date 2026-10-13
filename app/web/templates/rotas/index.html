@@ -71,6 +71,14 @@
       <div class="stat-tile-hint">Auvo é a fonte preferida</div>
     </div>
   </div>
+  {# Sem esta linha, um "0 Auvo" na tela não distingue Auvo fora do ar de
+     nome que não casou de cadastro sem lat/long — foi exatamente o que
+     aconteceu na primeira rodada. #}
+  <p class="muted" style="margin-top: var(--space-2);">
+    Caminho da Auvo: {{ resultado.resumo.auvo_clientes }} cliente(s) na
+    Auvo, {{ resultado.resumo.auvo_com_coord }} com lat/long na região,
+    {{ resultado.resumo.auvo_casados }} casado(s) com uma conta base.
+  </p>
 </div>
 
 <div class="section">
