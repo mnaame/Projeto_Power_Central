@@ -8,6 +8,8 @@
 {% block head %}
 {% if pontos %}
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/MarkerCluster.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/MarkerCluster.Default.css') }}">
 {% endif %}
 {% endblock %}
 
@@ -108,13 +110,23 @@
     {% if importacoes %}
     <div class="table-wrap" style="margin-top: var(--space-3);">
       <table>
-        <thead><tr><th>Origem</th><th>Linhas</th><th>Com bairro</th><th>Importado em</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Origem</th><th>Linhas</th><th>Com bairro</th>
+            <th>Com coordenada</th><th>Importado em</th>
+          </tr>
+        </thead>
         <tbody>
           {% for item in importacoes %}
           <tr>
             <td>{{ item.fonte }}</td>
             <td class="is-numeric">{{ item.linhas }}</td>
             <td class="is-numeric">{{ item.com_bairro }}</td>
+            {# Zero aqui significa planilha enviada antes de o sistema ler
+               coordenada — e é a resposta para "cadê o mapa". #}
+            <td class="is-numeric {{ 'is-critical' if not item.com_coordenada }}">
+              {{ item.com_coordenada }}
+            </td>
             <td>{{ item.importado_em|data_local }}</td>
           </tr>
           {% endfor %}
@@ -181,7 +193,9 @@
   {% endif %}
 </div>
 
-{% if pontos %}
+{# A seção aparece MESMO sem pino. Escondê-la quando dá zero já me
+   custou três rodadas nesta tela: sem o número à vista, "não tem mapa" e
+   "não tem coordenada" são indistinguíveis. #}
 <div class="section">
   <div class="section-title">
     <h2>Mapa</h2>
@@ -189,17 +203,36 @@
       {{ pontos|length }} de {{ catalogo.total }} cliente(s) com coordenada
     </span>
   </div>
+
+  {% if pontos %}
   <div class="card" style="padding: 0; overflow: hidden;">
-    <div id="mapa-rotas" style="height: 520px;"
-         data-pontos="{{ pontos|tojson|forceescape }}"></div>
+    <div id="mapa-rotas" data-pontos="{{ pontos|tojson|forceescape }}"></div>
   </div>
   <p class="muted" style="margin-top: var(--space-2);">
-    Cada cor é um bairro; cliente já visitado fica cinza. Clique no pino
-    para ver conta, cliente e região. Quem não tem coordenada no cadastro
-    não aparece aqui — mas continua na lista e na busca.
+    Pinos próximos viram uma bolha com <strong>quantos ainda faltam</strong>
+    naquela região; aproxime para abrir. Cada cor é um bairro, e o cliente
+    já visitado fica cinza. Quem não tem coordenada não aparece aqui — mas
+    continua na lista e na busca.
   </p>
+  {% else %}
+  <div class="card empty-state">
+    <h3>Nenhum cliente com coordenada</h3>
+    <p class="muted">
+      O mapa precisa de latitude e longitude, que vêm da Auvo ou da
+      "Localização da conta" da PowerCentral.
+      {% if sem_coordenada_importada %}
+      <br><br>
+      <strong>As planilhas importadas estão sem coordenada</strong> — elas
+      foram enviadas antes de o sistema passar a ler esse campo.
+      <strong>Importe as duas de novo</strong>, no quadro acima, e gere o
+      catálogo: a coordenada vem junto.
+      {% else %}
+      Importe as planilhas no quadro acima e gere o catálogo de novo.
+      {% endif %}
+    </p>
+  </div>
+  {% endif %}
 </div>
-{% endif %}
 
 {# Sugestão em vez de digitação livre: escrever "Padre Eustaquio" onde a
    base tem "Padre Eustáquio" criaria duas regiões para o mesmo lugar. #}
@@ -212,11 +245,15 @@
 
   {# A busca filtra a lista E o mapa. Ver dez pinos de "padaria" num mapa
      de cem é metade da utilidade de procurar. #}
+  {# O `.field` é o que dá ao campo a cara do resto da plataforma: solto,
+     ele herda o estilo cru do navegador, que em tema escuro sai preto. #}
   <div class="card" style="margin-bottom: var(--space-3);">
-    <label for="rotas-busca">Procurar cliente, conta, bairro ou cidade</label>
-    <input id="rotas-busca" type="search" autocomplete="off"
-           placeholder="ex.: padaria, 0118, buritis" style="width: 100%;">
-    <p class="muted" id="rotas-busca-resultado" style="margin-top: var(--space-1);">
+    <div class="field" style="margin-bottom: 0;">
+      <label for="rotas-busca">Procurar cliente, conta, bairro ou cidade</label>
+      <input id="rotas-busca" type="search" autocomplete="off"
+             placeholder="ex.: padaria, 0118, buritis">
+    </div>
+    <p class="muted" id="rotas-busca-resultado" style="margin-top: var(--space-2);">
       {{ catalogo.total }} cliente(s) no ciclo.
     </p>
   </div>
@@ -322,6 +359,7 @@
 {% block scripts %}
 {% if pontos %}
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.markercluster.js') }}"></script>
 <script src="{{ url_for('static', filename='js/mapa_rotas.js') }}"></script>
 {% endif %}
 {% if catalogo.total %}

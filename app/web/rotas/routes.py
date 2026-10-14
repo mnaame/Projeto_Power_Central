@@ -74,13 +74,19 @@ def _pontos_do_mapa(dados: dict) -> list[dict]:
 def index():
     ciclo = rotas_service.ciclo_atual()
     dados = rotas_service.catalogo(ciclo)
+    importacoes = rotas_service.resumo_importacoes()
     return render_template(
         "rotas/index.html",
         ciclo=ciclo,
         catalogo=dados,
         pontos=_pontos_do_mapa(dados),
         bairros=rotas_service.bairros_conhecidos(),
-        importacoes=rotas_service.resumo_importacoes(),
+        importacoes=importacoes,
+        # Planilha importada e nenhuma coordenada nela = enviada antes de
+        # o sistema passar a ler esse campo. É a causa mais provável de um
+        # mapa vazio, e a tela diz isso em vez de deixar adivinhar.
+        sem_coordenada_importada=bool(importacoes)
+        and not any(item["com_coordenada"] for item in importacoes),
     )
 
 

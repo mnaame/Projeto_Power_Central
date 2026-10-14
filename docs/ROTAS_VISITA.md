@@ -181,6 +181,13 @@ já foi visitado no ciclo. Marcar na lista repinta o pino na hora, e a
 busca filtra os dois juntos — senão o mapa viraria uma segunda versão da
 verdade, desatualizada desde o primeiro clique.
 
+**A seção do mapa aparece mesmo sem pino nenhum**, mostrando "0 de 105
+com coordenada" e o que fazer. Escondê-la quando dá zero já custou três
+rodadas nesta tela: sem o número à vista, "não tem mapa" e "não tem
+coordenada" são indistinguíveis. A tabela de importação também ganhou a
+coluna **Com coordenada** — zero ali significa planilha enviada antes de
+o sistema ler esse campo, que é a causa mais provável de um mapa vazio.
+
 **A coordenada é a mesma história do bairro**: vem da Auvo (API ou
 planilha, em campos `Latitude`/`Longitude`) ou da PowerCentral (campo
 "Localização da conta", no formato `"lat,long"`), e é reconhecida pela
@@ -194,12 +201,26 @@ interior de São Paulo: no mapa cada uma dessas é um cliente plantado a
 400 km daqui, e o enquadramento inicial abrindo no lugar errado por causa
 delas.
 
-Leaflet **1.9.4 vendorizado** em `static/vendor/leaflet/` (BSD-2), não
-CDN: o site roda na rede interna e precisa abrir sem depender de CDN. Só
-os tiles vêm do OpenStreetMap — sem internet o mapa fica cinza, mas a
-página e as tabelas continuam inteiras. O `leaflet.js` só é carregado
-quando há pino para desenhar; sem coordenada nenhuma, 190 KB de
-biblioteca seriam só peso.
+### Pinos agrupados
+
+Cem pinos crus em cima de Belo Horizonte viram uma mancha: não dá para
+ver quantos clientes há em cada lugar nem clicar num deles. Os pinos
+próximos viram uma bolha que **mostra quantos ainda faltam** naquela
+região — "o que ainda tenho para fazer aqui" é a pergunta de quem monta a
+agenda — e vão abrindo conforme se aproxima.
+
+Bolha verde = tem cliente pendente; **cinza = região inteira visitada**,
+recuando junto com os pinos já visitados. Verde nos dois casos seria pior
+que não ter cor: só o número mudaria de significado (pendentes x total),
+sem nenhuma pista de qual é qual.
+
+Leaflet **1.9.4** e **Leaflet.markercluster 1.5.3** vendorizados em
+`static/vendor/leaflet/` (BSD-2 e MIT), não CDN: o site roda na rede
+interna e precisa abrir sem depender de CDN. Só os tiles vêm do
+OpenStreetMap — sem internet o mapa fica cinza, mas a página e as tabelas
+continuam inteiras. As bibliotecas só são carregadas quando há pino para
+desenhar; sem coordenada nenhuma, seriam 180 KB de peso para desenhar
+zero.
 
 Os pontos chegam ao JS por `data-attribute`, não por uma chamada à API: a
 tela já recebeu o catálogo renderizado.

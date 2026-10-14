@@ -446,3 +446,94 @@ def test_tela_sugere_os_bairros_que_ja_existem(operador_client, monkeypatch):
 
     assert 'id="rotas-bairros"' in corpo
     assert '<option value="Savassi">' in corpo
+
+
+def test_mapa_diz_quantos_tem_coordenada_mesmo_quando_da_zero(
+    operador_client, monkeypatch
+):
+    """Esconder a seção quando dá zero já custou três rodadas nesta tela:
+    sem o número à vista, "não tem mapa" e "não tem coordenada" são
+    indistinguíveis."""
+    _preparar(monkeypatch, clientes=[])
+    operador_client.post("/rotas/gerar")
+
+    corpo = operador_client.get("/rotas").get_data(as_text=True)
+
+    assert "0 de 4 cliente(s) com coordenada" in corpo
+    assert "Nenhum cliente com coordenada" in corpo
+
+
+def test_planilha_antiga_sem_coordenada_e_apontada_como_causa(
+    operador_client, monkeypatch
+):
+    """Planilha importada e nenhuma coordenada nela = enviada antes de o
+    sistema ler esse campo. É a causa mais provável de um mapa vazio."""
+    operador_client.post(
+        "/rotas/importar",
+        data={
+            "arquivo": (
+                BytesIO(
+                    _xlsx_auvo(
+                        [["Código", "Nome", "Endereço"], ["500", "A", ENDERECO_SAVASSI]]
+                    )
+                ),
+                "clientes.xlsx",
+            )
+        },
+        content_type="multipart/form-data",
+    )
+    _preparar(monkeypatch, clientes=[])
+    operador_client.post("/rotas/gerar")
+
+    corpo = operador_client.get("/rotas").get_data(as_text=True)
+
+    assert "estão sem coordenada" in corpo
+    assert "Importe as duas de novo" in corpo
+
+
+def test_tabela_de_importacao_mostra_a_coluna_de_coordenada(operador_client):
+    operador_client.post(
+        "/rotas/importar",
+        data={
+            "arquivo": (
+                BytesIO(
+                    _xlsx_auvo(
+                        [
+                            ["Código", "Nome", "Endereço", "Latitude", "Longitude"],
+                            ["500", "A", ENDERECO_SAVASSI, "-19,9191", "-43,9386"],
+                        ]
+                    )
+                ),
+                "clientes.xlsx",
+            )
+        },
+        content_type="multipart/form-data",
+    )
+
+    corpo = operador_client.get("/rotas").get_data(as_text=True)
+
+    assert "Com coordenada" in corpo
+
+
+def test_busca_usa_o_estilo_de_campo_da_plataforma(operador_client, monkeypatch):
+    """Solto, o input herda o estilo cru do navegador — que em tema
+    escuro sai preto, fora do padrão de todas as outras telas."""
+    _preparar(monkeypatch)
+    operador_client.post("/rotas/gerar")
+
+    corpo = operador_client.get("/rotas").get_data(as_text=True)
+    inicio = corpo.index('id="rotas-busca"')
+    trecho = corpo[inicio - 400:inicio]
+
+    assert 'class="field"' in trecho
+
+
+def test_mapa_carrega_o_agrupador_de_pinos(operador_client, monkeypatch):
+    """Cem pinos crus em cima de BH viram uma mancha."""
+    _preparar(monkeypatch, clientes=COM_COORD)
+    operador_client.post("/rotas/gerar")
+
+    corpo = operador_client.get("/rotas").get_data(as_text=True)
+
+    assert "leaflet.markercluster.js" in corpo
+    assert "MarkerCluster.Default.css" in corpo

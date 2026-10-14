@@ -793,3 +793,37 @@ summary.btn::-webkit-details-marker {
    a marca), mas sai do caminho de quem está procurando o que falta. */
 tr.is-visitado > td { opacity: .55; }
 tr.is-visitado > td:nth-child(3) { text-decoration: line-through; }
+
+/* Bolha de agrupamento do mapa de preventivas. A contagem mostrada é a
+   de clientes QUE FALTAM na região — "o que ainda tenho para fazer aqui"
+   é a pergunta de quem monta a agenda. Verde quando não falta nenhum. */
+.cluster-rotas-bolha {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: #fff;
+  font-weight: var(--font-weight-semibold);
+  border: 3px solid rgba(255, 255, 255, .85);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, .3);
+}
+
+/* Região inteira visitada: cinza, recuando como os pinos já visitados.
+   Verde nas duas seria pior que não ter cor — só o NÚMERO mudaria de
+   significado (pendentes x total), sem nenhuma pista de qual é qual. */
+.cluster-rotas-bolha.is-ok {
+  background: #9aa0a6;
+}
+
+/* O mapa precisa de altura explícita — o Leaflet mede o contêiner. */
+#mapa-rotas {
+  height: 620px;
+  width: 100%;
+}
+
+@media (max-width: 720px) {
+  #mapa-rotas { height: 420px; }
+}

@@ -912,9 +912,16 @@ ciclo encerrado continua guardado no banco com as datas de visita — é o
 histórico de quando cada local foi atendido.
 
 **O mapa.** Cada cliente com coordenada vira um pino, com cor por bairro;
-quem já foi visitado fica cinza. Clique no pino para ver conta, cliente e
-região. Quem não tem coordenada no cadastro não aparece no mapa, mas
-continua na lista e na busca.
+quem já foi visitado fica cinza. Pinos próximos viram uma bolha com
+**quantos ainda faltam** naquela região — aproxime para abrir. Bolha
+cinza = região inteira já visitada. Clique no pino para ver conta,
+cliente e região. Quem não tem coordenada no cadastro não aparece no
+mapa, mas continua na lista e na busca.
+
+**Se o mapa aparecer vazio**, olhe a coluna **Com coordenada** na tabela
+de importação. Se estiver zerada, as planilhas foram enviadas antes de o
+sistema passar a ler esse campo: **importe as duas de novo** e gere o
+catálogo. A própria tela avisa isso.
 
 **A busca** acha por cliente, conta, bairro ou cidade — não precisa de
 acento nem de maiúscula. Ela filtra a lista **e** o mapa ao mesmo tempo,

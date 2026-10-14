@@ -37,9 +37,22 @@ def test_arquivo_adulterado_nao_abre():
 
 
 def test_nenhuma_senha_aparece_em_claro_no_arquivo():
-    """O teste que mais importa: o arquivo não pode ser um vazamento."""
+    """O teste que mais importa: o arquivo não pode ser um vazamento.
+
+    As agulhas são longas de propósito. O título era "DVR", e três
+    caracteres dentro de ~390 de base64 aparecem por acaso em 0,06% das
+    execuções (medido em 40 mil) — o teste falhava sozinho mais ou menos
+    uma vez a cada mil rodadas da suíte, sem nada estar errado. Um teste
+    de vazamento que crava falso alarme é um teste que se aprende a
+    ignorar, e aí ele deixa de proteger."""
     pacote = dom.empacotar(
-        [{"titulo": "DVR", "senha": "SENHA-SUPER-SECRETA", "notas": "NOTA-SECRETA"}],
+        [
+            {
+                "titulo": "DVR-PORTARIA-BLOCO-A",
+                "senha": "SENHA-SUPER-SECRETA",
+                "notas": "NOTA-SECRETA",
+            }
+        ],
         senha=SENHA_BOA,
         iteracoes=1000,
     )
@@ -47,7 +60,7 @@ def test_nenhuma_senha_aparece_em_claro_no_arquivo():
     texto = pacote.decode()
     assert "SENHA-SUPER-SECRETA" not in texto
     assert "NOTA-SECRETA" not in texto
-    assert "DVR" not in texto  # nem o título escapa
+    assert "DVR-PORTARIA-BLOCO-A" not in texto  # nem o título escapa
     assert SENHA_BOA not in texto  # nem a senha do próprio backup
 
 
