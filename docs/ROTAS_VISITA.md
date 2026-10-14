@@ -174,13 +174,75 @@ uma lista de cem clientes deixa de exigir cem recarregamentos. Se a
 chamada falhar, o formulário é enviado do jeito comum — para a pessoa ver
 o erro em vez de achar que marcou.
 
-## 6. Quem não tem bairro não some
+## 6. Mapa
+
+Um pino por cliente **com coordenada**, cor por bairro, cinza para quem
+já foi visitado no ciclo. Marcar na lista repinta o pino na hora, e a
+busca filtra os dois juntos — senão o mapa viraria uma segunda versão da
+verdade, desatualizada desde o primeiro clique.
+
+**A coordenada é a mesma história do bairro**: vem da Auvo (API ou
+planilha, em campos `Latitude`/`Longitude`) ou da PowerCentral (campo
+"Localização da conta", no formato `"lat,long"`), e é reconhecida pela
+forma, não pelo nome do campo (`domain/geo.py`). Quem não tem coordenada
+**não vira pino**, mas continua na lista e na busca — não aparecer no
+mapa não pode sumir com o cliente.
+
+A caixa da região é checada antes de qualquer uso. Na base real, 13 das
+104 contas com coordenada no cadastro da PowerCentral apontavam para o
+interior de São Paulo: no mapa cada uma dessas é um cliente plantado a
+400 km daqui, e o enquadramento inicial abrindo no lugar errado por causa
+delas.
+
+Leaflet **1.9.4 vendorizado** em `static/vendor/leaflet/` (BSD-2), não
+CDN: o site roda na rede interna e precisa abrir sem depender de CDN. Só
+os tiles vêm do OpenStreetMap — sem internet o mapa fica cinza, mas a
+página e as tabelas continuam inteiras. O `leaflet.js` só é carregado
+quando há pino para desenhar; sem coordenada nenhuma, 190 KB de
+biblioteca seriam só peso.
+
+Os pontos chegam ao JS por `data-attribute`, não por uma chamada à API: a
+tela já recebeu o catálogo renderizado.
+
+## 7. Busca
+
+Filtra por cliente, conta, bairro ou cidade, sem acento e sem caixa, na
+lista **e** no mapa. Bairro que fica sem resultado é escondido; bairro
+com resultado é aberto — procurar e ter que abrir cada região à mão seria
+inútil.
+
+É filtro no navegador, não consulta: o catálogo inteiro já está na tela,
+e uma ida ao servidor por tecla digitada seria lentidão sem ganho.
+
+## 8. Corrigir o bairro à mão
+
+O bairro lido do endereço acerta em 93% dos cadastros preenchidos. Para o
+resto — endereço sem bairro escrito ("Shopping Cidade"), bairro errado,
+formato que o leitor não interpreta — existe o botão **Bairro** em cada
+linha.
+
+- A correção é gravada **fora do ciclo** (`rotas_bairros_manuais`), de
+  propósito: ela tem que sobreviver a gerar o catálogo de novo e a
+  reiniciar a rodada. Se morasse no ciclo, a próxima geração desfaria o
+  trabalho de quem corrigiu, em silêncio.
+- **Vence todas as outras fontes**, pelo mesmo motivo que o de-para com
+  status OK vence o casamento por nome: alguém olhou e decidiu.
+- O campo **sugere os bairros que já existem** na base. Digitar "Padre
+  Eustaquio" onde o resto tem "Padre Eustáquio" criaria duas regiões para
+  o mesmo lugar.
+- **Bairro em branco apaga a correção** — é como se volta a confiar na
+  leitura automática depois de arrumar o cadastro na origem.
+- A tela mostra a correção na hora, no ciclo aberto. Sem isso, a pessoa
+  corrigiria e a tela continuaria igual até a próxima geração, que leva
+  minutos e ninguém vai rodar por uma linha.
+
+## 9. Quem não tem bairro não some
 
 Vai para uma região `(sem bairro) — Cidade`, no fim da lista. Some seria
 pior: ninguém procura o que não aparece. Essa é a fila de trabalho do
 cadastro, e sai numa aba própria do Excel.
 
-## 7. Resiliência
+## 10. Resiliência
 
 - **Auvo fora do ar não cancela nada**: sobram a planilha importada e a
   PowerCentral. Entregar parte é melhor que não entregar nada — e o
@@ -194,7 +256,7 @@ cadastro, e sai numa aba própria do Excel.
   visitas já marcadas. O catálogo fica como está até alguém gerar de
   novo, e a mensagem da importação diz isso.
 
-## 8. Validação com a base real (13/10)
+## 11. Validação com a base real
 
 Pior caso simulado: a API da PowerCentral devolvendo **só conta e nome**,
 a Auvo fora do ar, tudo vindo das duas planilhas importadas.
@@ -208,6 +270,8 @@ a Auvo fora do ar, tudo vindo das duas planilhas importadas.
 | Só com a cidade | **30** |
 | Sem região nenhuma | **0** |
 | Bairros distintos | **59** |
+| Com coordenada (pino no mapa) | **97** |
+| Sem pino | **9** |
 
 Leitura do endereço isolada, sobre os 488 endereços preenchidos da Auvo:
 **93% com bairro legível**. Os 7% restantes são endereços que realmente
@@ -218,7 +282,7 @@ Da coluna "Rua" da PowerCentral sai quase nada — de 148 contas, uma tinha
 bairro legível. Por isso a PowerCentral entra como fonte de **cidade**, e
 a Auvo como fonte de bairro.
 
-## 9. Conferir contra as plataformas de verdade
+## 12. Conferir contra as plataformas de verdade
 
 ```
 .venv\Scripts\python.exe scripts\debug_rotas.py

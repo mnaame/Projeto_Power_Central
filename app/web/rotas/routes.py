@@ -40,14 +40,46 @@ bp = Blueprint("rotas", __name__, url_prefix="/rotas")
 TAMANHO_MAXIMO = 8 * 1024 * 1024
 
 
+def _pontos_do_mapa(dados: dict) -> list[dict]:
+    """Só os clientes com coordenada — quem não tem não vira um pino no
+    meio do nada, continua na lista e na busca.
+
+    Os pontos vão para o JS por `data-attribute`, e não por uma chamada à
+    API: a tela já tem o catálogo renderizado, e buscar de novo seria
+    refazer uma consulta que já foi feita."""
+    linhas = dados.get("linhas") or {}
+    pontos = []
+    for regiao in dados.get("regioes", []):
+        for cliente in regiao.clientes:
+            if not cliente.tem_coordenada:
+                continue
+            linha = linhas.get(cliente.conta)
+            pontos.append(
+                {
+                    "conta": cliente.conta,
+                    "nome": cliente.nome,
+                    "regiao": regiao.rotulo,
+                    "bairro": cliente.bairro,
+                    "cidade": cliente.cidade,
+                    "lat": cliente.lat,
+                    "lon": cliente.lon,
+                    "visitado": bool(linha is not None and linha.visitado_em),
+                }
+            )
+    return pontos
+
+
 @bp.route("")
 @login_required
 def index():
     ciclo = rotas_service.ciclo_atual()
+    dados = rotas_service.catalogo(ciclo)
     return render_template(
         "rotas/index.html",
         ciclo=ciclo,
-        catalogo=rotas_service.catalogo(ciclo),
+        catalogo=dados,
+        pontos=_pontos_do_mapa(dados),
+        bairros=rotas_service.bairros_conhecidos(),
         importacoes=rotas_service.resumo_importacoes(),
     )
 
@@ -117,6 +149,46 @@ def visita():
             {"conta": conta, "visitado": visitado,
              "visitados": dados["visitados"], "total": dados["total"]}
         )
+    return redirect(url_for("rotas.index"))
+
+
+@bp.route("/bairro", methods=["POST"])
+@login_required
+def bairro():
+    """Corrige o bairro de um cliente à mão.
+
+    Responde JSON para o JS atualizar a linha sem recarregar, e
+    redireciona quando vem de um `form` comum."""
+    ciclo = rotas_service.ciclo_atual()
+    conta = (request.form.get("conta") or "").strip()
+    quer_json = request.accept_mimetypes.best == "application/json"
+
+    try:
+        resultado = rotas_service.definir_bairro_manual(
+            ciclo,
+            conta,
+            bairro=request.form.get("bairro", ""),
+            cidade=request.form.get("cidade", ""),
+            user=current_user,
+        )
+    except rotas_service.RotasError as exc:
+        db.session.rollback()
+        if quer_json:
+            return jsonify({"erro": str(exc)}), 404
+        flash(str(exc), "error")
+        return redirect(url_for("rotas.index"))
+
+    db.session.commit()
+    if quer_json:
+        return jsonify(resultado)
+    if resultado["bairro"]:
+        flash(
+            f"Conta {conta}: bairro definido como {resultado['bairro']}. "
+            "A correção vale também nas próximas gerações.",
+            "success",
+        )
+    else:
+        flash(f"Conta {conta}: correção removida, voltou a valer o cadastro.", "info")
     return redirect(url_for("rotas.index"))
 
 

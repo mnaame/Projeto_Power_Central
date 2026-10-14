@@ -39,6 +39,7 @@ FONTE_AUVO = "Auvo"
 FONTE_AUVO_PLANILHA = "Auvo (planilha)"
 FONTE_POWER = "PowerCentral"
 FONTE_POWER_PLANILHA = "PowerCentral (planilha)"
+FONTE_MANUAL = "corrigido à mão"
 
 # Clientes que não são clientes.
 PADROES_INTERNOS = ("NOVO MILLENIUM", "NOVO MILLENNIUM", "CONTA TESTE")
@@ -56,6 +57,14 @@ class ClienteBase:
     bairro: str = ""
     cidade: str = ""
     fonte: str = ""
+    # Para o mapa. Nulo = cliente sem coordenada conhecida; ele continua
+    # no catálogo e na lista, só não aparece no mapa.
+    lat: float | None = None
+    lon: float | None = None
+
+    @property
+    def tem_coordenada(self) -> bool:
+        return self.lat is not None and self.lon is not None
 
     @property
     def chave_regiao(self) -> str:

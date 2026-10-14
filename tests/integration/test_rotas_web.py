@@ -337,3 +337,112 @@ def test_tela_mostra_o_que_ja_foi_importado(operador_client):
 
     assert "Endereços importados" in corpo
     assert "Auvo" in corpo
+
+
+# ---------- mapa, busca e correção de bairro na tela ----------
+
+
+COM_COORD = [
+    _cliente_auvo(1, "A", ENDERECO_SAVASSI),
+    _cliente_auvo(2, "B", ENDERECO_SAVASSI),
+    _cliente_auvo(3, "C", ENDERECO_BURITIS),
+]
+for _c in COM_COORD:
+    _c["latitude"], _c["longitude"] = "-19,9191", "-43,9386"
+
+
+def test_mapa_aparece_quando_ha_coordenada(operador_client, monkeypatch):
+    _preparar(monkeypatch, clientes=COM_COORD)
+    operador_client.post("/rotas/gerar")
+
+    corpo = operador_client.get("/rotas").get_data(as_text=True)
+
+    assert 'id="mapa-rotas"' in corpo
+    assert "vendor/leaflet/leaflet.js" in corpo  # vendorizado, não CDN
+
+
+def test_sem_coordenada_nenhuma_o_mapa_nao_carrega_o_leaflet(
+    operador_client, monkeypatch
+):
+    """Carregar 190 KB de biblioteca para desenhar zero pinos seria só
+    peso."""
+    _preparar(monkeypatch, clientes=[])
+    operador_client.post("/rotas/gerar")
+
+    corpo = operador_client.get("/rotas").get_data(as_text=True)
+
+    assert "leaflet.js" not in corpo
+
+
+def test_cliente_sem_coordenada_nao_vira_pino_mas_fica_na_lista(
+    operador_client, monkeypatch
+):
+    _preparar(monkeypatch, clientes=COM_COORD)
+    operador_client.post("/rotas/gerar")
+
+    corpo = operador_client.get("/rotas").get_data(as_text=True)
+
+    assert "SEM BAIRRO" in corpo  # a conta 4, sem Auvo e sem coordenada
+    assert "3 de 4 cliente(s) com coordenada" in corpo
+
+
+def test_busca_esta_na_tela(operador_client, monkeypatch):
+    _preparar(monkeypatch)
+    operador_client.post("/rotas/gerar")
+
+    corpo = operador_client.get("/rotas").get_data(as_text=True)
+
+    assert 'id="rotas-busca"' in corpo
+
+
+def test_corrigir_bairro_pela_tela(operador_client, monkeypatch):
+    _preparar(monkeypatch)
+    operador_client.post("/rotas/gerar")
+
+    resposta = operador_client.post(
+        "/rotas/bairro",
+        data={"conta": "4", "bairro": "Eldorado", "cidade": "Contagem"},
+        headers={"Accept": "application/json"},
+    )
+
+    assert resposta.get_json()["bairro"] == "Eldorado"
+    corpo = operador_client.get("/rotas").get_data(as_text=True)
+    assert "Eldorado — Contagem" in corpo
+
+
+def test_corrigir_bairro_sem_javascript_tambem_funciona(operador_client, monkeypatch):
+    _preparar(monkeypatch)
+    operador_client.post("/rotas/gerar")
+
+    corpo = operador_client.post(
+        "/rotas/bairro",
+        data={"conta": "4", "bairro": "Eldorado", "cidade": "Contagem"},
+        follow_redirects=True,
+    ).get_data(as_text=True)
+
+    assert "bairro definido como Eldorado" in corpo
+
+
+def test_correcao_de_bairro_sobrevive_a_gerar_de_novo(operador_client, monkeypatch):
+    """Uma leitura automática não tem autoridade para desfazer o que
+    alguém olhou e decidiu."""
+    _preparar(monkeypatch)
+    operador_client.post("/rotas/gerar")
+    operador_client.post(
+        "/rotas/bairro", data={"conta": "4", "bairro": "Eldorado", "cidade": "Contagem"}
+    )
+
+    operador_client.post("/rotas/gerar")
+    corpo = operador_client.get("/rotas").get_data(as_text=True)
+
+    assert "Eldorado — Contagem" in corpo
+
+
+def test_tela_sugere_os_bairros_que_ja_existem(operador_client, monkeypatch):
+    _preparar(monkeypatch)
+    operador_client.post("/rotas/gerar")
+
+    corpo = operador_client.get("/rotas").get_data(as_text=True)
+
+    assert 'id="rotas-bairros"' in corpo
+    assert '<option value="Savassi">' in corpo

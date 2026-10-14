@@ -153,3 +153,43 @@ def test_cabecalho_com_acento_e_caixa_diferentes_e_o_mesmo():
     )
 
     assert pl.ler_planilha_power(conteudo)[0].cidade == "CONTAGEM"
+
+
+# ---------- coordenada (para o mapa) ----------
+
+
+def test_auvo_traz_latitude_e_longitude_em_campos_separados():
+    conteudo = _xlsx(
+        [
+            ["Código", "Nome", "Endereço", "Latitude", "Longitude"],
+            ["500", "PADARIA", "Rua X,10,,Centro,BH,MG,30100000", "-19,9191", "-43,9386"],
+        ]
+    )
+
+    linha = pl.ler_planilha_auvo(conteudo)[0]
+
+    assert (linha.lat, linha.lon) == ("-19,9191", "-43,9386")
+
+
+def test_power_traz_o_par_num_campo_so():
+    conteudo = _html(
+        [
+            ["Dealer / Conta", "Nome", "Localidade", "Localização da conta"],
+            ["MIL-0095", "PADARIA", "BELO HORIZONTE", "-19.9191,-43.9386"],
+        ]
+    )
+
+    assert pl.ler_planilha_power(conteudo)[0].lat == "-19.9191,-43.9386"
+
+
+def test_planilha_sem_coluna_de_coordenada_continua_valendo():
+    """A coordenada é um bônus: a planilha antiga, sem essas colunas,
+    não pode deixar de ser lida."""
+    conteudo = _xlsx(
+        [["Código", "Nome", "Endereço"], ["500", "PADARIA", "Rua X,10,,Centro,BH,MG,30100000"]]
+    )
+
+    linha = pl.ler_planilha_auvo(conteudo)[0]
+
+    assert linha.nome == "PADARIA"
+    assert linha.lat == ""

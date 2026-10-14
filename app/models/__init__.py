@@ -12,7 +12,12 @@ from app.models.central_cliente import CentralClienteLote, CentralClienteLink
 from app.models.tarefa import Tarefa
 from app.models.horarios import AuditoriaHorarioSnapshot
 from app.models.horario_lote import AjusteHorarioItem, AjusteHorarioLote
-from app.models.rotas import RotasCiclo, RotasCicloCliente, RotasEndereco
+from app.models.rotas import (
+    RotasBairroManual,
+    RotasCiclo,
+    RotasCicloCliente,
+    RotasEndereco,
+)
 
 __all__ = [
     "User",
@@ -39,4 +44,5 @@ __all__ = [
     "RotasEndereco",
     "RotasCiclo",
     "RotasCicloCliente",
+    "RotasBairroManual",
 ]

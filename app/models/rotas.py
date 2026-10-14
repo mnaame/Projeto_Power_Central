@@ -44,6 +44,12 @@ class RotasEndereco(db.Model):
     # O endereço como estava na planilha, para conferir quando a leitura
     # sair estranha — sem isto, "bairro errado" não tem como ser apurado.
     endereco_bruto = db.Column(db.Text, nullable=False, default="")
+    # Coordenada, quando a planilha traz. Guardada já validada contra a
+    # caixa da região: o que aponta para outro estado é descartado na
+    # importação, porque no mapa ele plantaria o cliente a 400 km daqui e
+    # ainda abriria o enquadramento no lugar errado.
+    lat = db.Column(db.Float)
+    lon = db.Column(db.Float)
 
     importado_em = db.Column(
         db.DateTime(timezone=True),
@@ -119,6 +125,8 @@ class RotasCicloCliente(db.Model):
     bairro = db.Column(db.String(120), nullable=False, default="")
     cidade = db.Column(db.String(120), nullable=False, default="")
     fonte = db.Column(db.String(32), nullable=False, default="")
+    lat = db.Column(db.Float)
+    lon = db.Column(db.Float)
 
     # Nulo = ainda não visitado. A data é o dado útil: "quando passamos
     # lá" responde mais que um booleano, e dá para auditar a rodada.
@@ -131,3 +139,36 @@ class RotasCicloCliente(db.Model):
 
     def __repr__(self) -> str:  # pragma: no cover - diagnóstico
         return f"<RotasCicloCliente {self.conta} {'ok' if self.visitado else '-'}>"
+
+
+class RotasBairroManual(db.Model):
+    """Bairro corrigido à mão — a palavra final sobre onde o cliente fica.
+
+    O bairro lido do endereço acerta na maioria, mas não em todos: tem
+    cadastro sem bairro escrito ("Shopping Cidade"), tem bairro errado, e
+    tem endereço que o leitor não consegue interpretar. Sem uma forma de
+    corrigir, o conserto seria editar o cadastro na Auvo e reimportar —
+    caro demais para um caso isolado, e fora do alcance de quem está
+    montando a agenda.
+
+    **Vence todas as outras fontes**, pelo mesmo motivo que o de-para com
+    status OK vence o casamento por nome: alguém olhou e decidiu. Uma
+    leitura automática não tem autoridade para desfazer isso, nem quando
+    o catálogo é gerado de novo.
+    """
+
+    __tablename__ = "rotas_bairros_manuais"
+
+    id = db.Column(db.Integer, primary_key=True)
+    conta = db.Column(db.String(16), nullable=False, unique=True, index=True)
+    bairro = db.Column(db.String(120), nullable=False, default="")
+    cidade = db.Column(db.String(120), nullable=False, default="")
+    atualizado_em = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    atualizado_por_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+
+    def __repr__(self) -> str:  # pragma: no cover - diagnóstico
+        return f"<RotasBairroManual {self.conta} {self.bairro!r}>"

@@ -12,7 +12,7 @@ import pytest
 from app.extensions import db
 from app.integrations.softguard_client import SoftGuardError
 from app.models.auvo import AuvoDepara
-from app.models.rotas import RotasCiclo, RotasEndereco
+from app.models.rotas import RotasBairroManual, RotasCiclo, RotasEndereco
 from app.services import rotas_service as svc
 
 ENDERECO_SAVASSI = "Rua Antônio de Albuquerque, 100,,Savassi,Belo Horizonte,MG,30112010"
@@ -63,6 +63,17 @@ class FakeAuvo:
         if self.erro:
             raise self.erro
         return self.clientes
+
+
+def _fake(app, monkeypatch, contas, clientes_auvo):
+    """Prepara os dublês e devolve o config — para os testes que precisam
+    do CICLO, e não do catálogo montado."""
+    monkeypatch.setattr(svc, "SoftGuardClient", lambda *a, **k: FakeSoftGuard(contas))
+    monkeypatch.setattr(svc, "credenciais_softguard", lambda config: None)
+    monkeypatch.setattr(
+        svc.auvo_service, "criar_cliente", lambda config: FakeAuvo(clientes_auvo)
+    )
+    return app.config
 
 
 def _montar(app, monkeypatch, *, contas, clientes_auvo=None, erro_auvo=None):
@@ -496,3 +507,138 @@ def test_marcar_visita_e_auditado_com_a_conta(app, monkeypatch, admin_user):
 
     entrada = AuditLog.query.filter_by(action="rotas_visita_marcada").one()
     assert entrada.details["conta"] == "0095"
+
+
+# ---------- coordenada (para o mapa) ----------
+
+
+def test_coordenada_da_auvo_entra_no_ciclo(app, monkeypatch):
+    cliente = {
+        "id": 500, "description": "PADARIA DO ZE", "address": ENDERECO_SAVASSI,
+        "latitude": "-19,9191", "longitude": "-43,9386",
+    }
+    contas = [_conta("0095", "PADARIA DO ZE")]
+
+    resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=[cliente])
+
+    ponto = resultado["regioes"][0].clientes[0]
+    assert ponto.tem_coordenada
+    assert round(ponto.lat, 4) == -19.9191
+
+
+def test_coordenada_de_outro_estado_nao_entra(app, monkeypatch):
+    """Na base real, 13 das 104 contas com coordenada apontavam para o
+    interior de São Paulo. No mapa isso planta o cliente a 400 km daqui e
+    ainda abre o enquadramento no lugar errado."""
+    cliente = {
+        "id": 500, "description": "PADARIA DO ZE", "address": ENDERECO_SAVASSI,
+        "latitude": "-23.5505", "longitude": "-46.6333",
+    }
+    contas = [_conta("0095", "PADARIA DO ZE")]
+
+    resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=[cliente])
+
+    assert resultado["regioes"][0].clientes[0].tem_coordenada is False
+
+
+def test_cliente_sem_coordenada_continua_no_catalogo(app, monkeypatch):
+    """Não ter pino no mapa não pode tirar o cliente da lista."""
+    contas = [_conta("0095", "PADARIA DO ZE", cidade="BELO HORIZONTE")]
+
+    resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=[])
+
+    assert resultado["total"] == 1
+    assert resultado["com_coordenada"] == 0
+
+
+def test_coordenada_vem_da_planilha_quando_a_api_nao_da(app, monkeypatch):
+    svc.importar_planilha(
+        _xlsx_auvo(
+            [
+                ["Código", "Nome", "Endereço", "Latitude", "Longitude"],
+                ["500", "PADARIA DO ZE", ENDERECO_SAVASSI, "-19,9191", "-43,9386"],
+            ]
+        )
+    )
+    db.session.commit()
+    contas = [_conta("0095", "PADARIA DO ZE")]
+
+    resultado = _montar(app, monkeypatch, contas=contas, clientes_auvo=[])
+
+    assert resultado["com_coordenada"] == 1
+
+
+# ---------- bairro corrigido à mão ----------
+
+
+def test_bairro_manual_vence_o_lido_do_endereco(app, monkeypatch):
+    contas = [_conta("0095", "PADARIA DO ZE")]
+    clientes = [_cliente_auvo(500, "PADARIA DO ZE", ENDERECO_SAVASSI)]
+    ciclo = svc.montar_catalogo(config=_fake(app, monkeypatch, contas, clientes))
+
+    svc.definir_bairro_manual(ciclo, "0095", bairro="Centro", cidade="Belo Horizonte")
+    db.session.commit()
+
+    ciclo = svc.montar_catalogo(config=app.config)
+    db.session.commit()
+    assert svc.catalogo(ciclo)["regioes"][0].rotulo == "Centro — Belo Horizonte"
+
+
+def test_bairro_manual_sobrevive_a_reiniciar_o_ciclo(app, monkeypatch):
+    """A correção é de quem olhou e decidiu. Uma rodada nova não desfaz
+    isso."""
+    contas = [_conta("0095", "PADARIA DO ZE")]
+    ciclo = svc.montar_catalogo(config=_fake(app, monkeypatch, contas, []))
+    svc.definir_bairro_manual(ciclo, "0095", bairro="Centro", cidade="BH")
+    db.session.commit()
+
+    novo = svc.reiniciar_ciclo(ciclo)
+    db.session.commit()
+    ciclo = svc.montar_catalogo(config=app.config)
+    db.session.commit()
+
+    assert svc.catalogo(ciclo)["regioes"][0].rotulo.startswith("Centro")
+    assert novo.numero == 2
+
+
+def test_bairro_manual_aparece_na_hora_no_ciclo_aberto(app, monkeypatch):
+    """Sem isto, a pessoa corrige e a tela continua igual até a próxima
+    geração — que leva minutos e ninguém roda por uma linha."""
+    contas = [_conta("0095", "PADARIA DO ZE")]
+    ciclo = svc.montar_catalogo(config=_fake(app, monkeypatch, contas, []))
+
+    svc.definir_bairro_manual(ciclo, "0095", bairro="Savassi", cidade="BH")
+    db.session.commit()
+
+    assert svc.catalogo(ciclo)["regioes"][0].rotulo == "Savassi — Bh"
+
+
+def test_bairro_em_branco_apaga_a_correcao(app, monkeypatch):
+    contas = [_conta("0095", "PADARIA DO ZE")]
+    ciclo = svc.montar_catalogo(config=_fake(app, monkeypatch, contas, []))
+    svc.definir_bairro_manual(ciclo, "0095", bairro="Centro")
+    db.session.commit()
+
+    svc.definir_bairro_manual(ciclo, "0095", bairro="")
+    db.session.commit()
+
+    assert RotasBairroManual.query.count() == 0
+
+
+def test_bairro_manual_de_conta_fora_do_ciclo_e_recusado(app, monkeypatch):
+    contas = [_conta("0095", "PADARIA DO ZE")]
+    ciclo = svc.montar_catalogo(config=_fake(app, monkeypatch, contas, []))
+
+    with pytest.raises(svc.RotasError, match="0999"):
+        svc.definir_bairro_manual(ciclo, "0999", bairro="Centro")
+
+
+def test_sugestoes_de_bairro_saem_do_que_ja_existe(app, monkeypatch):
+    """Digitar "Padre Eustaquio" onde a base tem "Padre Eustáquio" criaria
+    duas regiões para o mesmo lugar."""
+    svc.importar_planilha(
+        _xlsx_auvo([["Código", "Nome", "Endereço"], ["500", "X", ENDERECO_SAVASSI]])
+    )
+    db.session.commit()
+
+    assert "Savassi" in svc.bairros_conhecidos()

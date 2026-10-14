@@ -40,6 +40,10 @@ class LinhaPlanilha:
     nome: str = ""
     endereco: str = ""
     cidade: str = ""
+    # Texto cru: quem valida a região é `domain/geo`, não o leitor. O
+    # leitor não decide o que é coordenada boa, só entrega o que achou.
+    lat: str = ""
+    lon: str = ""
 
 
 # ----------------------------------------------------------------------
@@ -191,6 +195,8 @@ def ler_planilha_auvo(conteudo: bytes) -> list[LinhaPlanilha]:
     i_nome = achar_coluna(cabecalho, "Nome", "Cliente", "Descrição")
     i_end = achar_coluna(cabecalho, "Endereço", "Endereco", "Address")
     i_cod = achar_coluna(cabecalho, "Código", "Codigo", "Id")
+    i_lat = achar_coluna(cabecalho, "Latitude", "Lat")
+    i_lon = achar_coluna(cabecalho, "Longitude", "Long", "Lng")
     if i_nome is None or i_end is None:
         raise PlanilhaInvalida(
             "Não achei as colunas 'Nome' e 'Endereço'. "
@@ -210,7 +216,13 @@ def ler_planilha_auvo(conteudo: bytes) -> list[LinhaPlanilha]:
         if id_auvo is None:
             continue
         registros.append(
-            LinhaPlanilha(id_auvo=id_auvo, nome=nome, endereco=_celula(linha, i_end))
+            LinhaPlanilha(
+                id_auvo=id_auvo,
+                nome=nome,
+                endereco=_celula(linha, i_end),
+                lat=_celula(linha, i_lat),
+                lon=_celula(linha, i_lon),
+            )
         )
     return registros
 
@@ -236,6 +248,8 @@ def ler_planilha_power(conteudo: bytes) -> list[LinhaPlanilha]:
     i_nome = achar_coluna(cabecalho, "Nome", "Cliente")
     i_cidade = achar_coluna(cabecalho, "Localidade", "Cidade")
     i_rua = achar_coluna(cabecalho, "Rua", "Endereço", "Endereco")
+    # "Localização da conta": o par "lat,long" num campo só.
+    i_loc = achar_coluna(cabecalho, "Localização da conta", "Localizacao da conta")
     if i_conta is None or i_nome is None:
         raise PlanilhaInvalida(
             "Não achei as colunas 'Dealer / Conta' e 'Nome' no relatório."
@@ -255,6 +269,7 @@ def ler_planilha_power(conteudo: bytes) -> list[LinhaPlanilha]:
                 nome=nome,
                 cidade=_celula(linha, i_cidade),
                 endereco=_celula(linha, i_rua),
+                lat=_celula(linha, i_loc),
             )
         )
     return registros

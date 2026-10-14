@@ -28,12 +28,18 @@ from datetime import datetime, timezone
 
 from app.domain import disparos_geral as dom_disp
 from app.domain import endereco as dom_end
+from app.domain import geo
 from app.domain import planilhas as dom_pl
 from app.domain import rotas as dom
 from app.extensions import db
 from app.integrations.softguard_client import SoftGuardClient, SoftGuardError
 from app.models.auvo import AuvoDepara
-from app.models.rotas import RotasCiclo, RotasCicloCliente, RotasEndereco
+from app.models.rotas import (
+    RotasBairroManual,
+    RotasCiclo,
+    RotasCicloCliente,
+    RotasEndereco,
+)
 from app.services import audit_service, auvo_service
 from app.services.collector import credenciais_softguard
 
@@ -152,11 +158,17 @@ def importar_planilha(conteudo: bytes, *, user=None) -> dict:
     RotasEndereco.query.filter_by(fonte=fonte).delete(synchronize_session=False)
 
     agora = datetime.now(timezone.utc)
-    salvos = com_bairro = com_cidade = 0
+    salvos = com_bairro = com_cidade = com_coord = 0
     for linha in linhas:
         endereco = dom_end.ler(linha.endereco)
         cidade = endereco.cidade or linha.cidade
-        if not (endereco.bairro or cidade):
+        # A Auvo manda lat e lon em campos separados; a PowerCentral manda
+        # o par "lat,long" num campo só. Os dois caminhos passam pela
+        # mesma validação de região.
+        coordenada = geo.coordenada_valida(linha.lat, linha.lon) or geo.coordenada_de_texto(
+            linha.lat
+        )
+        if not (endereco.bairro or cidade or coordenada):
             continue
         db.session.add(
             RotasEndereco(
@@ -170,6 +182,8 @@ def importar_planilha(conteudo: bytes, *, user=None) -> dict:
                 uf=(endereco.uf or "")[:2],
                 cep=(endereco.cep or "")[:12],
                 endereco_bruto=linha.endereco or "",
+                lat=coordenada[0] if coordenada else None,
+                lon=coordenada[1] if coordenada else None,
                 importado_em=agora,
                 importado_por_user_id=getattr(user, "id", None),
             )
@@ -177,6 +191,7 @@ def importar_planilha(conteudo: bytes, *, user=None) -> dict:
         salvos += 1
         com_bairro += 1 if endereco.bairro else 0
         com_cidade += 1 if cidade else 0
+        com_coord += 1 if coordenada else 0
 
     db.session.flush()
     resumo = {
@@ -185,6 +200,7 @@ def importar_planilha(conteudo: bytes, *, user=None) -> dict:
         "salvas": salvos,
         "com_bairro": com_bairro,
         "com_cidade": com_cidade,
+        "com_coordenada": com_coord,
     }
     audit_service.registrar(
         action="rotas_planilha_importada", result="success", user=user, details=resumo
@@ -224,6 +240,7 @@ def resumo_importacoes() -> list[dict]:
                 "fonte": rotulo,
                 "linhas": len(linhas),
                 "com_bairro": sum(1 for linha in linhas if linha.bairro),
+                "com_coordenada": sum(1 for linha in linhas if linha.lat is not None),
                 "importado_em": max(linha.importado_em for linha in linhas),
             }
         )
@@ -272,6 +289,8 @@ def montar_catalogo(*, config, user=None) -> dict:
     }
     importados = _enderecos_importados()
 
+    manuais = {linha.conta: linha for linha in RotasBairroManual.query.all()}
+
     clientes: list[dom.ClienteBase] = []
     contagem_fontes: dict[str, int] = {}
 
@@ -282,6 +301,7 @@ def montar_catalogo(*, config, user=None) -> dict:
         id_auvo = depara.get(chave_conta, "")
 
         bairro = cidade = fonte = ""
+        coordenada = None
 
         # 1. Auvo ao vivo
         cliente = por_id.get(id_auvo)
@@ -292,6 +312,7 @@ def montar_catalogo(*, config, user=None) -> dict:
             lido = _endereco_do_registro(cliente)
             if lido.bairro or lido.cidade:
                 bairro, cidade, fonte = lido.bairro or "", lido.cidade or "", dom.FONTE_AUVO
+            coordenada = geo.coordenada_do_registro(cliente)
 
         # 2. Planilha da Auvo (por de-para, depois por nome)
         if not bairro:
@@ -305,8 +326,12 @@ def montar_catalogo(*, config, user=None) -> dict:
                 bairro = importado.bairro
                 cidade = cidade or importado.cidade
                 fonte = dom.FONTE_AUVO_PLANILHA
+            if coordenada is None and importado is not None:
+                coordenada = geo.coordenada_valida(importado.lat, importado.lon)
 
         # 3. PowerCentral ao vivo — normalmente só a cidade
+        if coordenada is None:
+            coordenada = geo.coordenada_do_registro(linha)
         if not cidade:
             lido = _endereco_do_registro(linha)
             cidade = lido.cidade or str(_primeiro(linha, CAMPOS_CIDADE)).strip()
@@ -316,16 +341,28 @@ def montar_catalogo(*, config, user=None) -> dict:
                 bairro, fonte = lido.bairro, dom.FONTE_POWER
 
         # 4. Planilha da PowerCentral
-        if not cidade:
-            importado = importados["conta"].get(chave_conta)
-            if importado is not None:
-                cidade = importado.cidade
-                bairro = bairro or importado.bairro
-                fonte = fonte or dom.FONTE_POWER_PLANILHA
+        importado_power = importados["conta"].get(chave_conta)
+        if not cidade and importado_power is not None:
+            cidade = importado_power.cidade
+            bairro = bairro or importado_power.bairro
+            fonte = fonte or dom.FONTE_POWER_PLANILHA
+        if coordenada is None and importado_power is not None:
+            coordenada = geo.coordenada_valida(importado_power.lat, importado_power.lon)
 
+        # 5. Correção à mão — vence tudo. Alguém olhou e decidiu; uma
+        # leitura automática não tem autoridade para desfazer isso, nem
+        # quando o catálogo é gerado de novo.
+        manual = manuais.get(chave_conta)
+        if manual is not None and manual.bairro:
+            bairro = manual.bairro
+            cidade = manual.cidade or cidade
+            fonte = dom.FONTE_MANUAL
+
+        lat, lon = coordenada if coordenada else (None, None)
         clientes.append(
             dom.ClienteBase(
-                conta=conta, nome=nome, bairro=bairro, cidade=cidade, fonte=fonte
+                conta=conta, nome=nome, bairro=bairro, cidade=cidade, fonte=fonte,
+                lat=lat, lon=lon,
             )
         )
         if fonte:
@@ -413,6 +450,8 @@ def _gravar_ciclo(clientes, *, resumo: dict, user=None) -> RotasCiclo:
                 bairro=cliente.bairro[:120],
                 cidade=cliente.cidade[:120],
                 fonte=cliente.fonte[:32],
+                lat=cliente.lat,
+                lon=cliente.lon,
                 visitado_em=visitado_em,
                 visitado_por_user_id=visitado_por,
             )
@@ -444,6 +483,8 @@ def catalogo(ciclo: RotasCiclo | None) -> dict:
                 bairro=linha.bairro,
                 cidade=linha.cidade,
                 fonte=linha.fonte,
+                lat=linha.lat,
+                lon=linha.lon,
             )
             for linha in linhas
         ]
@@ -454,6 +495,7 @@ def catalogo(ciclo: RotasCiclo | None) -> dict:
         "linhas": visitado_por_conta,
         "visitados": sum(1 for linha in linhas if linha.visitado_em is not None),
         "total": len(linhas),
+        "com_coordenada": sum(1 for linha in linhas if linha.lat is not None),
     }
 
 
@@ -511,6 +553,8 @@ def reiniciar_ciclo(ciclo: RotasCiclo, *, user=None) -> RotasCiclo:
                 bairro=linha.bairro,
                 cidade=linha.cidade,
                 fonte=linha.fonte,
+                lat=linha.lat,
+                lon=linha.lon,
             )
         )
     db.session.flush()
@@ -522,3 +566,84 @@ def reiniciar_ciclo(ciclo: RotasCiclo, *, user=None) -> RotasCiclo:
         details={"encerrado": ciclo.numero, "novo": novo.numero, "clientes": len(linhas)},
     )
     return novo
+
+
+def definir_bairro_manual(
+    ciclo: RotasCiclo | None, conta: str, *, bairro: str, cidade: str = "", user=None
+) -> dict:
+    """Corrige o bairro de uma conta à mão, para sempre.
+
+    A correção é gravada fora do ciclo (`RotasBairroManual`) de propósito:
+    ela precisa sobreviver a gerar o catálogo de novo e a reiniciar a
+    rodada. Se morasse no ciclo, a próxima geração desfaria o trabalho de
+    quem corrigiu, em silêncio.
+
+    Bairro vazio **apaga** a correção — é como se volta a confiar na
+    leitura automática depois de arrumar o cadastro na origem."""
+    conta_chave = str(conta or "").strip().lstrip("0")
+    bairro = " ".join(str(bairro or "").split())[:120]
+    cidade = " ".join(str(cidade or "").split())[:120]
+
+    linha_ciclo = None
+    if ciclo is not None:
+        linha_ciclo = ciclo.clientes.filter(RotasCicloCliente.conta == conta).first()
+        if linha_ciclo is None:
+            raise RotasError(f"A conta {conta} não está neste ciclo.")
+
+    manual = RotasBairroManual.query.filter_by(conta=conta_chave).first()
+    if not bairro:
+        if manual is not None:
+            db.session.delete(manual)
+        acao, aplicado = "rotas_bairro_manual_removido", ""
+    else:
+        if manual is None:
+            manual = RotasBairroManual(conta=conta_chave)
+            db.session.add(manual)
+        manual.bairro = bairro
+        manual.cidade = cidade
+        manual.atualizado_em = datetime.now(timezone.utc)
+        manual.atualizado_por_user_id = getattr(user, "id", None)
+        acao, aplicado = "rotas_bairro_manual", bairro
+
+    # O ciclo em aberto passa a mostrar a correção na hora. Sem isto, a
+    # pessoa corrigiria o bairro e a tela continuaria igual até a próxima
+    # geração — que leva minutos e ninguém vai rodar por uma linha.
+    if linha_ciclo is not None:
+        linha_ciclo.bairro = aplicado
+        linha_ciclo.cidade = cidade or linha_ciclo.cidade
+        linha_ciclo.fonte = dom.FONTE_MANUAL if aplicado else ""
+        ciclo.atualizado_em = datetime.now(timezone.utc)
+
+    db.session.flush()
+    audit_service.registrar(
+        action=acao,
+        result="success",
+        user=user,
+        details={"conta": conta, "bairro": aplicado, "cidade": cidade},
+    )
+    return {"conta": conta, "bairro": aplicado, "cidade": cidade}
+
+
+def bairros_conhecidos() -> list[str]:
+    """Bairros já usados, para a tela sugerir em vez de pedir digitação.
+
+    Digitar "Padre Eustaquio" onde o resto da base tem "Padre Eustáquio"
+    criaria duas regiões para o mesmo lugar — e a lista de sugestões é a
+    forma barata de isso não acontecer."""
+    vistos = {
+        linha.bairro
+        for linha in RotasEndereco.query.filter(RotasEndereco.bairro != "").all()
+    }
+    vistos.update(
+        linha.bairro for linha in RotasBairroManual.query.all() if linha.bairro
+    )
+    # O ciclo também entra: quando o bairro vem da API da Auvo ele nunca
+    # passa pela tabela de planilhas, e quem só usa a API ficaria sem
+    # sugestão nenhuma — justamente a situação em que a divergência de
+    # grafia nasce.
+    ciclo = ciclo_atual()
+    if ciclo is not None:
+        vistos.update(
+            linha.bairro for linha in ciclo.clientes.all() if linha.bairro
+        )
+    return sorted(vistos, key=dom_end.normalizar)

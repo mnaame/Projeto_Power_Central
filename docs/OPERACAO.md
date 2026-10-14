@@ -911,6 +911,25 @@ volta das preventivas. Não consulta as plataformas, é instantâneo. O
 ciclo encerrado continua guardado no banco com as datas de visita — é o
 histórico de quando cada local foi atendido.
 
+**O mapa.** Cada cliente com coordenada vira um pino, com cor por bairro;
+quem já foi visitado fica cinza. Clique no pino para ver conta, cliente e
+região. Quem não tem coordenada no cadastro não aparece no mapa, mas
+continua na lista e na busca.
+
+**A busca** acha por cliente, conta, bairro ou cidade — não precisa de
+acento nem de maiúscula. Ela filtra a lista **e** o mapa ao mesmo tempo,
+e abre sozinha os bairros que têm resultado.
+
+**Corrigir o bairro.** Em cada linha tem o botão **Bairro**. Use quando o
+cadastro não tem bairro ou tem o errado: digite, salve, pronto. O campo
+sugere os bairros que já existem — vale aceitar a sugestão em vez de
+digitar, para não criar "Padre Eustaquio" e "Padre Eustáquio" como dois
+lugares diferentes.
+
+A correção **é definitiva**: sobrevive a gerar o catálogo de novo e a
+reiniciar o ciclo, porque ela vale mais que o que o sistema lê sozinho.
+Para desfazer, salve o bairro em branco — aí volta a valer o cadastro.
+
 **A lista "(sem bairro)" é a parte importante.** São clientes que o
 cadastro não diz em que bairro ficam; eles aparecem agrupados só pela
 cidade, no fim da lista, e saem numa aba própria do Excel. Quanto menor

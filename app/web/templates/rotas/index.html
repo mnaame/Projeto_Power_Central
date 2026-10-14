@@ -5,6 +5,12 @@
 {% set resumo = catalogo.resumo %}
 {% set completo = catalogo.total > 0 and catalogo.visitados == catalogo.total %}
 
+{% block head %}
+{% if pontos %}
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+{% endif %}
+{% endblock %}
+
 {% block content %}
 <div class="section">
   <div class="section-title">
@@ -175,8 +181,46 @@
   {% endif %}
 </div>
 
+{% if pontos %}
+<div class="section">
+  <div class="section-title">
+    <h2>Mapa</h2>
+    <span class="muted">
+      {{ pontos|length }} de {{ catalogo.total }} cliente(s) com coordenada
+    </span>
+  </div>
+  <div class="card" style="padding: 0; overflow: hidden;">
+    <div id="mapa-rotas" style="height: 520px;"
+         data-pontos="{{ pontos|tojson|forceescape }}"></div>
+  </div>
+  <p class="muted" style="margin-top: var(--space-2);">
+    Cada cor é um bairro; cliente já visitado fica cinza. Clique no pino
+    para ver conta, cliente e região. Quem não tem coordenada no cadastro
+    não aparece aqui — mas continua na lista e na busca.
+  </p>
+</div>
+{% endif %}
+
+{# Sugestão em vez de digitação livre: escrever "Padre Eustaquio" onde a
+   base tem "Padre Eustáquio" criaria duas regiões para o mesmo lugar. #}
+<datalist id="rotas-bairros">
+  {% for nome in bairros %}<option value="{{ nome }}"></option>{% endfor %}
+</datalist>
+
 <div class="section">
   <div class="section-title"><h2>Regiões</h2></div>
+
+  {# A busca filtra a lista E o mapa. Ver dez pinos de "padaria" num mapa
+     de cem é metade da utilidade de procurar. #}
+  <div class="card" style="margin-bottom: var(--space-3);">
+    <label for="rotas-busca">Procurar cliente, conta, bairro ou cidade</label>
+    <input id="rotas-busca" type="search" autocomplete="off"
+           placeholder="ex.: padaria, 0118, buritis" style="width: 100%;">
+    <p class="muted" id="rotas-busca-resultado" style="margin-top: var(--space-1);">
+      {{ catalogo.total }} cliente(s) no ciclo.
+    </p>
+  </div>
+
   {% for regiao in catalogo.regioes %}
   {% set feitos = namespace(n=0) %}
   {% for cliente in regiao.clientes %}
@@ -197,7 +241,8 @@
         <thead>
           <tr>
             <th style="width: 7rem;">Visitado</th>
-            <th>Conta</th><th>Cliente</th><th>Bairro</th><th>Cidade</th><th>Quando</th>
+            <th>Conta</th><th>Cliente</th><th>Bairro</th><th>Cidade</th>
+            <th>Quando</th><th style="width: 4rem;"></th>
           </tr>
         </thead>
         <tbody>
@@ -223,10 +268,45 @@
             </td>
             <td class="is-numeric">{{ cliente.conta }}</td>
             <td>{{ cliente.nome }}</td>
-            <td>{{ cliente.bairro or '—' }}</td>
-            <td>{{ cliente.cidade or '—' }}</td>
+            <td data-bairro>
+              {{ cliente.bairro or '—' }}
+              {% if cliente.fonte == 'corrigido à mão' %}
+              <span class="chip chip-neutral" title="corrigido à mão">✎</span>
+              {% endif %}
+            </td>
+            <td data-cidade>{{ cliente.cidade or '—' }}</td>
             <td class="muted" data-quando>
               {{ linha.visitado_em|data_local if linha.visitado_em else '—' }}
+            </td>
+            <td>
+              <button type="button" class="btn btn-ghost" style="padding: 2px 10px;"
+                      data-abrir-bairro>Bairro</button>
+            </td>
+          </tr>
+          <tr class="linha-bairro" data-editor-de="{{ cliente.conta }}" hidden>
+            <td colspan="7">
+              {# `form` de verdade de novo: sem JS corrige igual, só
+                 recarregando a página. #}
+              <form method="post" action="{{ url_for('rotas.bairro') }}" data-bairro-form
+                    style="display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: flex-end;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="conta" value="{{ cliente.conta }}">
+                <div class="field" style="margin-bottom: 0;">
+                  <label>Bairro</label>
+                  <input type="text" name="bairro" list="rotas-bairros"
+                         value="{{ cliente.bairro }}" style="width: 16rem;">
+                </div>
+                <div class="field" style="margin-bottom: 0;">
+                  <label>Cidade</label>
+                  <input type="text" name="cidade" value="{{ cliente.cidade }}"
+                         style="width: 12rem;">
+                </div>
+                <button type="submit" class="btn btn-secondary">Salvar</button>
+                <span class="muted">
+                  Vale também nas próximas gerações. Em branco = volta a
+                  valer o cadastro.
+                </span>
+              </form>
             </td>
           </tr>
           {% endfor %}
@@ -240,6 +320,10 @@
 {% endblock %}
 
 {% block scripts %}
+{% if pontos %}
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ url_for('static', filename='js/mapa_rotas.js') }}"></script>
+{% endif %}
 {% if catalogo.total %}
 <script>
 // Marcar visita sem recarregar. Percorrer uma lista de cem clientes com
@@ -275,6 +359,90 @@
     }
   }
 
+  // ---------- busca ----------
+  var busca = document.getElementById('rotas-busca');
+  var resultado = document.getElementById('rotas-busca-resultado');
+
+  function textoDaLinha(linha) {
+    return (linha.textContent || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+
+  if (busca) {
+    busca.addEventListener('input', function () {
+      var termo = busca.value.trim()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      var visiveis = termo ? new Set() : null;
+      var achados = 0;
+
+      document.querySelectorAll('[data-regiao]').forEach(function (bloco) {
+        var mostrouAlguma = false;
+        bloco.querySelectorAll('tbody tr[data-conta]').forEach(function (linha) {
+          var bate = !termo || textoDaLinha(linha).indexOf(termo) !== -1;
+          linha.hidden = !bate;
+          // O editor de bairro acompanha a linha dele.
+          var editor = bloco.querySelector(
+            '[data-editor-de="' + linha.dataset.conta + '"]');
+          if (editor && !bate) { editor.hidden = true; }
+          if (bate) {
+            mostrouAlguma = true;
+            achados += 1;
+            if (visiveis) { visiveis.add(linha.dataset.conta); }
+          }
+        });
+        bloco.hidden = termo && !mostrouAlguma;
+        // Procurar e ter que abrir cada bairro à mão seria inútil.
+        if (termo && mostrouAlguma) { bloco.open = true; }
+      });
+
+      if (resultado) {
+        resultado.textContent = termo
+          ? achados + ' cliente(s) encontrado(s).'
+          : total + ' cliente(s) no ciclo.';
+      }
+      document.dispatchEvent(new CustomEvent('rotas:busca', {
+        detail: { contas: visiveis },
+      }));
+    });
+  }
+
+  // ---------- corrigir o bairro ----------
+  document.querySelectorAll('[data-abrir-bairro]').forEach(function (botao) {
+    botao.addEventListener('click', function () {
+      var linha = botao.closest('tr');
+      var editor = linha.parentNode.querySelector(
+        '[data-editor-de="' + linha.dataset.conta + '"]');
+      if (!editor) { return; }
+      editor.hidden = !editor.hidden;
+      if (!editor.hidden) { editor.querySelector('input[name="bairro"]').focus(); }
+    });
+  });
+
+  document.querySelectorAll('form[data-bairro-form]').forEach(function (form) {
+    form.addEventListener('submit', function (evento) {
+      evento.preventDefault();
+      fetch(form.action, {
+        method: 'POST',
+        body: new FormData(form),
+        headers: { 'Accept': 'application/json' },
+      })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r); })
+        .then(function (dados) {
+          var editor = form.closest('tr');
+          var linha = editor.previousElementSibling;
+          editor.hidden = true;
+          if (linha) {
+            linha.querySelector('[data-bairro]').textContent = dados.bairro || '—';
+            linha.querySelector('[data-cidade]').textContent = dados.cidade || '—';
+          }
+          // O agrupamento mudou: só recarregando a tela reorganiza as
+          // regiões, e mostrar o cliente no bairro antigo seria mentira.
+          window.location.reload();
+        })
+        .catch(function () { form.submit(); });
+    });
+  });
+
   document.querySelectorAll('form[data-visita]').forEach(function (form) {
     form.addEventListener('submit', function (evento) {
       evento.preventDefault();
@@ -303,6 +471,17 @@
           }
           atualizarProgresso(dados.visitados);
           atualizarRegiao(linha);
+          // O mapa é a mesma verdade: sem este aviso ele ficaria
+          // desatualizado desde o primeiro clique.
+          document.dispatchEvent(new CustomEvent('rotas:visita', {
+            detail: {
+              conta: dados.conta,
+              visitado: dados.visitado,
+              regiao: linha.closest('[data-regiao]')
+                ? linha.closest('[data-regiao]').querySelector('summary strong').textContent
+                : '',
+            },
+          }));
         })
         .catch(function () {
           // Falhou a marcação sem recarregar: manda o formulário do jeito
