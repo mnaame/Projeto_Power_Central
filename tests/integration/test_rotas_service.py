@@ -12,7 +12,7 @@ import pytest
 from app.extensions import db
 from app.integrations.softguard_client import SoftGuardError
 from app.models.auvo import AuvoDepara
-from app.models.rotas import RotasEndereco
+from app.models.rotas import RotasCiclo, RotasEndereco
 from app.services import rotas_service as svc
 
 ENDERECO_SAVASSI = "Rua Antônio de Albuquerque, 100,,Savassi,Belo Horizonte,MG,30112010"
@@ -73,7 +73,9 @@ def _montar(app, monkeypatch, *, contas, clientes_auvo=None, erro_auvo=None):
         "criar_cliente",
         lambda config: FakeAuvo(clientes_auvo, erro=erro_auvo),
     )
-    return svc.montar_catalogo(config=app.config)
+    # `montar_catalogo` devolve o CICLO gravado; `catalogo()` é o que a
+    # tela monta a partir dele. Os testes olham o segundo.
+    return svc.catalogo(svc.montar_catalogo(config=app.config))
 
 
 # ---------- quem é base ----------
@@ -349,7 +351,7 @@ def test_auvo_nao_configurada_e_avisada_sem_derrubar(app, monkeypatch):
     monkeypatch.setattr(svc, "credenciais_softguard", lambda config: None)
     monkeypatch.setattr(svc.auvo_service, "criar_cliente", lambda config: None)
 
-    resultado = svc.montar_catalogo(config=app.config)
+    resultado = svc.catalogo(svc.montar_catalogo(config=app.config))
 
     assert "não configurada" in resultado["resumo"]["erro_auvo"]
 
@@ -379,3 +381,118 @@ def test_geracao_e_auditada_so_com_contadores(app, monkeypatch, admin_user):
     entrada = AuditLog.query.filter_by(action="rotas_catalogo_gerado").one()
     assert len(entrada.action) <= 48
     assert "PADARIA SIGILOSA" not in str(entrada.details)
+
+
+# ---------- o ciclo de preventivas ----------
+
+
+def test_gerar_duas_vezes_nao_cria_dois_ciclos(app, monkeypatch):
+    """Gerar é rotina — se cada geração abrisse uma rodada, o número do
+    ciclo viraria ruído e a progressão não significaria nada."""
+    contas = [_conta("0095", "PADARIA DO ZE")]
+    monkeypatch.setattr(svc, "SoftGuardClient", lambda *a, **k: FakeSoftGuard(contas))
+    monkeypatch.setattr(svc, "credenciais_softguard", lambda config: None)
+    monkeypatch.setattr(svc.auvo_service, "criar_cliente", lambda config: FakeAuvo([]))
+
+    primeiro = svc.montar_catalogo(config=app.config)
+    db.session.commit()
+    segundo = svc.montar_catalogo(config=app.config)
+    db.session.commit()
+
+    assert primeiro.id == segundo.id
+    assert RotasCiclo.query.count() == 1
+
+
+def test_conta_que_sai_da_base_sai_do_ciclo(app, monkeypatch):
+    contas = [_conta("0095", "PADARIA"), _conta("0096", "ACADEMIA")]
+    monkeypatch.setattr(svc, "SoftGuardClient", lambda *a, **k: FakeSoftGuard(contas))
+    monkeypatch.setattr(svc, "credenciais_softguard", lambda config: None)
+    monkeypatch.setattr(svc.auvo_service, "criar_cliente", lambda config: FakeAuvo([]))
+    svc.montar_catalogo(config=app.config)
+    db.session.commit()
+
+    contas.pop()  # a conta sumiu da PowerCentral
+    ciclo = svc.montar_catalogo(config=app.config)
+    db.session.commit()
+
+    assert [linha.conta for linha in ciclo.clientes] == ["0095"]
+
+
+def test_visita_de_conta_que_continua_no_catalogo_e_preservada(app, monkeypatch):
+    contas = [_conta("0095", "PADARIA"), _conta("0096", "ACADEMIA")]
+    monkeypatch.setattr(svc, "SoftGuardClient", lambda *a, **k: FakeSoftGuard(contas))
+    monkeypatch.setattr(svc, "credenciais_softguard", lambda config: None)
+    monkeypatch.setattr(svc.auvo_service, "criar_cliente", lambda config: FakeAuvo([]))
+    ciclo = svc.montar_catalogo(config=app.config)
+    svc.marcar_visita(ciclo, "0095", visitado=True)
+    db.session.commit()
+
+    ciclo = svc.montar_catalogo(config=app.config)
+    db.session.commit()
+
+    assert svc.catalogo(ciclo)["visitados"] == 1
+
+
+def test_reiniciar_encerra_o_ciclo_e_abre_o_seguinte(app, monkeypatch):
+    contas = [_conta("0095", "PADARIA")]
+    monkeypatch.setattr(svc, "SoftGuardClient", lambda *a, **k: FakeSoftGuard(contas))
+    monkeypatch.setattr(svc, "credenciais_softguard", lambda config: None)
+    monkeypatch.setattr(svc.auvo_service, "criar_cliente", lambda config: FakeAuvo([]))
+    ciclo = svc.montar_catalogo(config=app.config)
+    svc.marcar_visita(ciclo, "0095", visitado=True)
+    db.session.commit()
+
+    novo = svc.reiniciar_ciclo(ciclo)
+    db.session.commit()
+
+    assert ciclo.encerrado_em is not None
+    assert novo.numero == ciclo.numero + 1
+    assert svc.catalogo(novo)["visitados"] == 0
+    assert svc.catalogo(novo)["total"] == 1
+    assert svc.ciclo_atual().id == novo.id
+
+
+def test_o_ciclo_encerrado_guarda_o_que_foi_visitado(app, monkeypatch):
+    """A rodada anterior é o histórico das preventivas — zerar por cima
+    dela apagaria quando cada local foi atendido."""
+    contas = [_conta("0095", "PADARIA")]
+    monkeypatch.setattr(svc, "SoftGuardClient", lambda *a, **k: FakeSoftGuard(contas))
+    monkeypatch.setattr(svc, "credenciais_softguard", lambda config: None)
+    monkeypatch.setattr(svc.auvo_service, "criar_cliente", lambda config: FakeAuvo([]))
+    ciclo = svc.montar_catalogo(config=app.config)
+    svc.marcar_visita(ciclo, "0095", visitado=True)
+    db.session.commit()
+
+    svc.reiniciar_ciclo(ciclo)
+    db.session.commit()
+
+    antigo = RotasCiclo.query.filter(RotasCiclo.encerrado_em.isnot(None)).one()
+    assert antigo.clientes.first().visitado_em is not None
+
+
+def test_marcar_conta_de_fora_do_ciclo_e_recusado(app, monkeypatch):
+    contas = [_conta("0095", "PADARIA")]
+    monkeypatch.setattr(svc, "SoftGuardClient", lambda *a, **k: FakeSoftGuard(contas))
+    monkeypatch.setattr(svc, "credenciais_softguard", lambda config: None)
+    monkeypatch.setattr(svc.auvo_service, "criar_cliente", lambda config: FakeAuvo([]))
+    ciclo = svc.montar_catalogo(config=app.config)
+    db.session.commit()
+
+    with pytest.raises(svc.RotasError, match="0999"):
+        svc.marcar_visita(ciclo, "0999", visitado=True)
+
+
+def test_marcar_visita_e_auditado_com_a_conta(app, monkeypatch, admin_user):
+    from app.models.audit import AuditLog
+
+    contas = [_conta("0095", "PADARIA")]
+    monkeypatch.setattr(svc, "SoftGuardClient", lambda *a, **k: FakeSoftGuard(contas))
+    monkeypatch.setattr(svc, "credenciais_softguard", lambda config: None)
+    monkeypatch.setattr(svc.auvo_service, "criar_cliente", lambda config: FakeAuvo([]))
+    ciclo = svc.montar_catalogo(config=app.config)
+
+    svc.marcar_visita(ciclo, "0095", visitado=True, user=admin_user)
+    db.session.commit()
+
+    entrada = AuditLog.query.filter_by(action="rotas_visita_marcada").one()
+    assert entrada.details["conta"] == "0095"

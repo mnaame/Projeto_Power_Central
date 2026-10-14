@@ -2,18 +2,22 @@
 
 {% block title %}Visitas por Bairro{% endblock %}
 
+{% set resumo = catalogo.resumo %}
+{% set completo = catalogo.total > 0 and catalogo.visitados == catalogo.total %}
+
 {% block content %}
 <div class="section">
   <div class="section-title">
     <h2>Visita Preventiva por Bairro</h2>
-    {% if resultado %}
+    {% if catalogo.total %}
     <a class="btn btn-ghost" href="{{ url_for('rotas.exportar') }}">Baixar Excel</a>
     {% endif %}
   </div>
   <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
     Agrupa os clientes <strong>base</strong> (fora Villefort, Super Nosso e
-    Apoio) por bairro, para agendar as preventivas por região. Só leitura —
-    não altera nada na PowerCentral nem na Auvo.
+    Apoio) por bairro, para agendar as preventivas por região. Marque o que
+    o técnico já visitou — a marca fica guardada e não se perde ao fechar o
+    navegador. Só leitura nas plataformas.
   </p>
 
   <form method="post" action="{{ url_for('rotas.gerar') }}" class="card"
@@ -21,10 +25,60 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit" class="btn btn-primary">Gerar catálogo</button>
     <span class="muted">
-      Consulta a PowerCentral e a Auvo. Leva alguns minutos.
+      Consulta a PowerCentral e a Auvo. As visitas já marcadas são mantidas.
     </span>
   </form>
 </div>
+
+{% if ciclo %}
+<div class="section">
+  <div class="section-title">
+    <h2>Ciclo #{{ ciclo.numero }}</h2>
+    <span class="muted">iniciado em {{ ciclo.iniciado_em|data_local }}</span>
+  </div>
+
+  {# Barra de progresso da rodada: é o número que responde "falta muito?" #}
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: baseline;
+                gap: var(--space-3); flex-wrap: wrap;">
+      <strong id="rotas-progresso-texto">
+        {{ catalogo.visitados }} de {{ catalogo.total }} cliente(s) visitado(s)
+      </strong>
+      <span class="muted">{{ catalogo.total - catalogo.visitados }} restante(s)</span>
+    </div>
+    <div style="margin-top: var(--space-2); height: 10px; border-radius: 999px;
+                background: var(--color-status-neutral-bg); overflow: hidden;">
+      <div id="rotas-progresso-barra"
+           style="height: 100%; border-radius: 999px; background: var(--color-accent);
+                  width: {{ (100 * catalogo.visitados / catalogo.total) if catalogo.total else 0 }}%;
+                  transition: width .2s;"></div>
+    </div>
+
+    <div id="rotas-ciclo-completo" class="banner banner-info"
+         style="margin-top: var(--space-3); {{ '' if completo else 'display: none;' }}"
+         role="status">
+      <span>
+        <strong>Rodada concluída</strong> — todos os clientes do ciclo
+        #{{ ciclo.numero }} foram visitados. Reinicie para começar a próxima
+        rodada com as mesmas contas e nenhuma marca.
+      </span>
+    </div>
+
+    <form method="post" action="{{ url_for('rotas.reiniciar') }}"
+          style="margin-top: var(--space-3);"
+          onsubmit="return confirm('Encerrar o ciclo #{{ ciclo.numero }} e começar outro? Todas as {{ catalogo.visitados }} marca(s) de visita são zeradas.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn {{ 'btn-primary' if completo else 'btn-ghost' }}">
+        Reiniciar ciclo
+      </button>
+      <span class="muted" style="margin-left: var(--space-2);">
+        Zera as visitas e abre o ciclo #{{ ciclo.numero + 1 }}. Não consulta
+        as plataformas — a lista de clientes é a mesma.
+      </span>
+    </form>
+  </div>
+</div>
+{% endif %}
 
 <div class="section">
   <div class="section-title"><h2>Endereços importados</h2></div>
@@ -70,7 +124,7 @@
   </div>
 </div>
 
-{% if not resultado %}
+{% if not catalogo.total %}
 <div class="section">
   <div class="card empty-state">
     <h3>Nenhum catálogo gerado ainda</h3>
@@ -82,40 +136,39 @@
   <div class="stat-grid">
     <div class="stat-tile">
       <div class="stat-tile-label">Bairros</div>
-      <div class="stat-tile-value">{{ resultado.resumo.regioes }}</div>
+      <div class="stat-tile-value">{{ resumo.regioes }}</div>
       <div class="stat-tile-hint">regiões de visita</div>
     </div>
     <div class="stat-tile">
       <div class="stat-tile-label">Clientes base</div>
-      <div class="stat-tile-value">{{ resultado.resumo.base }}</div>
-      <div class="stat-tile-hint">{{ resultado.resumo.com_bairro }} com bairro</div>
+      <div class="stat-tile-value">{{ resumo.base }}</div>
+      <div class="stat-tile-hint">{{ resumo.com_bairro }} com bairro</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-label">Visitados</div>
+      <div class="stat-tile-value {{ 'is-ok' if completo }}" id="rotas-visitados-tile">
+        {{ catalogo.visitados }}
+      </div>
+      <div class="stat-tile-hint">neste ciclo</div>
     </div>
     <div class="stat-tile">
       <div class="stat-tile-label">Sem bairro</div>
-      <div class="stat-tile-value {{ 'is-critical' if resultado.resumo.sem_bairro else 'is-ok' }}">
-        {{ resultado.resumo.sem_bairro }}
+      <div class="stat-tile-value {{ 'is-critical' if resumo.sem_bairro else 'is-ok' }}">
+        {{ resumo.sem_bairro }}
       </div>
       <div class="stat-tile-hint">
-        {% if resultado.resumo.sem_regiao %}
-        {{ resultado.resumo.sem_regiao }} sem nem a cidade
+        {% if resumo.sem_regiao %}
+        {{ resumo.sem_regiao }} sem nem a cidade
         {% else %}
         agrupados só pela cidade
         {% endif %}
       </div>
     </div>
-    <div class="stat-tile">
-      <div class="stat-tile-label">Clientes na Auvo</div>
-      <div class="stat-tile-value">{{ resultado.resumo.auvo_clientes }}</div>
-      <div class="stat-tile-hint">lidos da API</div>
-    </div>
   </div>
-  {# De onde veio o endereço de cada cliente. Sem isto, um resultado
-     magro não distingue "a API não entrega" de "o cadastro está vazio"
-     — foi o que travou o diagnóstico nas primeiras rodadas. #}
-  {% if resultado.resumo.fontes %}
+  {% if resumo.fontes %}
   <p class="muted" style="margin-top: var(--space-2);">
     Origem do endereço:
-    {% for fonte, quantidade in resultado.resumo.fontes.items() %}
+    {% for fonte, quantidade in resumo.fontes.items() %}
     {{ quantidade }} {{ fonte }}{{ ", " if not loop.last }}
     {% endfor %}
   </p>
@@ -124,10 +177,17 @@
 
 <div class="section">
   <div class="section-title"><h2>Regiões</h2></div>
-  {% for regiao in resultado.regioes %}
-  <details class="card" style="margin-bottom: var(--space-3);" {{ 'open' if loop.first }}>
+  {% for regiao in catalogo.regioes %}
+  {% set feitos = namespace(n=0) %}
+  {% for cliente in regiao.clientes %}
+    {% if catalogo.linhas[cliente.conta].visitado_em %}{% set feitos.n = feitos.n + 1 %}{% endif %}
+  {% endfor %}
+  <details class="card" style="margin-bottom: var(--space-3);"
+           data-regiao {{ 'open' if loop.first and feitos.n < regiao.tamanho }}>
     <summary style="cursor: pointer;">
       <strong>{{ regiao.rotulo }}</strong> — {{ regiao.tamanho }} cliente(s)
+      <span class="chip {{ 'chip-ok' if feitos.n == regiao.tamanho else 'chip-neutral' }}"
+            data-contador-regiao>{{ feitos.n }}/{{ regiao.tamanho }} visitado(s)</span>
       {% if not regiao.tem_bairro %}
       <span class="chip chip-warning">sem bairro no cadastro</span>
       {% endif %}
@@ -135,19 +195,38 @@
     <div class="table-wrap" style="margin-top: var(--space-3);">
       <table>
         <thead>
-          <tr><th>Conta</th><th>Cliente</th><th>Bairro</th><th>Cidade</th><th>Origem</th></tr>
+          <tr>
+            <th style="width: 7rem;">Visitado</th>
+            <th>Conta</th><th>Cliente</th><th>Bairro</th><th>Cidade</th><th>Quando</th>
+          </tr>
         </thead>
         <tbody>
           {% for cliente in regiao.clientes %}
-          <tr>
+          {% set linha = catalogo.linhas[cliente.conta] %}
+          <tr data-conta="{{ cliente.conta }}"
+              class="{{ 'is-visitado' if linha.visitado_em }}">
+            <td>
+              {# `form` de verdade: sem JS a marcação continua funcionando,
+                 só recarregando a página. O JS abaixo intercepta para não
+                 recarregar a cada clique numa lista de cem clientes. #}
+              <form method="post" action="{{ url_for('rotas.visita') }}" data-visita>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="conta" value="{{ cliente.conta }}">
+                <input type="hidden" name="visitado"
+                       value="{{ '0' if linha.visitado_em else '1' }}">
+                <button type="submit"
+                        class="btn {{ 'btn-ghost' if linha.visitado_em else 'btn-secondary' }}"
+                        style="padding: 2px 10px;">
+                  {{ 'Desfazer' if linha.visitado_em else 'Marcar' }}
+                </button>
+              </form>
+            </td>
             <td class="is-numeric">{{ cliente.conta }}</td>
             <td>{{ cliente.nome }}</td>
             <td>{{ cliente.bairro or '—' }}</td>
             <td>{{ cliente.cidade or '—' }}</td>
-            <td>
-              {% if cliente.fonte %}
-              <span class="chip chip-neutral">{{ cliente.fonte }}</span>
-              {% else %}—{% endif %}
+            <td class="muted" data-quando>
+              {{ linha.visitado_em|data_local if linha.visitado_em else '—' }}
             </td>
           </tr>
           {% endfor %}
@@ -157,5 +236,83 @@
   </details>
   {% endfor %}
 </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if catalogo.total %}
+<script>
+// Marcar visita sem recarregar. Percorrer uma lista de cem clientes com
+// um reload por clique seria inviável na prática — mas o `form` continua
+// de pé, então sem JS a tela funciona igual, só mais lenta.
+(function () {
+  var total = {{ catalogo.total }};
+
+  function atualizarProgresso(visitados) {
+    var texto = document.getElementById('rotas-progresso-texto');
+    var barra = document.getElementById('rotas-progresso-barra');
+    var tile = document.getElementById('rotas-visitados-tile');
+    var aviso = document.getElementById('rotas-ciclo-completo');
+    if (texto) { texto.textContent = visitados + ' de ' + total + ' cliente(s) visitado(s)'; }
+    if (barra) { barra.style.width = (total ? (100 * visitados / total) : 0) + '%'; }
+    if (tile) {
+      tile.textContent = visitados;
+      tile.classList.toggle('is-ok', visitados === total);
+    }
+    if (aviso) { aviso.style.display = (visitados === total && total > 0) ? '' : 'none'; }
+  }
+
+  function atualizarRegiao(linha) {
+    var bloco = linha.closest('[data-regiao]');
+    if (!bloco) { return; }
+    var linhas = bloco.querySelectorAll('tbody tr');
+    var feitos = bloco.querySelectorAll('tbody tr.is-visitado').length;
+    var chip = bloco.querySelector('[data-contador-regiao]');
+    if (chip) {
+      chip.textContent = feitos + '/' + linhas.length + ' visitado(s)';
+      chip.classList.toggle('chip-ok', feitos === linhas.length);
+      chip.classList.toggle('chip-neutral', feitos !== linhas.length);
+    }
+  }
+
+  document.querySelectorAll('form[data-visita]').forEach(function (form) {
+    form.addEventListener('submit', function (evento) {
+      evento.preventDefault();
+      var botao = form.querySelector('button');
+      botao.disabled = true;
+
+      fetch(form.action, {
+        method: 'POST',
+        body: new FormData(form),
+        headers: { 'Accept': 'application/json' },
+      })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r); })
+        .then(function (dados) {
+          var linha = form.closest('tr');
+          var campo = form.querySelector('[name="visitado"]');
+          linha.classList.toggle('is-visitado', dados.visitado);
+          campo.value = dados.visitado ? '0' : '1';
+          botao.textContent = dados.visitado ? 'Desfazer' : 'Marcar';
+          botao.classList.toggle('btn-ghost', dados.visitado);
+          botao.classList.toggle('btn-secondary', !dados.visitado);
+          var quando = linha.querySelector('[data-quando]');
+          if (quando) {
+            quando.textContent = dados.visitado
+              ? new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+              : '—';
+          }
+          atualizarProgresso(dados.visitados);
+          atualizarRegiao(linha);
+        })
+        .catch(function () {
+          // Falhou a marcação sem recarregar: manda o formulário do jeito
+          // comum, para a pessoa ver o erro em vez de achar que marcou.
+          form.submit();
+        })
+        .finally(function () { botao.disabled = false; });
+    });
+  });
+})();
+</script>
 {% endif %}
 {% endblock %}

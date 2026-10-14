@@ -894,6 +894,23 @@ Dá para repetir sempre que o cadastro mudar. A planilha da PowerCentral
 precisa ser enviada **como ela é baixada** — se você abrir e salvar pelo
 Excel, o arquivo muda de formato e o sistema recusa, explicando isso.
 
+**Marcando as visitas.** Cada cliente tem um botão **Marcar** — clique
+quando o técnico passar lá. A linha fica riscada, a barra de progresso
+sobe e o contador do bairro ("3/4 visitado(s)") acompanha. Marcou errado?
+**Desfazer** no mesmo lugar.
+
+A marca fica **guardada no servidor**: pode fechar o navegador, usar
+outra máquina, voltar amanhã. E **gerar o catálogo de novo não apaga as
+visitas** — dá para importar planilha nova no meio da rodada sem perder
+nada.
+
+**Quando tudo estiver marcado**, aparece o aviso de rodada concluída.
+Clique em **Reiniciar ciclo**: o ciclo atual é encerrado e começa o
+seguinte, com as mesmas contas e nenhuma marca, pronto para a próxima
+volta das preventivas. Não consulta as plataformas, é instantâneo. O
+ciclo encerrado continua guardado no banco com as datas de visita — é o
+histórico de quando cada local foi atendido.
+
 **A lista "(sem bairro)" é a parte importante.** São clientes que o
 cadastro não diz em que bairro ficam; eles aparecem agrupados só pela
 cidade, no fim da lista, e saem numa aba própria do Excel. Quanto menor

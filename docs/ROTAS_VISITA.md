@@ -120,25 +120,81 @@ Ele aparece dentro de nome de bairro ("Palmares - 4ª Seção (Parque Durval
 de Barros)"), e quebrar por ele cortava o bairro ao meio. É tratado só
 onde realmente separa.
 
-## 5. Quem não tem bairro não some
+## 5. O ciclo de preventivas
+
+Uma rodada de visitas é um **ciclo** persistido (`rotas_ciclos` +
+`rotas_ciclo_clientes`): o catálogo gerado, mais a marca de quem já foi
+visitado e quando.
+
+### Por que o catálogo mora no banco
+
+A primeira versão guardava o resultado no **cookie de sessão**. Com a
+base real ele dava **4.746 bytes contra um limite de 4.093** no
+navegador: o cookie era descartado em silêncio, e a tela respondia
+"nenhum catálogo gerado ainda" logo depois de gerar. Nenhum erro
+aparecia, porque do ponto de vista do código a sessão só tinha vindo
+vazia — o servidor tinha montado tudo certo.
+
+Guardar no banco é também o que dá memória à rodada: o técnico visita ao
+longo de dias, e a marca do que já foi tem que sobreviver a fechar o
+navegador, a trocar de máquina e a gerar o catálogo de novo.
+
+### Gerar de novo preserva as visitas
+
+Gerar no meio de uma rodada é rotina — importou planilha nova, entrou
+conta nova. A lista de clientes é substituída, mas a marca de cada conta
+que continua no catálogo é recolocada. Perder as marcas faria o técnico
+repetir locais, que é exatamente o que a marcação existe para evitar.
+
+Pelo mesmo motivo, **gerar não abre um ciclo novo**: se cada geração
+abrisse uma rodada, o número do ciclo viraria ruído e a progressão não
+significaria nada. Conta que saiu da base sai do ciclo.
+
+### Reiniciar
+
+"Reiniciar ciclo" encerra a rodada (`encerrado_em`) e abre a seguinte com
+**os mesmos clientes e nenhuma marca**. Não consulta plataforma nenhuma:
+a lista acabou de ser percorrida, e refazer a varredura só para zerar
+marcas custaria minutos para não mudar nada.
+
+O ciclo encerrado **fica no banco com as visitas dele**. Zerar por cima
+apagaria quando cada local foi atendido, que é o histórico das
+preventivas.
+
+### Desmarcar
+
+Marcar errado é fácil e inevitável. Sem o desfazer, o único conserto
+seria reiniciar a rodada e perder todas as outras marcas.
+
+### Marcar sem recarregar
+
+A marcação é um `form` de verdade, interceptado por JS. Sem JS a tela
+continua funcionando, só recarregando a cada clique; com JS, percorrer
+uma lista de cem clientes deixa de exigir cem recarregamentos. Se a
+chamada falhar, o formulário é enviado do jeito comum — para a pessoa ver
+o erro em vez de achar que marcou.
+
+## 6. Quem não tem bairro não some
 
 Vai para uma região `(sem bairro) — Cidade`, no fim da lista. Some seria
 pior: ninguém procura o que não aparece. Essa é a fila de trabalho do
 cadastro, e sai numa aba própria do Excel.
 
-## 6. Resiliência
+## 7. Resiliência
 
 - **Auvo fora do ar não cancela nada**: sobram a planilha importada e a
   PowerCentral. Entregar parte é melhor que não entregar nada — e o
   resumo mostra de onde veio cada endereço e avisa o que faltou.
 - **PowerCentral fora** aborta com erro próprio: sem a lista de contas
   não existe nada para catalogar.
-- O resultado fica na sessão entre gerar e exportar, para o Excel sair
-  **exatamente** igual ao que está na tela. Importar uma planilha descarta
-  esse resultado — senão a tela mostraria o catálogo de antes logo depois
-  da importação.
+- O Excel sai **exatamente** igual ao que está na tela, porque os dois
+  leem o mesmo ciclo gravado, e traz a coluna de quando cada cliente foi
+  visitado.
+- Importar planilha **não** mexe no ciclo: descartá-lo jogaria fora as
+  visitas já marcadas. O catálogo fica como está até alguém gerar de
+  novo, e a mensagem da importação diz isso.
 
-## 7. Validação com a base real (13/10)
+## 8. Validação com a base real (13/10)
 
 Pior caso simulado: a API da PowerCentral devolvendo **só conta e nome**,
 a Auvo fora do ar, tudo vindo das duas planilhas importadas.
@@ -162,7 +218,7 @@ Da coluna "Rua" da PowerCentral sai quase nada — de 148 contas, uma tinha
 bairro legível. Por isso a PowerCentral entra como fonte de **cidade**, e
 a Auvo como fonte de bairro.
 
-## 8. Conferir contra as plataformas de verdade
+## 9. Conferir contra as plataformas de verdade
 
 ```
 .venv\Scripts\python.exe scripts\debug_rotas.py

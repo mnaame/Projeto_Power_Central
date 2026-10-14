@@ -787,3 +787,9 @@ summary.btn::-webkit-details-marker {
 .tarefa-lista-concluidas {
   margin-top: var(--space-2);
 }
+
+/* Linha de cliente já visitado no ciclo de preventivas. O contraste é
+   deliberadamente baixo: ela continua legível (pode ser preciso desfazer
+   a marca), mas sai do caminho de quem está procurando o que falta. */
+tr.is-visitado > td { opacity: .55; }
+tr.is-visitado > td:nth-child(3) { text-decoration: line-through; }

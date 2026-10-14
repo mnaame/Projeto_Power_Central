@@ -33,7 +33,7 @@ from app.domain import rotas as dom
 from app.extensions import db
 from app.integrations.softguard_client import SoftGuardClient, SoftGuardError
 from app.models.auvo import AuvoDepara
-from app.models.rotas import RotasEndereco
+from app.models.rotas import RotasCiclo, RotasCicloCliente, RotasEndereco
 from app.services import audit_service, auvo_service
 from app.services.collector import credenciais_softguard
 
@@ -342,17 +342,183 @@ def montar_catalogo(*, config, user=None) -> dict:
         "fontes": contagem_fontes,
         "erro_auvo": erro_auvo,
         "auvo_clientes": len(clientes_auvo),
-        "importacoes": resumo_importacoes(),
     }
 
+    ciclo = _gravar_ciclo(clientes, resumo=resumo, user=user)
     audit_service.registrar(
         action="rotas_catalogo_gerado",
         result="success",
         user=user,
         details={
+            "ciclo": ciclo.numero,
             "base": resumo["base"],
             "com_bairro": resumo["com_bairro"],
             "regioes": resumo["regioes"],
         },
     )
-    return {"regioes": regioes, "resumo": resumo}
+    return ciclo
+
+
+# ----------------------------------------------------------------------
+# O ciclo de preventivas (persistido — ver `models/rotas.RotasCiclo`)
+# ----------------------------------------------------------------------
+
+
+def ciclo_atual() -> RotasCiclo | None:
+    """A rodada em aberto, ou nada se nunca se gerou catálogo."""
+    return (
+        RotasCiclo.query.filter(RotasCiclo.encerrado_em.is_(None))
+        .order_by(RotasCiclo.numero.desc())
+        .first()
+    )
+
+
+def _gravar_ciclo(clientes, *, resumo: dict, user=None) -> RotasCiclo:
+    """Grava o catálogo na rodada em aberto, **preservando as visitas**.
+
+    Gerar de novo no meio de uma rodada é normal (importou planilha nova,
+    entrou conta nova), e perder o que já foi visitado faria o técnico
+    repetir locais — exatamente o que a marcação existe para evitar. Por
+    isso a lista é substituída, mas a marca de cada conta que continua no
+    catálogo é recolocada."""
+    ciclo = ciclo_atual()
+    if ciclo is None:
+        ultimo = RotasCiclo.query.order_by(RotasCiclo.numero.desc()).first()
+        ciclo = RotasCiclo(numero=(ultimo.numero + 1) if ultimo else 1)
+        db.session.add(ciclo)
+        db.session.flush()
+
+    visitas = {
+        linha.conta: (linha.visitado_em, linha.visitado_por_user_id)
+        for linha in ciclo.clientes
+        if linha.visitado_em is not None
+    }
+    # Apagado uma a uma, pela ORM, e não com um DELETE em massa: o
+    # `delete(synchronize_session=False)` deixa as linhas apagadas no
+    # mapa de identidade da sessão, e como o SQLite reaproveita id, as
+    # novas colidiam com elas ("identity map already had an identity").
+    # Deu certo por sorte aqui; é o tipo de coisa que vira bug de dado
+    # trocado quando a lista cresce.
+    for linha in ciclo.clientes.all():
+        db.session.delete(linha)
+    db.session.flush()
+
+    for cliente in clientes:
+        visitado_em, visitado_por = visitas.get(cliente.conta, (None, None))
+        db.session.add(
+            RotasCicloCliente(
+                ciclo_id=ciclo.id,
+                conta=cliente.conta,
+                nome=cliente.nome[:200],
+                bairro=cliente.bairro[:120],
+                cidade=cliente.cidade[:120],
+                fonte=cliente.fonte[:32],
+                visitado_em=visitado_em,
+                visitado_por_user_id=visitado_por,
+            )
+        )
+
+    ciclo.resumo = resumo
+    ciclo.atualizado_em = datetime.now(timezone.utc)
+    ciclo.criado_por_user_id = getattr(user, "id", ciclo.criado_por_user_id)
+    db.session.flush()
+    return ciclo
+
+
+def catalogo(ciclo: RotasCiclo | None) -> dict:
+    """O que a tela mostra: regiões montadas a partir do ciclo gravado.
+
+    O agrupamento é refeito aqui, e não guardado: ele é função pura do que
+    está nas linhas, e guardar duas representações da mesma coisa é como
+    elas começam a divergir."""
+    if ciclo is None:
+        return {"regioes": [], "resumo": {}, "visitados": 0, "total": 0}
+
+    linhas = ciclo.clientes.all()
+    visitado_por_conta = {linha.conta: linha for linha in linhas}
+    regioes = dom.agrupar_por_regiao(
+        [
+            dom.ClienteBase(
+                conta=linha.conta,
+                nome=linha.nome,
+                bairro=linha.bairro,
+                cidade=linha.cidade,
+                fonte=linha.fonte,
+            )
+            for linha in linhas
+        ]
+    )
+    return {
+        "regioes": regioes,
+        "resumo": ciclo.resumo or {},
+        "linhas": visitado_por_conta,
+        "visitados": sum(1 for linha in linhas if linha.visitado_em is not None),
+        "total": len(linhas),
+    }
+
+
+def marcar_visita(ciclo: RotasCiclo, conta: str, *, visitado: bool, user=None) -> bool:
+    """Marca (ou desmarca) a visita de uma conta. Devolve o estado final.
+
+    Desmarcar existe porque marcar errado é fácil e inevitável — sem o
+    desfazer, o único conserto seria reiniciar a rodada inteira e perder
+    todas as outras marcas."""
+    linha = ciclo.clientes.filter(RotasCicloCliente.conta == conta).first()
+    if linha is None:
+        raise RotasError(f"A conta {conta} não está neste ciclo.")
+
+    linha.visitado_em = datetime.now(timezone.utc) if visitado else None
+    linha.visitado_por_user_id = getattr(user, "id", None) if visitado else None
+    ciclo.atualizado_em = datetime.now(timezone.utc)
+    db.session.flush()
+
+    audit_service.registrar(
+        action="rotas_visita_marcada" if visitado else "rotas_visita_desmarcada",
+        result="success",
+        user=user,
+        details={"ciclo": ciclo.numero, "conta": conta},
+    )
+    return visitado
+
+
+def reiniciar_ciclo(ciclo: RotasCiclo, *, user=None) -> RotasCiclo:
+    """Fecha a rodada e abre a próxima com os mesmos clientes, sem marcas.
+
+    Não consulta plataforma nenhuma: a lista de clientes é a mesma que
+    acabou de ser percorrida, e refazer a varredura só para zerar as
+    marcas custaria minutos para não mudar nada. Quem quiser a lista
+    atualizada clica em "gerar catálogo" depois."""
+    agora = datetime.now(timezone.utc)
+    linhas = ciclo.clientes.all()
+
+    ciclo.encerrado_em = agora
+    novo = RotasCiclo(
+        numero=ciclo.numero + 1,
+        iniciado_em=agora,
+        atualizado_em=agora,
+        criado_por_user_id=getattr(user, "id", None),
+        resumo=ciclo.resumo or {},
+    )
+    db.session.add(novo)
+    db.session.flush()
+
+    for linha in linhas:
+        db.session.add(
+            RotasCicloCliente(
+                ciclo_id=novo.id,
+                conta=linha.conta,
+                nome=linha.nome,
+                bairro=linha.bairro,
+                cidade=linha.cidade,
+                fonte=linha.fonte,
+            )
+        )
+    db.session.flush()
+
+    audit_service.registrar(
+        action="rotas_ciclo_reiniciado",
+        result="success",
+        user=user,
+        details={"encerrado": ciclo.numero, "novo": novo.numero, "clientes": len(linhas)},
+    )
+    return novo

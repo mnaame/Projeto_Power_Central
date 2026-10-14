@@ -1,10 +1,11 @@
 """Catálogo de visita preventiva por bairro — tela, importação e export.
 
-O resultado fica em `session` entre o "gerar" e o "exportar" pelo mesmo
-motivo do resto do sistema: a geração consulta duas plataformas e leva
-tempo. Guardando, o export reusa o que já foi calculado em vez de
-refazer tudo — e, principalmente, exporta **exatamente** o que está na
-tela.
+O catálogo vive no **banco**, não na sessão. A versão anterior guardava o
+resultado no cookie de sessão: com a base real ele dava 4.746 bytes
+contra um limite de 4.093 no navegador, o cookie era descartado calado, e
+a tela respondia "nenhum catálogo gerado ainda" logo depois de gerar.
+Guardar no banco também é o que dá memória à rodada — a marca do que já
+foi visitado tem que sobreviver a fechar o navegador.
 """
 
 from __future__ import annotations
@@ -16,11 +17,11 @@ from flask import (
     Blueprint,
     current_app,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
     send_file,
-    session,
     url_for,
 )
 from flask_login import current_user, login_required
@@ -33,46 +34,20 @@ from app.services.report_xlsx import gerar_xlsx_rotas
 
 bp = Blueprint("rotas", __name__, url_prefix="/rotas")
 
-CHAVE_SESSAO = "rotas_resultado"
-
 # 8 MB: o export da Auvo com 579 clientes tem 110 KB, e o relatório da
 # PowerCentral 310 KB. O limite é folgado para crescer, e existe só para
 # um arquivo trocado não virar um upload de gigabytes.
 TAMANHO_MAXIMO = 8 * 1024 * 1024
 
 
-def _serializar(resultado: dict) -> dict:
-    """Formato leve para a sessão — dataclass não vai para JSON."""
-    return {
-        "resumo": resultado["resumo"],
-        "regioes": [
-            {
-                "rotulo": regiao.rotulo,
-                "tamanho": regiao.tamanho,
-                "tem_bairro": regiao.tem_bairro,
-                "cidade": regiao.cidade,
-                "clientes": [
-                    {
-                        "conta": c.conta,
-                        "nome": c.nome,
-                        "bairro": c.bairro,
-                        "cidade": c.cidade,
-                        "fonte": c.fonte,
-                    }
-                    for c in regiao.clientes
-                ],
-            }
-            for regiao in resultado["regioes"]
-        ],
-    }
-
-
 @bp.route("")
 @login_required
 def index():
+    ciclo = rotas_service.ciclo_atual()
     return render_template(
         "rotas/index.html",
-        resultado=session.get(CHAVE_SESSAO),
+        ciclo=ciclo,
+        catalogo=rotas_service.catalogo(ciclo),
         importacoes=rotas_service.resumo_importacoes(),
     )
 
@@ -81,7 +56,7 @@ def index():
 @login_required
 def gerar():
     try:
-        resultado = rotas_service.montar_catalogo(
+        ciclo = rotas_service.montar_catalogo(
             config=current_app.config, user=current_user
         )
     except (rotas_service.RotasError, SoftGuardError) as exc:
@@ -90,19 +65,75 @@ def gerar():
         return redirect(url_for("rotas.index"))
 
     db.session.commit()
-    session[CHAVE_SESSAO] = _serializar(resultado)
-
-    resumo = resultado["resumo"]
-    if resumo["erro_auvo"]:
+    resumo = ciclo.resumo or {}
+    if resumo.get("erro_auvo"):
         flash(
             f"Endereços da Auvo indisponíveis ({resumo['erro_auvo']}) — "
             "usei o que estiver importado e a PowerCentral.",
             "warning",
         )
     flash(
-        f"{resumo['regioes']} bairro(s) com {resumo['com_bairro']} cliente(s). "
-        f"{resumo['sem_bairro']} sem bairro.",
+        f"Ciclo #{ciclo.numero}: {resumo.get('regioes', 0)} bairro(s) com "
+        f"{resumo.get('com_bairro', 0)} cliente(s). "
+        f"{resumo.get('sem_bairro', 0)} sem bairro.",
         "info",
+    )
+    return redirect(url_for("rotas.index"))
+
+
+@bp.route("/visita", methods=["POST"])
+@login_required
+def visita():
+    """Marca ou desmarca uma visita.
+
+    Responde JSON quando o pedido vem do JS (a tela marca sem recarregar,
+    que é o que torna viável percorrer uma lista de cem clientes) e
+    redireciona quando vem de um `form` comum — sem JS a tela continua
+    inteira, só mais lenta."""
+    ciclo = rotas_service.ciclo_atual()
+    conta = (request.form.get("conta") or "").strip()
+    visitado = request.form.get("visitado") == "1"
+    quer_json = request.accept_mimetypes.best == "application/json"
+
+    if ciclo is None:
+        if quer_json:
+            return jsonify({"erro": "Nenhum ciclo em aberto."}), 400
+        flash("Gere o catálogo antes de marcar visitas.", "warning")
+        return redirect(url_for("rotas.index"))
+
+    try:
+        rotas_service.marcar_visita(ciclo, conta, visitado=visitado, user=current_user)
+    except rotas_service.RotasError as exc:
+        db.session.rollback()
+        if quer_json:
+            return jsonify({"erro": str(exc)}), 404
+        flash(str(exc), "error")
+        return redirect(url_for("rotas.index"))
+
+    db.session.commit()
+    if quer_json:
+        dados = rotas_service.catalogo(ciclo)
+        return jsonify(
+            {"conta": conta, "visitado": visitado,
+             "visitados": dados["visitados"], "total": dados["total"]}
+        )
+    return redirect(url_for("rotas.index"))
+
+
+@bp.route("/reiniciar", methods=["POST"])
+@login_required
+def reiniciar():
+    ciclo = rotas_service.ciclo_atual()
+    if ciclo is None:
+        flash("Não há ciclo para reiniciar.", "warning")
+        return redirect(url_for("rotas.index"))
+
+    novo = rotas_service.reiniciar_ciclo(ciclo, user=current_user)
+    db.session.commit()
+    flash(
+        f"Ciclo #{ciclo.numero} encerrado. Começou o #{novo.numero} com as "
+        "mesmas contas e nenhuma visita marcada.",
+        "success",
     )
     return redirect(url_for("rotas.index"))
 
@@ -130,11 +161,6 @@ def importar():
         return redirect(url_for("rotas.index"))
 
     db.session.commit()
-    # O catálogo na sessão foi montado com os endereços de antes; mantê-lo
-    # faria a tela mostrar o resultado antigo logo depois de importar, que
-    # é exatamente a confusão que este módulo já causou uma vez.
-    session.pop(CHAVE_SESSAO, None)
-
     rotulo = "Auvo" if resumo["fonte"] == rotas_service.FONTE_AUVO else "PowerCentral"
     flash(
         f"Planilha da {rotulo} importada: {resumo['lidas']} linha(s) lida(s), "
@@ -148,38 +174,54 @@ def importar():
 @bp.route("/exportar")
 @login_required
 def exportar():
-    resultado = session.get(CHAVE_SESSAO)
-    if not resultado:
+    ciclo = rotas_service.ciclo_atual()
+    dados = rotas_service.catalogo(ciclo)
+    if not dados["regioes"]:
         flash("Gere o catálogo antes de exportar.", "warning")
         return redirect(url_for("rotas.index"))
 
+    linhas = dados["linhas"]
+
+    def _visita(conta: str) -> str:
+        linha = linhas.get(conta)
+        if linha is None or linha.visitado_em is None:
+            return ""
+        return linha.visitado_em.strftime("%d/%m/%Y %H:%M")
+
     pasta = Path(current_app.instance_path) / "reports" / "rotas"
     carimbo = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    caminho = pasta / f"visitas_por_bairro_{carimbo}.xlsx"
+    caminho = pasta / f"visitas_por_bairro_ciclo{ciclo.numero}_{carimbo}.xlsx"
 
     gerar_xlsx_rotas(
         caminho,
         clientes=[
             (
-                regiao["rotulo"],
-                cliente["conta"],
-                cliente["nome"],
-                cliente["bairro"],
-                cliente["cidade"],
-                cliente["fonte"],
+                regiao.rotulo,
+                cliente.conta,
+                cliente.nome,
+                cliente.bairro,
+                cliente.cidade,
+                cliente.fonte,
+                _visita(cliente.conta),
             )
-            for regiao in resultado["regioes"]
-            for cliente in regiao["clientes"]
+            for regiao in dados["regioes"]
+            for cliente in regiao.clientes
         ],
         resumo=[
-            (r["rotulo"], r["tamanho"], r["cidade"], "sim" if r["tem_bairro"] else "não")
-            for r in resultado["regioes"]
+            (
+                regiao.rotulo,
+                regiao.tamanho,
+                sum(1 for c in regiao.clientes if _visita(c.conta)),
+                regiao.cidade,
+                "sim" if regiao.tem_bairro else "não",
+            )
+            for regiao in dados["regioes"]
         ],
         sem_bairro=[
-            (c["conta"], c["nome"], c["cidade"] or "—")
-            for r in resultado["regioes"]
-            if not r["tem_bairro"]
-            for c in r["clientes"]
+            (cliente.conta, cliente.nome, cliente.cidade or "—")
+            for regiao in dados["regioes"]
+            if not regiao.tem_bairro
+            for cliente in regiao.clientes
         ],
     )
     return send_file(caminho, as_attachment=True, download_name=caminho.name)
