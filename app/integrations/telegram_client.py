@@ -12,10 +12,36 @@ LIMITE_CARACTERES = 4096
 LIMITE_LEGENDA = 1024  # caption do sendDocument é bem menor que a mensagem
 DEFAULT_TIMEOUT_SECONDS = 10
 
+# Subir arquivo não é mandar uma linha de texto. Com 10s (o timeout das
+# mensagens), o relatório de uma conta movimentada estourava no meio do
+# upload: o técnico recebia o diagnóstico e o arquivo nunca chegava. O
+# relatório de 15 dias de uma loja grande passa dos 20 MB numa rede
+# interna, e 5 minutos é folga para isso sem prender o bot
+# indefinidamente.
+TIMEOUT_DOCUMENTO_SEGUNDOS = 300
+
+# Teto do próprio Bot API para upload. Acima disso o Telegram recusa, e
+# recusa DEPOIS de receber o arquivo inteiro — checar antes evita gastar
+# minutos de upload para ouvir não.
+LIMITE_DOCUMENTO_BYTES = 50 * 1024 * 1024
+
 
 class TelegramError(Exception):
     """Erro ao enviar mensagem pelo Bot API do Telegram. Quem chama decide
     como registrar — nunca deve propagar como crash do coletor."""
+
+
+class TelegramArquivoGrande(TelegramError):
+    """Arquivo acima do teto do Telegram. Separado de `TelegramError`
+    porque o conserto é outro: repetir não adianta, tem que pedir menos
+    dias."""
+
+    def __init__(self, tamanho: int):
+        self.tamanho = tamanho
+        super().__init__(
+            f"Arquivo de {tamanho / 1024 / 1024:.1f} MB; o Telegram aceita até "
+            f"{LIMITE_DOCUMENTO_BYTES // 1024 // 1024} MB."
+        )
 
 
 @dataclass(frozen=True)
@@ -100,7 +126,14 @@ class TelegramClient:
     ) -> str:
         """`sendDocument` — manda o arquivo do relatório para o técnico
         abrir no celular. A legenda vai junto (limite bem menor que o da
-        mensagem: 1024), então quem chama manda só o resumo curto."""
+        mensagem: 1024), então quem chama manda só o resumo curto.
+
+        Usa um timeout próprio, muito maior que o das mensagens: o que
+        vale para mandar uma linha de texto não vale para subir dezenas de
+        megabytes."""
+        if len(conteudo) > LIMITE_DOCUMENTO_BYTES:
+            raise TelegramArquivoGrande(len(conteudo))
+
         url = f"{API_BASE}/bot{self._credentials.bot_token}/sendDocument"
         dados: dict[str, str] = {"chat_id": chat_id or self._credentials.chat_id}
         if legenda:
@@ -111,7 +144,7 @@ class TelegramClient:
                 url,
                 data=dados,
                 files={"document": (nome_arquivo, conteudo)},
-                timeout=self._timeout,
+                timeout=TIMEOUT_DOCUMENTO_SEGUNDOS,
             )
             response.raise_for_status()
             payload = response.json()

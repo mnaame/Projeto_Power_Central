@@ -758,6 +758,12 @@ Comandos (o técnico manda direto pro bot ou num grupo onde ele esteja):
   abaixo) **mais** o histórico de eventos da conta. Volta **dois arquivos**: o `.xls` nativo (com as cores, abre no PC) e o `.pdf`
   (abre no celular sem precisar de app de planilha), mais um resumo na
   legenda. Ex.: `/relatorio 95` (usa os dias padrão) ou `/relatorio 95 15`.
+
+  **Conta muito movimentada gera arquivo grande.** Se o envio falhar, o
+  bot avisa, diz o tamanho e sugere o mesmo comando com menos dias — o
+  relatório de 15 dias de uma loja com milhares de disparos pode passar
+  de 20 MB, e o Telegram não aceita acima de 50 MB. Nesse caso, peça
+  menos dias: `/relatorio 61 5`.
 - **`/zona <conta ou nome>`** — zoneamento completo do cliente: número da
   zona, descrição e o alarme que ela gera.
 - **`/diagnostico <conta> [dias]`** — **o que está errado na conta, em

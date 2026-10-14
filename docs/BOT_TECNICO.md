@@ -94,6 +94,18 @@ usado no export do histórico e no `CuentaByDealer`; aqui ele entra como
   terminar.
 - `enviar_documento(...)` — `sendDocument` para o arquivo do relatório
   (limite da legenda é 1024, bem menor que o da mensagem).
+
+  **Timeout próprio de 300s** (`TIMEOUT_DOCUMENTO_SEGUNDOS`), e não os 10s
+  das mensagens. Subir arquivo não é mandar uma linha de texto: com os
+  10s, o relatório de uma conta movimentada estourava no meio do upload —
+  o técnico recebia o diagnóstico e o arquivo nunca chegava. Uma loja com
+  4 mil disparos em 15 dias passa dos 20 MB.
+
+  **Teto de 50 MB conferido ANTES de subir** (`LIMITE_DOCUMENTO_BYTES`),
+  levantando `TelegramArquivoGrande`. O Telegram recusa depois de receber
+  o arquivo inteiro; checar antes evita gastar minutos de upload para
+  ouvir não. A exceção é separada de `TelegramError` porque o conserto é
+  outro: repetir não adianta, tem que pedir menos dias.
 - `enviar_mensagem(..., chat_id=...)` — o bot responde **no chat de onde
   veio o comando**; sem `chat_id` continua indo para o chat configurado,
   então os alertas do coletor não mudam.
@@ -205,6 +217,21 @@ conta em português, antes do arquivo: disparos recorrentes e em quais
 zonas, zona isolada demais, comunicação instável, bateria/energia/violação
 do painel. `/diagnostico <conta> [dias]` manda só o texto; `/relatorio`
 manda o texto e os arquivos.
+
+**Quando o arquivo não vai, o técnico é avisado.** Antes, uma falha de
+envio subia até o laço do bot, virava linha de log, e o técnico ficava
+com o diagnóstico na tela e nenhum arquivo — sem nada explicando. "Não
+chegou" e "está demorando" ficavam indistinguíveis, e a conta
+movimentada, que é a que mais precisa de relatório, era justamente a que
+falhava. Hoje:
+
+- cada formato vai por conta própria (o `.xls` falhar não impede o PDF);
+- a mensagem diz o tamanho **daquele** arquivo e sugere o mesmo comando
+  com menos dias (`/relatorio 61 5`);
+- arquivo acima do teto do Telegram tem mensagem própria, porque repetir
+  não resolve;
+- e o despachante tem uma rede de segurança para `TelegramError`: um
+  comando sempre responde alguma coisa.
 
 ### Quando uma conta é considerada "com problema"
 

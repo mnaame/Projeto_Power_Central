@@ -3,6 +3,7 @@ import pytest
 from app.integrations.softguard_client import SoftGuardAuthError, SoftGuardError
 from app.models.audit import AuditLog
 from app.services import settings_service
+from app.integrations.telegram_client import TelegramArquivoGrande, TelegramError
 from app.services import telegram_bot_service as svc
 
 # Formato real do portal: partição é conta própria; cue_nparticion guarda
@@ -835,3 +836,67 @@ def test_export_realmente_vazio_continua_dizendo_sem_problemas(app, autorizado):
     telegram, _ = _processar(app, "/diagnostico 95", sessao=sessao)
 
     assert "Sem problemas relevantes" in telegram.texto_completo
+
+
+# ---------- relatório que não cabe / falha no envio ----------
+
+
+class TelegramQueFalhaNoDocumento(FakeTelegram):
+    """O .xls falha; a mensagem de texto continua funcionando."""
+
+    def __init__(self, erro=None):
+        super().__init__()
+        self.erro = erro or TelegramError("conexão caiu no meio do upload")
+        self.tentativas = 0
+
+    def enviar_documento(self, conteudo, *, nome_arquivo, chat_id=None, legenda=""):
+        self.tentativas += 1
+        raise self.erro
+
+
+def test_falha_no_envio_do_arquivo_avisa_o_tecnico(app, autorizado, monkeypatch):
+    """Era o bug: o técnico recebia o diagnóstico, o arquivo nunca
+    chegava e nada explicava. "Não chegou" e "está demorando" ficavam
+    indistinguíveis — e a conta movimentada, que é a que mais precisa de
+    relatório, era justamente a que falhava."""
+    telegram = TelegramQueFalhaNoDocumento()
+    _processar(app, "/relatorio 95", telegram=telegram)
+
+    assert "Não consegui enviar" in telegram.texto_completo
+    assert "/relatorio 95 2" in telegram.texto_completo  # sugere menos dias
+
+
+def test_arquivo_acima_do_teto_do_telegram_explica_o_que_fazer(app, autorizado):
+    """Repetir não resolve: o conserto é pedir menos dias."""
+    telegram = TelegramQueFalhaNoDocumento(TelegramArquivoGrande(60 * 1024 * 1024))
+    _processar(app, "/relatorio 95 15", telegram=telegram)
+
+    assert "60.0 MB" in telegram.texto_completo
+    assert "Peça menos dias" in telegram.texto_completo
+    assert "/relatorio 95 5" in telegram.texto_completo
+
+
+def test_o_diagnostico_chega_mesmo_quando_o_arquivo_falha(app, autorizado):
+    """O diagnóstico é o que o técnico lê sem abrir nada — ele não pode
+    ir embora junto com o arquivo."""
+    telegram = TelegramQueFalhaNoDocumento()
+    _processar(app, "/relatorio 95", telegram=telegram)
+
+    assert "Diagnóstico" in telegram.texto_completo
+
+
+def test_falha_no_xls_nao_impede_o_pdf(app, autorizado):
+    """Cada formato vai por conta própria."""
+
+    class SoFalhaOXls(FakeTelegram):
+        def enviar_documento(self, conteudo, *, nome_arquivo, chat_id=None, legenda=""):
+            if nome_arquivo.endswith("xls"):
+                raise TelegramError("falhou o xls")
+            return super().enviar_documento(
+                conteudo, nome_arquivo=nome_arquivo, chat_id=chat_id, legenda=legenda
+            )
+
+    telegram = SoFalhaOXls()
+    _processar(app, "/relatorio 95", telegram=telegram)
+
+    assert [d[1] for d in telegram.documentos] == ["0095_AUTO MECANICA CENTRO.pdf"]

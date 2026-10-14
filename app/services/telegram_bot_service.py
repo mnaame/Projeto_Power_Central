@@ -37,6 +37,7 @@ from app.extensions import db
 from app.integrations.softguard_client import SoftGuardAuthError, SoftGuardClient, SoftGuardError
 from app.integrations.telegram_client import (
     LIMITE_CARACTERES,
+    TelegramArquivoGrande,
     TelegramError,
     dividir_mensagem,
 )
@@ -408,15 +409,72 @@ def _comando_relatorio(argumentos, *, sessao, telegram, chat_id: str) -> str:
     # Partição tem número de conta próprio, então o nome do arquivo já
     # sai distinto sem precisar de sufixo.
     base = dom_tecnico.nome_arquivo_loja(conta.numero, conta.nome, extensao="")
-    telegram.enviar_documento(
-        conteudo, nome_arquivo=f"{base}xls", chat_id=chat_id, legenda=legenda
-    )
-    telegram.enviar_documento(
-        dom_tecnico.montar_pdf_colorido(conteudo, titulo=f"{resumo.splitlines()[0]}"),
-        nome_arquivo=f"{base}pdf",
-        chat_id=chat_id,
+    _enviar_arquivos(
+        telegram,
+        chat_id,
+        base=base,
+        conteudo=conteudo,
+        legenda=legenda,
+        titulo_pdf=resumo.splitlines()[0],
+        conta=conta,
+        dias=dias,
     )
     return conta.numero
+
+
+def _enviar_arquivos(
+    telegram, chat_id: str, *, base: str, conteudo: bytes, legenda: str,
+    titulo_pdf: str, conta, dias: int,
+) -> None:
+    """Manda o .xls e o PDF, **avisando quando não dá**.
+
+    Antes, uma falha aqui subia até o laço do bot, virava linha de log e
+    o técnico ficava com o diagnóstico na tela e nenhum arquivo, sem
+    nada explicando. "Não chegou" e "está demorando" ficavam
+    indistinguíveis, e a conta movimentada — justamente a que mais
+    precisa de relatório — era a que falhava.
+
+    Cada formato é enviado por conta própria: o .xls falhar não pode
+    impedir o PDF de chegar, e vice-versa."""
+    dias_menor = max(1, dias // 3)
+
+    def _tentar(rotulo: str, dados: bytes, nome: str, legenda_arquivo: str = "") -> bool:
+        # O tamanho é o DESTE arquivo: informar o do .xls na mensagem do
+        # PDF mandaria a pessoa procurar o problema no lugar errado.
+        tamanho_mb = len(dados) / 1024 / 1024
+        try:
+            telegram.enviar_documento(
+                dados, nome_arquivo=nome, chat_id=chat_id, legenda=legenda_arquivo
+            )
+            return True
+        except TelegramArquivoGrande as exc:
+            logger.warning("Bot: %s grande demais para %s: %s", rotulo, conta.numero, exc)
+            _responder(
+                telegram,
+                chat_id,
+                f"O {rotulo} ficou com {exc.tamanho / 1024 / 1024:.1f} MB e o "
+                f"Telegram não aceita arquivo desse tamanho. Peça menos dias — "
+                f"ex.: /relatorio {conta.numero} {dias_menor}.",
+            )
+        except TelegramError as exc:
+            logger.warning("Bot: falha ao enviar %s de %s: %s", rotulo, conta.numero, exc)
+            _responder(
+                telegram,
+                chat_id,
+                f"Não consegui enviar o {rotulo} ({tamanho_mb:.1f} MB) — o envio "
+                f"falhou no meio. Tente de novo, ou peça menos dias: "
+                f"/relatorio {conta.numero} {dias_menor}.",
+            )
+        return False
+
+    _tentar("arquivo .xls", conteudo, f"{base}xls", legenda)
+
+    try:
+        pdf = dom_tecnico.montar_pdf_colorido(conteudo, titulo=titulo_pdf)
+    except Exception:  # noqa: BLE001 — o PDF é conveniência; o .xls é o relatório
+        logger.exception("Bot: falha ao montar o PDF de %s.", conta.numero)
+        return
+    _tentar("PDF", pdf, f"{base}pdf")
 
 
 # ----------------------------------------------------------------------
@@ -528,6 +586,20 @@ def processar_update(update: dict, *, config, sessao, telegram) -> None:
             _responder(
                 telegram, chat_id, "A PowerCentral não respondeu. Tente de novo em instantes."
             )
+        return
+    except TelegramError as exc:
+        # Rede de segurança. Sem ela, qualquer falha de Telegram no meio
+        # de um comando subia até o laço, virava log e deixava o técnico
+        # sem resposta nenhuma — que foi exatamente o que aconteceu com o
+        # relatório das contas grandes. Um comando sempre responde algo.
+        logger.warning("Bot: falha de Telegram no comando %s: %s", acao, exc)
+        audit_service.registrar(
+            action=acao, result="failure", details={**quem, "erro": str(exc)[:200]}
+        )
+        db.session.commit()
+        _responder(
+            telegram, chat_id, "Falhei ao enviar a resposta pelo Telegram. Tente de novo."
+        )
         return
 
     # `conta` vazia = pedido incompleto/ambíguo, já respondido ao técnico.

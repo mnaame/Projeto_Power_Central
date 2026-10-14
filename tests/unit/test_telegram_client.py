@@ -2,6 +2,9 @@ import requests as requests_lib
 import pytest
 
 from app.integrations.telegram_client import (
+    LIMITE_DOCUMENTO_BYTES,
+    TIMEOUT_DOCUMENTO_SEGUNDOS,
+    TelegramArquivoGrande,
     TelegramClient,
     TelegramCredentials,
     TelegramError,
@@ -136,3 +139,47 @@ def test_enviar_mensagem_sem_chat_usa_o_configurado(requests_mock):
     TelegramClient(CREDS).enviar_mensagem("oi")
 
     assert "chat_id=-100200300" in requests_mock.request_history[-1].text
+
+
+# ---------- envio de arquivo grande ----------
+
+
+def test_documento_usa_timeout_proprio_e_nao_o_das_mensagens(requests_mock):
+    """Subir arquivo não é mandar uma linha de texto. Com os 10s das
+    mensagens, o relatório de uma conta movimentada estourava no meio do
+    upload: o técnico recebia o diagnóstico e o arquivo nunca chegava."""
+    client = TelegramClient(CREDS, timeout=10)
+    mock = requests_mock.post(
+        f"https://api.telegram.org/bot{CREDS.bot_token}/sendDocument",
+        json={"ok": True, "result": {"message_id": 7}},
+    )
+
+    client.enviar_documento(b"conteudo", nome_arquivo="r.xls")
+
+    assert mock.last_request.timeout == TIMEOUT_DOCUMENTO_SEGUNDOS
+    assert TIMEOUT_DOCUMENTO_SEGUNDOS > 10
+
+
+def test_arquivo_acima_do_teto_e_recusado_antes_de_subir(requests_mock):
+    """O Telegram recusa DEPOIS de receber o arquivo inteiro — checar
+    antes evita gastar minutos de upload para ouvir não."""
+    client = TelegramClient(CREDS)
+    mock = requests_mock.post(f"https://api.telegram.org/bot{CREDS.bot_token}/sendDocument", json={"ok": True})
+
+    with pytest.raises(TelegramArquivoGrande) as erro:
+        client.enviar_documento(b"x" * (LIMITE_DOCUMENTO_BYTES + 1), nome_arquivo="r.xls")
+
+    assert "MB" in str(erro.value)
+    assert not mock.called  # nem tentou
+
+
+def test_arquivo_no_limite_ainda_passa(requests_mock):
+    client = TelegramClient(CREDS)
+    requests_mock.post(
+        f"https://api.telegram.org/bot{CREDS.bot_token}/sendDocument",
+        json={"ok": True, "result": {"message_id": 7}},
+    )
+
+    assert client.enviar_documento(
+        b"x" * LIMITE_DOCUMENTO_BYTES, nome_arquivo="r.xls"
+    ) == "7"
