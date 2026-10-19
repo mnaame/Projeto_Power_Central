@@ -130,10 +130,11 @@ DEFAULTS: dict[str, str] = {
     # plataforma, use scripts/importar_catalogo_codigos.py.
     "diag_descricoes": "",
     # --- Contas em teste (Super Nosso) ---
-    # Uma semana exata: a lista do Super Nosso chega toda segunda, e a
-    # janela anterior precisa ter vencido quando a próxima entra. Mudar
-    # isto para mais que 7 deixaria duas semanas de lista se sobrepondo.
-    "teste_duracao_dias": "7",
+    # Segunda a sexta: o serviço noturno é de dia útil, e no fim de semana
+    # a loja arma normal. Cobrir sábado e domingo seria suprimir alarme em
+    # dois dias nos quais ninguém pediu isso. Também não pode passar de 7,
+    # senão a lista de uma semana se sobrepõe à da seguinte.
+    "teste_duracao_dias": "5",
     "teste_nota_padrao": "Serviço noturno durante a semana.",
     # `est_ntipo` do estado "em teste", confirmado no HAR. É configurável
     # só para não exigir deploy se a plataforma renumerar os tipos.

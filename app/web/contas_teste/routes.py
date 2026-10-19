@@ -58,6 +58,9 @@ def _serializar(preview: dict) -> dict:
             for c in preview["ambiguos"]
         ],
         "nao_encontrados": [c.filial for c in preview["nao_encontrados"]],
+        "barradas": [
+            {"numero": c.numero, "nome": c.nome} for c in preview["barradas"]
+        ],
     }
 
 

@@ -23,11 +23,37 @@ exatamente um, e por isso ele é cercado assim:
 | **Janela que expira sozinha** | É o que impede "para sempre" |
 | Auditoria do lote | Contagens, nunca nome de cliente |
 | Recorte ao grupo Super Nosso/Apoio | Erro de digitação não alcança a base |
+| **Tesouraria barrada, duas vezes** | Ela fica armada durante o serviço noturno |
+
+### A tesouraria nunca entra
+
+A tesouraria é **conta separada** da loja no cadastro — `SUPER NOSSO
+CASTELO LOJA` (0330) e `SUPER NOSSO CASTELO TESOURARIA` (0327). Ela não
+participa do serviço noturno: fica armada, e tem que continuar sendo
+tratada.
+
+Hoje, na base real, **nenhuma tesouraria tem número de filial no nome**,
+então o casamento por número nunca a alcançaria. Mas isso é uma
+propriedade do cadastro de hoje, não uma garantia: basta alguém renomear
+a conta para "CASTELO TESOURARIA FILIAL 688" e a sorte acaba. A regra
+fica no código (`PADROES_NUNCA_EM_TESTE`), onde não depende de ninguém
+lembrar.
+
+São **duas barreiras**, de propósito:
+
+1. No universo elegível, quando a pré-visualização é montada — e a conta
+   barrada aparece numa lista própria na tela, porque exclusão
+   silenciosa é indistinguível de esquecimento.
+2. Na beira da escrita, relendo o cadastro. A primeira depende de o lote
+   ter vindo de uma pré-visualização íntegra; esta não depende de nada.
+   Barreira duplicada num caminho que suprime alarme é barata.
 
 ### A janela é a segurança, não o cuidado de quem opera
 
-`est_nduracion = 7` e `est_dfechahasta = início + 7 dias` fazem o estado
-expirar sozinho. **Não existe passo de remover** — e essa ausência é
+`est_nduracion = 5` e `est_dfechahasta = início + 5 dias` fazem o estado
+expirar sozinho. **Cinco dias = segunda a sexta**: o serviço noturno é de
+dia útil, e no fim de semana a loja arma normal. Cobrir sábado e domingo
+seria suprimir alarme em dois dias nos quais ninguém pediu isso. **Não existe passo de remover** — e essa ausência é
 deliberada: um passo de remover é um passo que se pode esquecer, e
 esquecer deixaria a loja silenciada indefinidamente. Quando a lista da
 semana seguinte chega, a anterior já venceu.
@@ -115,7 +141,7 @@ aplicar o mesmo lote de novo sem conferir.
 
 | Chave | Padrão | Para quê |
 |---|---|---|
-| `teste_duracao_dias` | `7` | Uma semana exata. Mais que isso faz duas listas se sobreporem |
+| `teste_duracao_dias` | `5` | Segunda a sexta. Mais que 7 faz duas listas se sobreporem |
 | `teste_nota_padrao` | `Serviço noturno durante a semana.` | Vai no `est_mnota` |
 | `teste_tipo` | `3` | `est_ntipo` do estado "em teste" |
 
@@ -129,6 +155,33 @@ falha:
 - universo sem o recorte Super Nosso/Apoio → o número solto alcança a
   base inteira.
 
+E as duas barreiras da tesouraria, cada uma com o seu teste: tirando
+qualquer uma delas, a conta protegida entra no lote.
+
 Mais os parâmetros exatos do `EstadoUpd`, a janela (`dfechahasta` =
 início + duração), a recusa de duração zero antes de qualquer chamada, e
 `success: false` com HTTP 200 sendo tratado como falha.
+
+
+## 7. O que o cadastro real mostrou (19/10)
+
+Rodando a lista de exemplo contra as 23 contas do grupo:
+
+| Filial | Resultado |
+|---|---|
+| 420 | `SUPER NOSSO FLEMING FILIAL 420 - LOJA` |
+| 530 | `APOIO VENDA NOVA FILIAL 530` |
+| **688** | **não encontrada** |
+
+**Castelo não tem número de filial no nome.** As contas são
+`SUPER NOSSO CASTELO LOJA` e `SUPER NOSSO CASTELO TESOURARIA`, e o
+casamento é por número — então 688 não acha nada. O conserto é no
+cadastro da PowerCentral (renomear para incluir `FILIAL 688` na conta da
+**loja**, nunca na da tesouraria), e não no código: inventar um
+casamento por nome aqui é o tipo de palpite que coloca a loja errada em
+teste.
+
+Também existe filial **duplicada**: `MOMENTO CEARA FILIAL 64` e
+`MOMENTO CEARA ESTACIONAMENTO FILIAL 64`. O módulo marca como **ambígua**
+e não escolhe — são dois pontos diferentes do mesmo endereço, e qual
+deles entra em teste é decisão de quem conhece a operação.

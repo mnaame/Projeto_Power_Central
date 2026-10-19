@@ -953,8 +953,9 @@ Detalhe técnico em [`ROTAS_VISITA.md`](ROTAS_VISITA.md).
 
 ### 5.2.11 Contas em Teste — Super Nosso (só admin)
 
-Coloca as lojas da lista semanal **em teste** por 7 dias, para o serviço
-noturno não gerar falha de arme.
+Coloca as lojas da lista semanal **em teste** de segunda a sexta (5
+dias), para o serviço noturno não gerar falha de arme. Sábado e domingo a
+loja arma normal.
 
 > ⚠️ **Isto suprime alarme.** Conta em teste faz a central parar de tratar
 > a falha de arme dela. Uma loja errada aqui fica sem cobertura e
@@ -976,8 +977,15 @@ O que a tela mostra depois de preparar:
   Super Nosso/Apoio. Pode ser filial nova no cadastro, ou número digitado
   diferente na mensagem.
 
+**A tesouraria nunca entra.** Ela é conta separada da loja no cadastro
+(`SUPER NOSSO CASTELO LOJA` × `SUPER NOSSO CASTELO TESOURARIA`), fica
+armada durante o serviço noturno, e o sistema a barra mesmo que o número
+bata. Ela aparece numa lista "Nunca entram em teste" para você ver que
+foi de propósito.
+
 **Não existe passo de remover, e isso é de propósito.** O teste vale por
-7 dias e **expira sozinho**. Quando a lista da semana que vem chegar, a
+5 dias — **segunda a sexta**, porque no fim de semana a loja arma
+normal — e **expira sozinho**. Quando a lista da semana que vem chegar, a
 desta já venceu — não há nada para desfazer, e por isso não há como
 esquecer de desfazer. É a janela de tempo, e não a memória de quem opera,
 que impede uma loja de ficar silenciada para sempre.

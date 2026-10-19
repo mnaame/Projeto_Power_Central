@@ -18,6 +18,9 @@ CONTAS = [
     {"cue_iid": "9001", "cue_ncuenta": "0002", "cue_cnombre": "SUPER NOSSO FLEMING FILIAL 420"},
     {"cue_iid": "9002", "cue_ncuenta": "0010", "cue_cnombre": "SUPER NOSSO (CASTELO FILIAL 688)"},
     {"cue_iid": "9003", "cue_ncuenta": "0011", "cue_cnombre": "APOIO (VENDA NOVA FILIAL 530)"},
+    # A tesouraria é conta separada da loja e NUNCA entra em teste.
+    {"cue_iid": "9006", "cue_ncuenta": "0327", "cue_cnombre": "SUPER NOSSO CASTELO TESOURARIA"},
+    {"cue_iid": "9007", "cue_ncuenta": "0330", "cue_cnombre": "SUPER NOSSO CASTELO LOJA"},
     # Base e Villefort entram na lista do portal, mas NÃO são elegíveis.
     {"cue_iid": "9004", "cue_ncuenta": "0420", "cue_cnombre": "PADARIA DO ZE 420"},
     {"cue_iid": "9005", "cue_ncuenta": "0030", "cue_cnombre": "VILLEFORT TROPICAL 688"},
@@ -69,7 +72,8 @@ def test_so_super_nosso_e_apoio_sao_elegiveis(app):
     preview = svc.preparar("420", config=app.config, softguard_client=FakePortal())
 
     assert [c.conta.nome for c in preview["casados"]] == ["SUPER NOSSO FLEMING FILIAL 420"]
-    assert preview["elegiveis"] == 3
+    # 3 do grupo + a CASTELO LOJA; a tesouraria fica fora.
+    assert preview["elegiveis"] == 4
 
 
 def test_filial_desconhecida_fica_visivel(app):
@@ -86,11 +90,13 @@ def test_mensagem_sem_numero_avisa_em_vez_de_preparar_lote_vazio(app):
                      softguard_client=FakePortal())
 
 
-def test_janela_de_sete_dias_por_padrao(app):
+def test_janela_de_segunda_a_sexta_por_padrao(app):
+    """5 dias. O serviço noturno é de dia útil; cobrir sábado e domingo
+    suprimiria alarme em dois dias nos quais ninguém pediu isso."""
     preview = svc.preparar(MENSAGEM, config=app.config, softguard_client=FakePortal())
 
-    assert preview["dias"] == 7
-    assert (preview["fim"] - preview["inicio"]).days == 7
+    assert preview["dias"] == 5
+    assert (preview["fim"] - preview["inicio"]).days == 5
 
 
 def test_portal_fora_do_ar_aborta_com_erro_proprio(app):
@@ -122,7 +128,7 @@ def test_aplicar_usa_a_janela_e_a_nota_configuradas(app, admin_user):
     db.session.commit()
 
     gravado = portal.gravacoes[0]
-    assert gravado["dias"] == 7
+    assert gravado["dias"] == 5
     assert gravado["tipo"] == 3
     assert "noturno" in gravado["nota"]
 
@@ -175,5 +181,63 @@ def test_lote_e_auditado_so_com_contagens(app, admin_user):
     assert entrada.result == "failure"  # houve falha no lote
     assert entrada.details["aplicadas"] == 1
     assert entrada.details["falhas"] == 1
-    assert entrada.details["dias"] == 7
+    assert entrada.details["dias"] == 5
     assert "SUPER NOSSO" not in str(entrada.details)
+
+
+# ---------- tesouraria: nunca entra ----------
+
+
+def test_tesouraria_fica_fora_dos_elegiveis(app):
+    elegiveis, barradas = svc.contas_do_super_nosso(CONTAS)
+
+    assert [c.numero for c in barradas] == ["0327"]
+    assert "0327" not in [c.numero for c in elegiveis]
+
+
+def test_tesouraria_aparece_na_previsualizacao_em_vez_de_sumir(app):
+    """Exclusão silenciosa é indistinguível de esquecimento."""
+    preview = svc.preparar("420", config=app.config, softguard_client=FakePortal())
+
+    assert [c.nome for c in preview["barradas"]] == ["SUPER NOSSO CASTELO TESOURARIA"]
+
+
+def test_tesouraria_com_numero_de_filial_continua_barrada(app):
+    """Hoje nenhuma tesouraria tem número de filial no nome — mas isso é
+    uma propriedade do cadastro de hoje, não uma garantia. Basta alguém
+    renomear a conta e a sorte acaba."""
+    contas = [
+        {"cue_iid": "9100", "cue_ncuenta": "0327",
+         "cue_cnombre": "SUPER NOSSO CASTELO TESOURARIA FILIAL 688"},
+    ]
+
+    preview = svc.preparar("688", config=app.config,
+                           softguard_client=FakePortal(contas))
+
+    assert preview["casados"] == []
+    assert [c.filial for c in preview["nao_encontrados"]] == ["688"]
+
+
+def test_tesouraria_e_barrada_tambem_na_hora_de_gravar(app, admin_user):
+    """Segunda barreira, já na beira da escrita: a primeira depende de o
+    lote ter vindo de uma pré-visualização íntegra, esta não depende de
+    nada."""
+    portal = FakePortal()
+
+    resultado = svc.aplicar(
+        ["9001", "9006"], config=app.config, user=admin_user, softguard_client=portal
+    )
+    db.session.commit()
+
+    assert [g["cue_iid"] for g in portal.gravacoes] == ["9001"]
+    assert resultado["bloqueadas"] == ["9006"]
+
+
+def test_lote_so_de_tesouraria_nao_grava_nada(app, admin_user):
+    portal = FakePortal()
+
+    with pytest.raises(svc.ContasTesteError, match="tesouraria"):
+        svc.aplicar(["9006"], config=app.config, user=admin_user,
+                    softguard_client=portal)
+
+    assert portal.gravacoes == []

@@ -37,7 +37,23 @@ _RE_FILIAL = re.compile(r"\b\d{2,4}\b")
 # "FILIAL 688", "FILIAL688", "FILIAL: 688"
 _RE_FILIAL_NO_NOME = re.compile(r"FILIAL\s*:?\s*(\d{2,4})\b")
 
-DURACAO_PADRAO_DIAS = 7
+# Segunda a sexta. O serviço noturno é de dia útil; sábado e domingo a
+# loja arma normal, e deixar a janela cobrir o fim de semana seria
+# suprimir alarme em dois dias nos quais ninguém pediu isso.
+DURACAO_PADRAO_DIAS = 5
+
+# Contas que NUNCA entram em teste, por mais que o número bata.
+#
+# A tesouraria é conta separada da loja no cadastro ("SUPER NOSSO CASTELO
+# LOJA" e "SUPER NOSSO CASTELO TESOURARIA"), e ela não participa do
+# serviço noturno: fica armada, e tem que continuar sendo tratada.
+#
+# Hoje, na base real, nenhuma tesouraria tem número de filial no nome —
+# então, por sorte, o casamento por número nunca a alcançaria. Mas isso é
+# uma propriedade do cadastro de hoje, não uma garantia: basta alguém
+# renomear a conta para "CASTELO TESOURARIA FILIAL 688" e a sorte acaba.
+# A regra fica no código, onde ela não depende de ninguém lembrar.
+PADROES_NUNCA_EM_TESTE = ("TESOURARIA",)
 
 
 def normalizar(texto: str) -> str:
@@ -75,6 +91,12 @@ def filiais_do_nome(nome: str) -> set[str]:
     if explicitos:
         return explicitos
     return {n.lstrip("0") or n for n in _RE_FILIAL.findall(normalizado)}
+
+
+def nunca_em_teste(nome: str) -> bool:
+    """Conta que não pode entrar em teste nem se o número bater."""
+    normalizado = normalizar(nome)
+    return any(padrao in normalizado for padrao in PADROES_NUNCA_EM_TESTE)
 
 
 @dataclass(frozen=True)

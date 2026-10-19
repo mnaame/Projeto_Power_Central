@@ -53,15 +53,21 @@ def _criar_cliente(config) -> SoftGuardClient:
     return SoftGuardClient(credenciais_softguard(config))
 
 
-def contas_do_super_nosso(linhas_contas) -> list[dom.ContaAlvo]:
-    """As contas elegíveis: só Super Nosso e Apoio.
+def contas_do_super_nosso(linhas_contas) -> tuple[list[dom.ContaAlvo], list[dom.ContaAlvo]]:
+    """`(elegíveis, barradas)` — só Super Nosso e Apoio, sem tesouraria.
 
-    O recorte é a classificação de `disparos_geral.grupo_do_cliente`,
-    reaproveitada inteira — e aqui ele não é cosmético, é contenção: um
-    número de filial solto ("530") casaria com qualquer conta da base que
-    tivesse esse número no nome. Limitando o universo ao grupo que manda
-    a lista, um erro de digitação não alcança a padaria da esquina."""
-    alvos = []
+    O recorte por grupo é a classificação de
+    `disparos_geral.grupo_do_cliente`, reaproveitada inteira — e aqui ele
+    não é cosmético, é contenção: um número de filial solto ("530")
+    casaria com qualquer conta da base que tivesse esse número no nome.
+    Limitando o universo ao grupo que manda a lista, um erro de digitação
+    não alcança a padaria da esquina.
+
+    A **tesouraria é barrada à parte**, e devolvida numa lista própria em
+    vez de sumir: exclusão silenciosa é indistinguível de esquecimento, e
+    quem confere precisa ver que ela foi deixada de fora de propósito."""
+    elegiveis: list[dom.ContaAlvo] = []
+    barradas: list[dom.ContaAlvo] = []
     for linha in linhas_contas:
         nome = str(linha.get("cue_cnombre") or "").strip()
         cue_iid = linha.get("cue_iid")
@@ -69,14 +75,29 @@ def contas_do_super_nosso(linhas_contas) -> list[dom.ContaAlvo]:
             continue
         if dom_disp.grupo_do_cliente(nome) != dom_disp.GRUPO_SUPER_NOSSO:
             continue
-        alvos.append(
-            dom.ContaAlvo(
-                cue_iid=str(cue_iid),
-                numero=str(linha.get("cue_ncuenta") or "").strip(),
-                nome=nome,
-            )
+        alvo = dom.ContaAlvo(
+            cue_iid=str(cue_iid),
+            numero=str(linha.get("cue_ncuenta") or "").strip(),
+            nome=nome,
         )
-    return alvos
+        (barradas if dom.nunca_em_teste(nome) else elegiveis).append(alvo)
+    return elegiveis, barradas
+
+
+def _tesourarias_por_iid(client) -> set[str]:
+    """Os `cue_iid` das tesourarias, lidos do cadastro na hora de gravar.
+
+    Lido agora, e não aproveitado da pré-visualização, porque é
+    exatamente o caso em que não se quer confiar no que veio de fora."""
+    try:
+        _, barradas = contas_do_super_nosso(client.listar_todas_contas())
+    except Exception:  # noqa: BLE001
+        logger.exception("Contas em teste: não consegui reler as contas.")
+        raise ContasTesteError(
+            "Não consegui reler as contas para conferir as tesourarias. "
+            "Nada foi gravado — tente de novo."
+        ) from None
+    return {c.cue_iid for c in barradas}
 
 
 def preparar(
@@ -104,7 +125,7 @@ def preparar(
             f"Não foi possível carregar as contas da PowerCentral: {exc}"
         ) from exc
 
-    alvos = contas_do_super_nosso(linhas)
+    alvos, barradas = contas_do_super_nosso(linhas)
     casamentos = dom.casar_filiais(filiais, alvos)
 
     inicio = datetime.now(FUSO_HORARIO).replace(microsecond=0)
@@ -120,6 +141,9 @@ def preparar(
         "fim": fim,
         "dias": dias,
         "elegiveis": len(alvos),
+        # Mostradas na tela: a tesouraria fica de fora de propósito, e
+        # quem confere tem que ver isso em vez de deduzir.
+        "barradas": barradas,
     }
 
 
@@ -149,6 +173,21 @@ def aplicar(
     inicio = datetime.now(FUSO_HORARIO).replace(microsecond=0)
     _, fim = dom.janela(inicio, dias)
 
+    # Segunda barreira para a tesouraria, já na beira da escrita. A
+    # primeira (o universo elegível) depende de o lote ter vindo de uma
+    # pré-visualização íntegra; esta não depende de nada. Barreira
+    # duplicada num caminho que suprime alarme é barata.
+    protegidas = _tesourarias_por_iid(client)
+    bloqueadas = [i for i in alvos if i in protegidas]
+    alvos = [i for i in alvos if i not in protegidas]
+    if bloqueadas:
+        logger.warning("Contas em teste: tesouraria barrada: %s", bloqueadas)
+    if not alvos:
+        raise ContasTesteError(
+            "Nenhuma conta elegível no lote — só tesouraria, que nunca entra "
+            "em teste."
+        )
+
     aplicados: list[str] = []
     falhas: list[dict] = []
     for indice, cue_iid in enumerate(alvos):
@@ -171,6 +210,7 @@ def aplicar(
             "pedidas": len(alvos),
             "aplicadas": len(aplicados),
             "falhas": len(falhas),
+            "bloqueadas": len(bloqueadas),
             "dias": dias,
             "tipo": tipo,
             "inicio": inicio.isoformat(),
@@ -184,6 +224,7 @@ def aplicar(
     return {
         "aplicados": aplicados,
         "falhas": falhas,
+        "bloqueadas": bloqueadas,
         "inicio": inicio,
         "fim": fim,
         "dias": dias,

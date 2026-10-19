@@ -15,9 +15,10 @@
       <strong>Isto suprime alarme.</strong> Conta em teste faz a central
       parar de tratar a falha de arme dela. Confira a lista antes de
       aplicar — uma loja errada aqui fica sem cobertura e ninguém é
-      avisado. A janela de {{ dias_padrao }} dias <strong>expira
-      sozinha</strong>: não existe passo de remover, e a lista da semana
-      que vem não precisa desfazer esta.
+      avisado. A janela de {{ dias_padrao }} dias (segunda a sexta)
+      <strong>expira sozinha</strong>: não existe passo de remover, e a
+      lista da semana que vem não precisa desfazer esta.
+      <br><strong>Tesouraria nunca entra</strong>, nem se o número bater.
     </span>
   </div>
 
@@ -34,8 +35,11 @@
     </div>
     <div class="field" style="max-width: 12rem;">
       <label for="dias">Duração (dias)</label>
-      <input id="dias" type="number" name="dias" min="1" max="31"
+      <input id="dias" type="number" name="dias" min="1" max="7"
              value="{{ dias_padrao }}">
+      <p class="muted" style="margin-top: var(--space-1);">
+        5 = segunda a sexta. Sábado e domingo a loja arma normal.
+      </p>
     </div>
     <button type="submit" class="btn btn-primary">Preparar (só leitura)</button>
     <span class="muted" style="margin-left: var(--space-2);">
@@ -126,6 +130,27 @@
             {% endfor %}
           </td>
         </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if preview.barradas %}
+<div class="section">
+  <div class="section-title"><h2>Nunca entram em teste</h2></div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    A <strong>tesouraria</strong> é conta separada da loja e fica armada
+    durante o serviço noturno — ela é barrada aqui mesmo que o número
+    bata. Esta lista existe para você ver que foi de propósito.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Conta</th><th>Cliente</th></tr></thead>
+      <tbody>
+        {% for item in preview.barradas %}
+        <tr><td class="is-numeric">{{ item.numero }}</td><td>{{ item.nome }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
