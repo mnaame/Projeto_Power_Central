@@ -5,6 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Power Central{% endblock %} · Power Central</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}">
+  {# Aplica o tema ANTES de qualquer pintura. O app.js tem `defer`, então
+     fazer isso lá dentro mostraria a tela clara por um instante antes de
+     virar preta — a "piscada" que todo tema escuro feito pela metade
+     tem. Script minúsculo e síncrono é o preço de não ter isso. #}
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("power-central-theme");
+        document.documentElement.setAttribute(
+          "data-theme", (t === "preto" || t === "sepia") ? t : "light");
+      } catch (e) {
+        document.documentElement.setAttribute("data-theme", "light");
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
   <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
@@ -113,6 +128,13 @@
           </svg>
           Visitas por Bairro
         </a>
+        <a class="sidebar-link {{ 'is-active' if request.path.startswith('/contas-teste') }}" href="{{ url_for('contas_teste.index') }}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M9 3h6v5l4 9a2 2 0 0 1-1.8 2.9H6.8A2 2 0 0 1 5 17l4-9z"></path>
+            <path d="M9 3v5M15 3v5M7.5 14h9"></path>
+          </svg>
+          Contas em Teste
+        </a>
         <a class="sidebar-link {{ 'is-active' if request.endpoint == 'admin.usuarios' }}" href="{{ url_for('admin.usuarios') }}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="9" cy="7" r="4"></circle><path d="M2 21v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2"></path>
@@ -141,13 +163,13 @@
           <span class="sidebar-user-name">{{ current_user.username }}</span>
           <span class="chip chip-neutral">{{ 'Admin' if current_user.is_admin else 'Operador' }}</span>
         </div>
+        {# Três temas, sempre no rodapé — que agora não sai da tela. #}
+        <div class="tema-seletor" role="group" aria-label="Tema da tela">
+          <button type="button" class="tema-opcao" data-tema="light" title="Tema claro">Claro</button>
+          <button type="button" class="tema-opcao" data-tema="preto" title="Tema preto (AMOLED)">Preto</button>
+          <button type="button" class="tema-opcao" data-tema="sepia" title="Tema sépia">Sépia</button>
+        </div>
         <div class="sidebar-actions">
-          <button type="button" class="theme-toggle" data-theme-toggle aria-label="Alternar tema claro/escuro" title="Alternar tema">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <circle cx="12" cy="12" r="4"></circle>
-              <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>
-            </svg>
-          </button>
           <form method="post" action="{{ url_for('auth.logout') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-ghost">Sair</button>

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import requests
 import pytest
 
@@ -473,3 +475,93 @@ def test_busca_de_contas_mantem_o_timeout_curto(requests_mock):
         requests.Session.request = original
 
     assert capturado["timeout"] == 15
+
+
+# ---------- colocar em teste: A ÚNICA ESCRITA DO SISTEMA ----------
+
+
+def _url_estado():
+    return f"{CREDS.base_url}/Rest/search/EstadoUpd"
+
+
+def test_colocar_em_teste_manda_os_parametros_exatos(requests_mock):
+    """Os nomes e valores vieram do HAR da própria plataforma. Um
+    parâmetro errado aqui não dá erro: grava um estado diferente do
+    pedido, e a conta fica em teste pelo tempo errado (ou para sempre)."""
+    _mock_login_ok(requests_mock)
+    mock = requests_mock.get(_url_estado(), json={"success": True})
+    client = _client()
+
+    client.colocar_em_teste(
+        "9383",
+        inicio=datetime(2026, 10, 19, 18, 30, 0),
+        dias=7,
+        nota="Serviço noturno durante a semana.",
+    )
+
+    enviado = mock.last_request.qs
+    assert enviado["id"] == ["9383"]
+    assert enviado["est_iidcuenta"] == ["9383"]
+    assert enviado["est_nestado"] == ["1"]
+    assert enviado["est_ntipo"] == ["3"]
+    assert enviado["est_nduracion"] == ["7"]
+    assert enviado["est_dfechadesde"] == ["2026-10-19t18:30:00"]
+    assert enviado["est_dfechahasta"] == ["2026-10-26t18:30:00"]
+    assert enviado["est_mnota"] == ["serviço noturno durante a semana."]
+    assert enviado["token"] == ["abc123"]  # o mesmo cookie OAuth_Token
+
+
+def test_a_janela_fecha_no_inicio_mais_a_duracao(requests_mock):
+    """`dfechahasta` é o que faz o estado expirar sozinho. Calculado
+    errado, a conta fica em teste depois da semana acabar."""
+    _mock_login_ok(requests_mock)
+    mock = requests_mock.get(_url_estado(), json={"success": True})
+
+    _client().colocar_em_teste(
+        "1", inicio=datetime(2026, 12, 29, 8, 0, 0), dias=7, nota=""
+    )
+
+    assert mock.last_request.qs["est_dfechahasta"] == ["2027-01-05t08:00:00"]
+
+
+def test_duracao_zero_e_recusada_antes_de_qualquer_chamada(requests_mock):
+    """Janela vazia deixaria a conta em teste sem previsão de voltar — e
+    a janela é a única coisa que torna este módulo seguro."""
+    _mock_login_ok(requests_mock)
+    mock = requests_mock.get(_url_estado(), json={"success": True})
+
+    with pytest.raises(SoftGuardError, match="pelo menos 1 dia"):
+        _client().colocar_em_teste("1", inicio=datetime(2026, 1, 1), dias=0, nota="")
+
+    assert not mock.called
+
+
+def test_success_falso_e_falha_mesmo_com_http_200(requests_mock):
+    """A plataforma recusa com 200 e `success:false`. Olhar só o status
+    deixaria passar uma conta que NÃO entrou em teste como se tivesse."""
+    _mock_login_ok(requests_mock)
+    requests_mock.get(
+        _url_estado(), json={"success": False, "message": "sem permissão"}
+    )
+
+    with pytest.raises(SoftGuardError, match="recusou"):
+        _client().colocar_em_teste("1", inicio=datetime(2026, 1, 1), dias=7, nota="")
+
+
+def test_token_vencido_reloga_e_repete(requests_mock):
+    """O token viaja na query, então repetir com o valor antigo depois de
+    relogar falharia pelo mesmo motivo."""
+    _mock_login_ok(requests_mock)
+    requests_mock.get(
+        _url_estado(),
+        [
+            {"status_code": 500, "text": "Invalid Token"},
+            {"status_code": 200, "json": {"success": True}},
+        ],
+    )
+
+    resultado = _client().colocar_em_teste(
+        "1", inicio=datetime(2026, 1, 1), dias=7, nota=""
+    )
+
+    assert resultado["success"] is True

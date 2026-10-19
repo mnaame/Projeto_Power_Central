@@ -951,11 +951,57 @@ cliente na Auvo.
 
 Detalhe técnico em [`ROTAS_VISITA.md`](ROTAS_VISITA.md).
 
-### 5.3 O que o sistema NÃO faz na PowerCentral
+### 5.2.11 Contas em Teste — Super Nosso (só admin)
 
-**Nada é escrito na plataforma.** Todos os módulos só leem.
+Coloca as lojas da lista semanal **em teste** por 7 dias, para o serviço
+noturno não gerar falha de arme.
 
-Houve uma exceção, e ela acabou: o **Ajuste de Horário em Lote** somava
+> ⚠️ **Isto suprime alarme.** Conta em teste faz a central parar de tratar
+> a falha de arme dela. Uma loja errada aqui fica sem cobertura e
+> **ninguém é avisado** — o erro só aparece se tentarem entrar nela.
+
+**Como usar:** aba **Contas em Teste** → cole a mensagem que o Super
+Nosso mandou (pode ser o texto inteiro, com saudação e tudo) →
+**Preparar (só leitura)** → confira → marque as contas → digite
+`COLOCAR EM TESTE` → **Aplicar**.
+
+O que a tela mostra depois de preparar:
+
+- **Vão entrar em teste** — filial, conta e cliente. É esta lista que
+  você confere, uma por uma, antes de liberar.
+- **Ambíguas** — o número bateu com mais de uma conta. O sistema **não
+  escolhe**: chutar aqui colocaria em teste uma loja que talvez vá armar
+  hoje. Essas vão à mão na plataforma.
+- **Não encontradas** — o número não casou com nenhuma conta do grupo
+  Super Nosso/Apoio. Pode ser filial nova no cadastro, ou número digitado
+  diferente na mensagem.
+
+**Não existe passo de remover, e isso é de propósito.** O teste vale por
+7 dias e **expira sozinho**. Quando a lista da semana que vem chegar, a
+desta já venceu — não há nada para desfazer, e por isso não há como
+esquecer de desfazer. É a janela de tempo, e não a memória de quem opera,
+que impede uma loja de ficar silenciada para sempre.
+
+Só casa com contas dos grupos **Super Nosso e Apoio**. Isso não é
+detalhe: um número de filial solto casaria com qualquer conta da base que
+tivesse esse número no nome, e limitar o universo ao grupo que manda a
+lista impede um erro de digitação de alcançar a padaria da esquina.
+
+Detalhe técnico em [`CONTAS_TESTE.md`](CONTAS_TESTE.md).
+
+### 5.3 O que o sistema escreve na PowerCentral
+
+**Uma coisa só: colocar conta em teste** (§5.2.11). Todo o resto —
+relatórios, BI, diagnóstico, catálogo de visitas, auditoria de horários —
+é leitura.
+
+Vale saber por que isso é dito em voz alta: até 13/10/2026 o sistema
+tinha **zero** escrita, e essa era uma propriedade que se podia afirmar
+sem ressalva. Hoje existe exatamente um caminho de escrita, ele suprime
+alarme, e por isso está cercado de pré-visualização, confirmação
+digitada, auditoria e uma janela que expira sozinha.
+
+Houve outra exceção, e ela acabou: o **Ajuste de Horário em Lote** somava
 1h ao fechamento de todas as contas. Ele cumpriu o serviço em 13/10/2026
 e foi **removido** — manter uma rota de escrita viva para uma operação
 que não se repete é risco sem contrapartida. Saiu a tela, saiu o código,
@@ -1014,6 +1060,26 @@ manhã de diagnóstico em cima de código que nem estava em execução.
 
 Se só quiser recarregar o código, sem migração nem dependência nova,
 `Restart-Service PowerCentral` basta.
+
+### Trocar o tema da tela
+
+No rodapé da barra lateral, três botões: **Claro**, **Preto** e
+**Sépia**. A escolha fica guardada no navegador — vale ao recarregar e ao
+navegar, e é por máquina/navegador, não por usuário.
+
+- **Preto** é preto de verdade (#000). Em tela OLED isso é pixel
+  desligado: menos brilho na sala escura e menos bateria no celular.
+- **Sépia** é quente e de contraste menor, para leitura longa à noite —
+  "sem branco estourando", não "difícil de ler". Os três passam no
+  mínimo de legibilidade (AA), e isso tem teste.
+
+Os botões ficam **fora do menu que rola**, então continuam alcançáveis
+por mais itens que o menu tenha. Antes eles saíam da tela junto com o
+"Sair" quando o menu crescia.
+
+> Quem usava o tema escuro automático (o que seguia o Windows) passa a
+> ver o **Claro** por padrão: agora quem manda é o seletor, não o sistema
+> operacional. Escolha Preto uma vez e ele fica.
 
 ### Como saber qual código está no ar
 

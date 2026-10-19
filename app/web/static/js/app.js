@@ -2,32 +2,41 @@
   "use strict";
 
   var THEME_KEY = "power-central-theme";
+  var TEMAS = ["light", "preto", "sepia"];
 
-  function aplicarTema(tema) {
+  // Quem APLICA o tema no carregamento é o script inline do <head>: este
+  // arquivo tem `defer`, e esperar por ele mostraria a tela clara antes
+  // de virar preta. Aqui ficam só a troca e o estado dos botões.
+  function marcarTemaAtivo() {
+    var atual = document.documentElement.getAttribute("data-theme") || "light";
+    document.querySelectorAll("[data-tema]").forEach(function (botao) {
+      var ativo = botao.getAttribute("data-tema") === atual;
+      botao.classList.toggle("is-ativo", ativo);
+      botao.setAttribute("aria-pressed", ativo ? "true" : "false");
+    });
+  }
+
+  function escolherTema(tema) {
+    if (TEMAS.indexOf(tema) === -1) {
+      return;
+    }
     document.documentElement.setAttribute("data-theme", tema);
-  }
-
-  function temaAtual() {
-    return localStorage.getItem(THEME_KEY) || "auto";
-  }
-
-  function alternarTema() {
-    var atual = document.documentElement.getAttribute("data-theme");
-    var proximo = atual === "dark" ? "light" : "dark";
-    localStorage.setItem(THEME_KEY, proximo);
-    aplicarTema(proximo);
-  }
-
-  var salvo = localStorage.getItem(THEME_KEY);
-  if (salvo && salvo !== "auto") {
-    aplicarTema(salvo);
+    try {
+      localStorage.setItem(THEME_KEY, tema);
+    } catch (e) {
+      // Navegador com armazenamento bloqueado: o tema vale para esta
+      // sessão e não persiste. Melhor que não trocar nada.
+    }
+    marcarTemaAtivo();
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    var botao = document.querySelector("[data-theme-toggle]");
-    if (botao) {
-      botao.addEventListener("click", alternarTema);
-    }
+    marcarTemaAtivo();
+    document.querySelectorAll("[data-tema]").forEach(function (botao) {
+      botao.addEventListener("click", function () {
+        escolherTema(botao.getAttribute("data-tema"));
+      });
+    });
 
     var alvo = document.querySelector("[data-poll-target]");
     if (alvo) {

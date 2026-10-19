@@ -151,6 +151,74 @@
   --color-status-neutral-bg: #18251c;
 }
 
+/* Tema PRETO (AMOLED) — fundo #000 de verdade.
+   Não é "o escuro mais escuro": num painel OLED o preto puro é pixel
+   desligado, o que economiza bateria e tira o brilho cinza que incomoda
+   em sala escura. O verde da marca fica como acento, mais claro que no
+   tema claro para manter contraste sobre o preto. */
+:root[data-theme="preto"] {
+  --color-bg: #000000;
+  --color-surface: #0d0e10;
+  --color-surface-raised: #141619;
+  --color-border: #1f2124;
+  --color-border-strong: #34373c;
+
+  --color-text-primary: #ececec;
+  --color-text-secondary: #b9bcc0;
+  --color-text-muted: #7c8085;
+
+  --color-accent: #2ec28b;
+  --color-accent-hover: #4ad6a3;
+  --color-accent-soft: #0e2b22;
+  --color-accent-text: #00140d;
+
+  --color-focus-ring: #2ec28b;
+  --color-brand: #2ec28b;
+
+  --color-status-critical: #ff6b6b;
+  --color-status-critical-bg: #2a1012;
+  --color-status-warning: #ffc14d;
+  --color-status-warning-bg: #2a2110;
+  --color-status-ok: #4ade80;
+  --color-status-ok-bg: #0d2617;
+  --color-status-neutral: #9aa0a6;
+  --color-status-neutral-bg: #17191c;
+}
+
+/* Tema SÉPIA — quente e de baixo contraste, para leitura longa à noite.
+   O contraste é menor de propósito, mas não abaixo do legível: o texto
+   principal sobre o fundo fica em ~11:1, bem acima do mínimo AA (4,5:1).
+   Baixo contraste aqui significa "sem branco estourando", não "difícil
+   de ler". */
+:root[data-theme="sepia"] {
+  --color-bg: #1c1712;
+  --color-surface: #241d16;
+  --color-surface-raised: #2c241b;
+  --color-border: #3a2f23;
+  --color-border-strong: #54442f;
+
+  --color-text-primary: #efe3cf;
+  --color-text-secondary: #cdbda4;
+  --color-text-muted: #9a8a73;
+
+  --color-accent: #c69a5b;
+  --color-accent-hover: #ddb679;
+  --color-accent-soft: #33281b;
+  --color-accent-text: #1c1712;
+
+  --color-focus-ring: #c69a5b;
+  --color-brand: #c69a5b;
+
+  --color-status-critical: #e8705f;
+  --color-status-critical-bg: #301914;
+  --color-status-warning: #d9a441;
+  --color-status-warning-bg: #302512;
+  --color-status-ok: #8fb96a;
+  --color-status-ok-bg: #202a18;
+  --color-status-neutral: #a8977f;
+  --color-status-neutral-bg: #292118;
+}
+
 /* Utilitário para números em tabelas/contadores (RF 7.1) */
 .tabular-nums {
   font-variant-numeric: tabular-nums;

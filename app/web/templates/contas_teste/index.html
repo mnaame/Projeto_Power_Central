@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}Contas em Teste{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title"><h2>Contas em Teste (Super Nosso)</h2></div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Coloca as lojas da lista semanal em <strong>teste</strong> por
+    {{ dias_padrao }} dias, para o serviço noturno não gerar falha de arme.
+  </p>
+
+  <div class="banner banner-critical" role="alert">
+    <span>
+      <strong>Isto suprime alarme.</strong> Conta em teste faz a central
+      parar de tratar a falha de arme dela. Confira a lista antes de
+      aplicar — uma loja errada aqui fica sem cobertura e ninguém é
+      avisado. A janela de {{ dias_padrao }} dias <strong>expira
+      sozinha</strong>: não existe passo de remover, e a lista da semana
+      que vem não precisa desfazer esta.
+    </span>
+  </div>
+
+  <form method="post" action="{{ url_for('contas_teste.preparar') }}" class="card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field">
+      <label for="mensagem">Cole a mensagem do Super Nosso</label>
+      <textarea id="mensagem" name="mensagem" rows="6" required
+                placeholder="420 SN. FLEMING&#10;688 SN. CASTELO&#10;530 AP. VENDA NOVA"></textarea>
+      <p class="muted" style="margin-top: var(--space-1);">
+        Pode colar o texto inteiro, com saudação e tudo — o sistema tira os
+        números de filial. Só casa com contas do grupo Super Nosso/Apoio.
+      </p>
+    </div>
+    <div class="field" style="max-width: 12rem;">
+      <label for="dias">Duração (dias)</label>
+      <input id="dias" type="number" name="dias" min="1" max="31"
+             value="{{ dias_padrao }}">
+    </div>
+    <button type="submit" class="btn btn-primary">Preparar (só leitura)</button>
+    <span class="muted" style="margin-left: var(--space-2);">
+      Mostra o que seria feito. Não grava nada.
+    </span>
+  </form>
+</div>
+
+{% if preview %}
+<div class="section">
+  <div class="section-title">
+    <h2>Vão entrar em teste</h2>
+    <span class="muted">{{ preview.inicio }} → {{ preview.fim }}</span>
+  </div>
+
+  {% if preview.casados %}
+  <form method="post" action="{{ url_for('contas_teste.aplicar') }}" class="card"
+        onsubmit="return confirm('COLOCAR EM TESTE as contas marcadas até {{ preview.fim }}? Elas param de gerar falha de arme nesse período.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 3rem;"></th>
+            <th>Filial</th><th>Conta</th><th>Cliente</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in preview.casados %}
+          <tr>
+            <td>
+              <input type="checkbox" name="cue_iid" value="{{ item.cue_iid }}" checked>
+            </td>
+            <td class="is-numeric">{{ item.filial }}</td>
+            <td class="is-numeric">{{ item.numero }}</td>
+            <td>{{ item.nome }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="field" style="margin-top: var(--space-3);">
+      <label for="nota">Nota (vai junto no cadastro)</label>
+      <input id="nota" type="text" name="nota" value="{{ nota_padrao }}">
+    </div>
+
+    <div class="field">
+      <label for="confirmacao">Confirmação</label>
+      <input id="confirmacao" type="text" name="confirmacao" autocomplete="off"
+             placeholder="digite {{ confirmacao }}">
+      <p class="muted" style="margin-top: var(--space-1);">
+        Digite <strong>{{ confirmacao }}</strong> para liberar. São
+        {{ preview.casados|length }} conta(s), em teste até
+        <strong>{{ preview.fim }}</strong>.
+      </p>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Aplicar</button>
+  </form>
+  {% else %}
+  <div class="card empty-state">
+    <h3>Nenhuma filial casou com uma conta</h3>
+    <p class="muted">Confira os números na mensagem.</p>
+  </div>
+  {% endif %}
+</div>
+
+{% if preview.ambiguos %}
+<div class="section">
+  <div class="section-title"><h2>Ambíguas — mais de uma conta</h2></div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    O número bate com mais de uma conta, então o sistema <strong>não
+    escolhe</strong>: chutar aqui colocaria em teste uma loja que talvez vá
+    armar hoje. Coloque essas à mão na plataforma.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Filial</th><th>Contas que batem</th></tr></thead>
+      <tbody>
+        {% for item in preview.ambiguos %}
+        <tr>
+          <td class="is-numeric">{{ item.filial }}</td>
+          <td>
+            {% for c in item.candidatas %}
+            {{ c.numero }} — {{ c.nome }}{{ "; " if not loop.last }}
+            {% endfor %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if preview.nao_encontrados %}
+<div class="section">
+  <div class="section-title"><h2>Não encontradas</h2></div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Estes números não casaram com nenhuma conta do grupo Super Nosso/Apoio.
+    Pode ser filial nova no cadastro, ou número digitado diferente na
+    mensagem.
+  </p>
+  <div class="card">
+    {% for filial in preview.nao_encontrados %}
+    <span class="chip chip-warning">{{ filial }}</span>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

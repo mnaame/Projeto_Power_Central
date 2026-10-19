@@ -93,6 +93,7 @@ img, svg {
 }
 
 .sidebar-brand {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -133,17 +134,47 @@ img, svg {
   margin-top: 2px;
 }
 
+/* O menu rola POR DENTRO; a marca e o rodapé ficam parados.
+   `min-height: 0` é o que faz isso funcionar: sem ele um item flex não
+   encolhe abaixo do próprio conteúdo, o `overflow-y` nunca entra em
+   ação, a lista empurra o rodapé para fora da tela — e foi assim que
+   trocar de tema e sair do usuário ficaram inalcançáveis quando o menu
+   passou de uns quinze itens. */
 .sidebar-nav {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 2px;
+  /* Barra de rolagem discreta: ela aparece dentro de um menu estreito e
+     não pode competir com o conteúdo. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
 }
 
+.sidebar-nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 999px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Compacto de propósito: cabe mais item sem rolar, e 7px de padding com
+   ícone de 16px ainda dá ~30px de alvo clicável. */
 .sidebar-link {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
+  padding: 7px var(--space-3);
+  line-height: 1.2;
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
@@ -172,7 +203,8 @@ img, svg {
 }
 
 .sidebar-footer {
-  margin-top: auto;
+  flex: 0 0 auto;
+  margin-top: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -625,22 +657,40 @@ summary.btn::-webkit-details-marker {
   white-space: nowrap;
 }
 
-.theme-toggle {
-  background: transparent;
+/* Seletor de tema: três botões num grupo só, no rodapé da barra. Fica
+   fora do menu que rola, então continua alcançável com qualquer altura
+   de tela — era justamente o que tinha sumido. */
+.tema-seletor {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
-  width: 36px;
-  height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
 }
 
-.theme-toggle:hover {
-  border-color: var(--color-border-strong);
+.tema-opcao {
+  flex: 1;
+  padding: 5px 2px;
+  border: 0;
+  border-radius: calc(var(--radius-md) - 3px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.tema-opcao:hover {
   color: var(--color-text-primary);
+  background: var(--color-status-neutral-bg);
+}
+
+.tema-opcao.is-ativo {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
 }
 
 .poll-target {
