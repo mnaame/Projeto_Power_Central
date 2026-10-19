@@ -25,10 +25,19 @@ HORARIO_PATH = "/rest/search/Horario"
 # por aqui. Read-modify-write: GET devolve o registro inteiro, PUT manda
 # o registro inteiro de volta com UM campo trocado.
 TOLERANCIA_PATH = "/Rest/HorarioTolerancia/"
-# `tol_nnyc` = aviso de "não fechou/não armou ainda". 1 desliga o aviso;
-# o valor que religa é o que a conta TINHA, lido antes de desligar — e
-# nunca uma constante, porque não é a mesma coisa em toda conta.
-NNYC_DESLIGADO = 1
+# `tol_nnyc` = aviso de "não fechou/não armou ainda".
+#
+# **1 = sim (gera), 2 = não (não gera)** — e não o contrário, como a
+# especificação inicial dizia. A prova está no próprio registro: a mesma
+# conta tem `tol_nnyo = 2` com a tela mostrando "Gerar não desarmado
+# ainda: Não", e `tol_nnyc = 1` com "Gerar não armado ainda: sim". Dois
+# campos irmãos, a mesma régua.
+#
+# O engano custou um lote inteiro: gravar 1 para "desligar" escrevia o
+# valor que já estava lá, e nove contas foram reportadas como desligadas
+# sem que nada mudasse na plataforma.
+NNYC_GERA = 1
+NNYC_NAO_GERA = 2
 # Escrita curta, mas é a que não pode ficar pela metade por impaciência.
 TIMEOUT_TOLERANCIA_SEGUNDOS = 60
 # Uma conta tem poucas faixas de horário (abertura/fechamento por dia da
@@ -345,11 +354,17 @@ class SoftGuardClient:
         disparo (BUR) continua chegando normalmente. É essa a diferença
         que justifica este mecanismo existir no lugar do outro.
 
-        `gerar=False` desliga o aviso (`tol_nnyc = 1`). `gerar=True`
+        `gerar=False` desliga o aviso (`tol_nnyc = 2`). `gerar=True`
         restaura o valor que a conta tinha, que vem do ledger e **nunca**
-        de uma constante: "tipicamente 2" não é "sempre 2", e religar com
-        o número errado deixaria a conta com uma supervisão que ela nunca
-        teve.
+        de uma constante: não é o mesmo número em toda conta, e religar
+        com o valor errado deixaria a conta com uma supervisão que ela
+        nunca teve.
+
+        **A escrita é conferida relendo.** A plataforma responde 200 e
+        segue a vida mesmo quando o valor não muda — foi assim que um
+        lote inteiro foi reportado como aplicado sem que nada tivesse
+        mudado. Aqui, se o campo não ficou com o valor pedido, isso é
+        falha, não sucesso.
 
         O corpo do PUT é o registro lido, com UM campo trocado. Os demais
         voltam exatamente como vieram, inclusive as datas no formato
@@ -362,7 +377,8 @@ class SoftGuardClient:
 
         atual = self.ler_tolerancia(cue_iid)
         corpo = dict(atual)
-        corpo["tol_nnyc"] = int(original) if gerar else NNYC_DESLIGADO
+        alvo = int(original) if gerar else NNYC_NAO_GERA
+        corpo["tol_nnyc"] = alvo
 
         response = self._request_reautenticando(
             "PUT",
@@ -377,6 +393,17 @@ class SoftGuardClient:
             raise SoftGuardError(
                 f"A PowerCentral recusou a tolerância da conta {cue_iid}: "
                 f"{str(resposta)[:200]}"
+            )
+
+        # Confere relendo. Escrita em produção que diz "deu certo" sem ter
+        # mudado nada é pior que erro: vira um registro falso de que a
+        # loja está coberta.
+        depois = self.ler_tolerancia(cue_iid)
+        if int(depois.get("tol_nnyc", -1)) != alvo:
+            raise SoftGuardError(
+                f"A tolerância da conta {cue_iid} não mudou: pedi "
+                f"tol_nnyc={alvo} e continua "
+                f"{depois.get('tol_nnyc')!r}."
             )
         return resposta
 

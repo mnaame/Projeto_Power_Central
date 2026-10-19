@@ -501,14 +501,36 @@ def _url_tolerancia(cue_iid=9383):
     return f"{CREDS.base_url}/Rest/HorarioTolerancia/{cue_iid}"
 
 
-def test_desligar_o_aviso_manda_nnyc_1(requests_mock):
+def test_desligar_o_aviso_manda_nnyc_2(requests_mock):
+    """1 = sim (gera), 2 = não. A prova está no próprio registro: a mesma
+    conta tem `tol_nnyo = 2` com a tela mostrando "Gerar não desarmado
+    ainda: Não", e `tol_nnyc = 1` com "Gerar não armado ainda: sim".
+
+    Gravar 1 para "desligar" escrevia o valor que já estava lá — nove
+    contas foram reportadas como desligadas sem nada mudar."""
     _mock_login_ok(requests_mock)
-    requests_mock.get(_url_tolerancia(), json=dict(TOLERANCIA))
+    requests_mock.get(
+        _url_tolerancia(),
+        [{"json": dict(TOLERANCIA)}, {"json": {**TOLERANCIA, "tol_nnyc": 2}}],
+    )
     put = requests_mock.put(_url_tolerancia(), json={"success": True})
 
     _client().set_nao_armado(9383, gerar=False)
 
-    assert put.last_request.json()["tol_nnyc"] == 1
+    assert put.last_request.json()["tol_nnyc"] == 2
+
+
+def test_escrita_que_nao_mudou_nada_e_falha(requests_mock):
+    """A plataforma responde 200 e segue a vida mesmo quando o valor não
+    muda. "Deu certo" sem ter mudado nada é pior que erro: vira registro
+    falso de que a loja está coberta."""
+    _mock_login_ok(requests_mock)
+    # Lê 1 antes e 1 depois: o PUT não pegou.
+    requests_mock.get(_url_tolerancia(), json={**TOLERANCIA, "tol_nnyc": 1})
+    requests_mock.put(_url_tolerancia(), json={"success": True})
+
+    with pytest.raises(SoftGuardError, match="não mudou"):
+        _client().set_nao_armado(9383, gerar=False)
 
 
 def test_o_put_devolve_o_registro_INTEIRO_com_um_campo_trocado(requests_mock):
@@ -516,7 +538,10 @@ def test_o_put_devolve_o_registro_INTEIRO_com_um_campo_trocado(requests_mock):
     inventar estado — inclusive as datas `/Date(...)/`, que voltam como
     vieram."""
     _mock_login_ok(requests_mock)
-    requests_mock.get(_url_tolerancia(), json=dict(TOLERANCIA))
+    requests_mock.get(
+        _url_tolerancia(),
+        [{"json": dict(TOLERANCIA)}, {"json": {**TOLERANCIA, "tol_nnyc": 2}}],
+    )
     put = requests_mock.put(_url_tolerancia(), json={"success": True})
 
     _client().set_nao_armado(9383, gerar=False)
@@ -530,12 +555,15 @@ def test_o_put_devolve_o_registro_INTEIRO_com_um_campo_trocado(requests_mock):
 
 def test_religar_restaura_o_valor_original(requests_mock):
     _mock_login_ok(requests_mock)
-    requests_mock.get(_url_tolerancia(), json={**TOLERANCIA, "tol_nnyc": 1})
+    requests_mock.get(
+        _url_tolerancia(),
+        [{"json": {**TOLERANCIA, "tol_nnyc": 2}}, {"json": {**TOLERANCIA, "tol_nnyc": 1}}],
+    )
     put = requests_mock.put(_url_tolerancia(), json={"success": True})
 
-    _client().set_nao_armado(9383, gerar=True, original=2)
+    _client().set_nao_armado(9383, gerar=True, original=1)
 
-    assert put.last_request.json()["tol_nnyc"] == 2
+    assert put.last_request.json()["tol_nnyc"] == 1
 
 
 def test_religar_sem_o_valor_original_e_recusado(requests_mock):

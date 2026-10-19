@@ -49,8 +49,26 @@ GET /Rest/HorarioTolerancia/<cue_iid>     → o registro com tol_*
 PUT /Rest/HorarioTolerancia/<cue_iid>     → o MESMO registro, com tol_nnyc trocado
 ```
 
-- **Desligar o aviso**: `tol_nnyc = 1`.
-- **Religar**: `tol_nnyc` = o valor original da conta, vindo do ledger.
+- **Desligar o aviso**: `tol_nnyc = 2`.
+- **Religar**: `tol_nnyc` = o valor original da conta, vindo do ledger
+  (tipicamente 1).
+
+### 1 = sim, 2 = não — e isso custou um lote
+
+A especificação inicial dizia o contrário ("desligar = 1"). A prova de
+que está invertido veio do próprio registro, comparado com a tela da
+plataforma na mesma conta:
+
+| Campo | Valor | Tela |
+|---|---|---|
+| `tol_nnyo` | 2 | "Gerar não desarmado ainda: **Não**" |
+| `tol_nnyc` | 1 | "Gerar não armado ainda: **sim**" |
+
+Dois campos irmãos, a mesma régua. Gravar 1 para "desligar" escrevia o
+valor que já estava lá: nove contas foram reportadas como desligadas sem
+que nada mudasse na plataforma, e o ledger guardou "religa com
+`tol_nnyc = 1`" — que era a pista de que o valor lido já era o de
+"ligado".
 
 Quatro detalhes com teste próprio, porque errá-los não dá erro — dá
 resultado errado:
@@ -64,6 +82,11 @@ resultado errado:
   client **recusa** religar sem receber o original.
 - **`success: false` chega com HTTP 200.** Olhar só o status deixaria
   passar uma conta que não mudou como se tivesse mudado.
+- **A escrita é conferida relendo.** A plataforma responde 200 e segue a
+  vida mesmo quando o valor não muda — foi exatamente assim que o lote
+  acima passou por aplicado. Se o campo não ficou com o valor pedido,
+  isso é falha, não sucesso, e a conta não entra no ledger. Registro
+  falso de que a loja está coberta é pior que erro.
 - **O ledger é gravado ANTES do PUT.** Se o processo morrer no meio,
   sobra uma linha dizendo "esta conta deveria estar desligada" — que se
   confere — em vez de uma conta desligada que ninguém sabe que existe e
@@ -111,7 +134,20 @@ correspondente falha:
 - religar com valor fixo em vez do ledger;
 - PUT montando corpo novo em vez de preservar o registro lido.
 
-Mais: `tol_nnyc = 1` ao desligar, recusa de religar sem o original,
+Mais: `tol_nnyc = 2` ao desligar, escrita que não pegou tratada como
+falha, recusa de religar sem o original,
 `success: false` com HTTP 200 tratado como falha, tesouraria barrada nos
 dois pontos, falha isolada por conta, e o ciclo semanal completo
 (desliga as novas, religa as que saíram).
+
+
+## 8. Se o ledger dessincronizar da plataforma
+
+Acontece quando uma escrita é reportada como aplicada sem ter sido — era
+possível antes da conferência pós-escrita existir. O sintoma na tela é a
+coluna **"Religa com"** mostrando um valor que não é 1: significa que a
+conta já estava desligada quando entrou no ledger, e o valor de origem se
+perdeu.
+
+O conserto é **"Religar todas"**: restaura o que cada linha guarda, limpa
+a lista, e aí a lista da semana pode ser rodada de novo do zero.

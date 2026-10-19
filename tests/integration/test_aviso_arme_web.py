@@ -103,7 +103,7 @@ def test_com_a_confirmacao_grava(admin_client, monkeypatch):
         follow_redirects=True,
     ).get_data(as_text=True)
 
-    assert portal.nnyc["9001"] == 1
+    assert portal.nnyc["9001"] == 2  # 2 = não gera o aviso
     assert "disparo continua ativo" in corpo.lower()
 
 
@@ -164,8 +164,8 @@ def test_conta_desligada_ha_muito_tempo_e_destacada(admin_client):
 def test_religar_tudo_e_a_saida_de_emergencia(admin_client, monkeypatch):
     """Como nada expira sozinho, tem que existir um jeito de voltar ao
     normal que não dependa de o Super Nosso mandar a lista."""
-    _desligada("9001", conta="0002", nome="SUPER NOSSO FLEMING", nnyc=2)
-    portal = _preparar(monkeypatch, FakePortal(nnyc={c["cue_iid"]: 1 for c in CONTAS}))
+    _desligada("9001", conta="0002", nome="SUPER NOSSO FLEMING", nnyc=1)
+    portal = _preparar(monkeypatch, FakePortal(nnyc={c["cue_iid"]: 2 for c in CONTAS}))
 
     admin_client.post(
         "/aviso-arme/religar-tudo",
@@ -173,7 +173,7 @@ def test_religar_tudo_e_a_saida_de_emergencia(admin_client, monkeypatch):
         follow_redirects=True,
     )
 
-    assert portal.nnyc["9001"] == 2
+    assert portal.nnyc["9001"] == 1
 
 
 def test_religar_tudo_tambem_pede_confirmacao(admin_client, monkeypatch):

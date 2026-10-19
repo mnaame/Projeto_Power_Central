@@ -42,8 +42,10 @@ class FakePortal:
 
     def __init__(self, contas=None, *, nnyc=None, erro_em=None, erro_contas=None):
         self.contas = CONTAS if contas is None else contas
-        # `tol_nnyc` de cada conta. 2 = aviso ligado (o normal).
-        self.nnyc = nnyc or {c["cue_iid"]: 2 for c in self.contas}
+        # `tol_nnyc` de cada conta. 1 = gera o aviso (o normal), 2 = não
+        # gera. A mesma régua do `tol_nnyo`, confirmada na tela da
+        # plataforma.
+        self.nnyc = nnyc or {c["cue_iid"]: 1 for c in self.contas}
         self.erro_em = erro_em or set()
         self.erro_contas = erro_contas
         self.puts = []
@@ -62,12 +64,12 @@ class FakePortal:
             raise SoftGuardError("a plataforma recusou")
         if gerar and original is None:
             raise SoftGuardError("religar exige o valor original")
-        self.nnyc[chave] = int(original) if gerar else 1
+        self.nnyc[chave] = int(original) if gerar else 2
         self.puts.append({"cue_iid": chave, "gerar": gerar, "nnyc": self.nnyc[chave]})
         return {"success": True}
 
 
-def _desligada(cue_iid, conta="0002", nome="SUPER NOSSO X", nnyc=2):
+def _desligada(cue_iid, conta="0002", nome="SUPER NOSSO X", nnyc=1):
     linha = AvisoArmeDesligado(
         cue_iid=cue_iid, conta=conta, nome=nome, nnyc_original=nnyc, ativo=True
     )
@@ -128,13 +130,13 @@ def test_portal_fora_do_ar_aborta_com_erro_proprio(app):
 # ---------- desligar ----------
 
 
-def test_desligar_grava_nnyc_1_e_guarda_o_original(app, admin_user):
-    portal = FakePortal(nnyc={"9001": 3, "9002": 2, "9003": 2, "9004": 2, "9005": 2, "9006": 2})
+def test_desligar_grava_nnyc_2_e_guarda_o_original(app, admin_user):
+    portal = FakePortal(nnyc={"9001": 3, "9002": 1, "9003": 1, "9004": 1, "9005": 1, "9006": 1})
 
     svc.aplicar(["9001"], [], config=app.config, user=admin_user, softguard_client=portal)
     db.session.commit()
 
-    assert portal.nnyc["9001"] == 1
+    assert portal.nnyc["9001"] == 2
     linha = AvisoArmeDesligado.query.filter_by(cue_iid="9001").one()
     assert linha.nnyc_original == 3  # o valor que a conta TINHA, não um chute
     assert linha.ativo is True
@@ -160,14 +162,14 @@ def test_o_ledger_e_gravado_antes_do_put(app, admin_user):
 def test_conta_ja_desligada_nao_e_regravada(app, admin_user):
     """Regravar trocaria o `nnyc_original` por 1, e aí o religar não
     teria mais o que restaurar. É o erro mais caro possível aqui."""
-    _desligada("9001", nnyc=2)
-    portal = FakePortal(nnyc={c["cue_iid"]: 1 for c in CONTAS})
+    _desligada("9001", nnyc=1)
+    portal = FakePortal(nnyc={c["cue_iid"]: 2 for c in CONTAS})
 
     svc.aplicar(["9001"], [], config=app.config, user=admin_user, softguard_client=portal)
     db.session.commit()
 
     assert portal.puts == []
-    assert AvisoArmeDesligado.query.filter_by(cue_iid="9001").one().nnyc_original == 2
+    assert AvisoArmeDesligado.query.filter_by(cue_iid="9001").one().nnyc_original == 1
 
 
 # ---------- religar ----------
@@ -175,7 +177,7 @@ def test_conta_ja_desligada_nao_e_regravada(app, admin_user):
 
 def test_religar_restaura_o_valor_do_ledger(app, admin_user):
     _desligada("9001", nnyc=3)
-    portal = FakePortal(nnyc={c["cue_iid"]: 1 for c in CONTAS})
+    portal = FakePortal(nnyc={c["cue_iid"]: 2 for c in CONTAS})
 
     svc.aplicar([], ["9001"], config=app.config, user=admin_user, softguard_client=portal)
     db.session.commit()
@@ -189,16 +191,16 @@ def test_religar_restaura_o_valor_do_ledger(app, admin_user):
 def test_ciclo_completo_desliga_novas_e_religa_as_que_sairam(app, admin_user):
     """O ciclo semanal inteiro: é ele que substitui a janela que expirava
     sozinha."""
-    _desligada("9003", conta="0011", nome="APOIO VENDA NOVA", nnyc=2)
-    portal = FakePortal(nnyc={"9001": 2, "9002": 2, "9003": 1, "9004": 2, "9005": 2, "9006": 2})
+    _desligada("9003", conta="0011", nome="APOIO VENDA NOVA", nnyc=1)
+    portal = FakePortal(nnyc={"9001": 1, "9002": 1, "9003": 2, "9004": 1, "9005": 1, "9006": 1})
 
     resultado = svc.aplicar(
         ["9001"], ["9003"], config=app.config, user=admin_user, softguard_client=portal
     )
     db.session.commit()
 
-    assert portal.nnyc["9001"] == 1  # desligada
-    assert portal.nnyc["9003"] == 2  # religada no valor original
+    assert portal.nnyc["9001"] == 2  # desligada (2 = não gera)
+    assert portal.nnyc["9003"] == 1  # religada no valor original
     assert resultado["desligadas"] == ["9001"]
     assert resultado["religadas"] == ["9003"]
 
@@ -285,3 +287,24 @@ def test_dias_desligado_conta_do_momento_do_desligamento(app):
     db.session.commit()
 
     assert linha.dias_desligado() == 23
+
+
+def test_escrita_que_nao_pega_nao_entra_no_ledger(app, admin_user):
+    """Foi o que aconteceu em produção: a plataforma respondeu 200, o
+    valor continuou o mesmo, e nove contas entraram no ledger como
+    desligadas sem nada ter mudado. Registro falso de que a loja está
+    coberta é pior que erro."""
+
+    class PortalQueNaoAplica(FakePortal):
+        def set_nao_armado(self, cue_iid, *, gerar, original=None):
+            raise SoftGuardError("a tolerância da conta não mudou")
+
+    portal = PortalQueNaoAplica()
+
+    resultado = svc.aplicar(
+        ["9001"], [], config=app.config, user=admin_user, softguard_client=portal
+    )
+    db.session.commit()
+
+    assert AvisoArmeDesligado.query.count() == 0
+    assert "não mudou" in resultado["falhas"][0]["erro"]

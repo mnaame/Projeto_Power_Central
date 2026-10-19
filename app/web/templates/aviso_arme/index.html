@@ -53,7 +53,12 @@
             {{ dias }} dia(s)
             {% if dias >= dias_para_alertar %}<strong>⚠</strong>{% endif %}
           </td>
-          <td class="is-numeric muted">tol_nnyc = {{ linha.nnyc_original }}</td>
+          {# "Religa com 2" é sinal de que a conta já estava desligada
+             quando entrou no ledger, e o valor de origem se perdeu. #}
+          <td class="is-numeric {{ 'is-critical' if linha.nnyc_original != 1 }}">
+            tol_nnyc = {{ linha.nnyc_original }}
+            <span class="muted">({{ 'gera' if linha.nnyc_original == 1 else 'NÃO gera' }})</span>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -66,6 +71,10 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="field" style="max-width: 20rem;">
       <label for="conf_tudo">Religar todas (saída de emergência)</label>
+      <p class="muted" style="margin-top: var(--space-1);">
+        Restaura o valor de cada conta e limpa esta lista. Use também se
+        desconfiar que o ledger está dessincronizado da plataforma.
+      </p>
       <input id="conf_tudo" type="text" name="confirmacao" autocomplete="off"
              placeholder="digite {{ confirmacao }}">
     </div>

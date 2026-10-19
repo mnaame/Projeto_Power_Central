@@ -984,7 +984,13 @@ A tela mostra:
 
 **Botão "religar todas"**: volta tudo ao normal sem depender de o Super
 Nosso mandar a lista. É a saída de emergência — use se desconfiar que
-alguma loja ficou desligada por engano.
+alguma loja ficou desligada por engano, ou que a lista da tela não bate
+com a plataforma.
+
+**Conferência que vale fazer:** na coluna **"Religa com"**, o normal é
+`tol_nnyc = 1 (gera)`. Se aparecer outro valor em vermelho, aquela conta
+já estava desligada quando entrou na lista — avise, porque o valor
+original dela se perdeu.
 
 Detalhe técnico em [`AVISO_ARME.md`](AVISO_ARME.md).
 
