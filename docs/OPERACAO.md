@@ -951,57 +951,52 @@ cliente na Auvo.
 
 Detalhe técnico em [`ROTAS_VISITA.md`](ROTAS_VISITA.md).
 
-### 5.2.11 Contas em Teste — Super Nosso (só admin)
+### 5.2.11 Lojas sem Arme — Super Nosso (só admin)
 
-Coloca as lojas da lista semanal **em teste** de segunda a sexta (5
-dias), para o serviço noturno não gerar falha de arme. Sábado e domingo a
-loja arma normal.
+Desliga o aviso de **"não armou"** das lojas da lista semanal, para o
+serviço noturno não gerar falha de arme.
 
-> ⚠️ **Isto suprime alarme.** Conta em teste faz a central parar de tratar
-> a falha de arme dela. Uma loja errada aqui fica sem cobertura e
-> **ninguém é avisado** — o erro só aparece se tentarem entrar nela.
+> **O disparo continua ativo.** Isto mexe só no aviso de "não fechou
+> ainda". Se alguém entrar na loja, o disparo chega normalmente. A versão
+> anterior desta aba colocava a conta "em teste", o que calava **tudo**,
+> inclusive invasão — por isso foi descartada.
 
-**Como usar:** aba **Contas em Teste** → cole a mensagem que o Super
-Nosso mandou (pode ser o texto inteiro, com saudação e tudo) →
-**Preparar (só leitura)** → confira → marque as contas → digite
-`COLOCAR EM TESTE` → **Aplicar**.
+> ⚠️ **Nada expira sozinho aqui.** A conta fica sem o aviso até alguém
+> religar. Rodar a lista da semana seguinte religa quem saiu dela; se a
+> lista parar de ser rodada, as lojas ficam sem supervisão de arme por
+> tempo indeterminado.
 
-O que a tela mostra depois de preparar:
+**Como usar:** aba **Lojas sem Arme** → cole a mensagem do Super Nosso →
+**Preparar (só leitura)** → confira → marque → digite `DESLIGAR AVISO` →
+**Aplicar**.
 
-- **Vão entrar em teste** — filial, conta e cliente. É esta lista que
-  você confere, uma por uma, antes de liberar.
-- **Ambíguas** — o número bateu com mais de uma conta. O sistema **não
-  escolhe**: chutar aqui colocaria em teste uma loja que talvez vá armar
-  hoje. Essas vão à mão na plataforma.
-- **Não encontradas** — o número não casou com nenhuma conta do grupo
-  Super Nosso/Apoio. Pode ser filial nova no cadastro, ou número digitado
-  diferente na mensagem.
+A tela mostra:
 
-**A tesouraria nunca entra.** Ela é conta separada da loja no cadastro
-(`SUPER NOSSO CASTELO LOJA` × `SUPER NOSSO CASTELO TESOURARIA`), fica
-armada durante o serviço noturno, e o sistema a barra mesmo que o número
-bata. Ela aparece numa lista "Nunca entram em teste" para você ver que
-foi de propósito.
+- **Desligadas agora** — tudo o que está sem o aviso neste momento, com
+  **há quantos dias**. Acima de 8 dias fica em vermelho: é o sinal de que
+  alguém deixou de rodar a lista.
+- **Desligar** — as da lista nova que ainda estão ligadas.
+- **Religar** — as que estavam desligadas e saíram da lista desta semana.
+- **Já estavam desligadas** — continuam na lista e não são tocadas.
+- **Nunca são desligadas** — a tesouraria, barrada mesmo que o número
+  bata.
+- **Ambíguas** e **Não encontradas** — como antes.
 
-**Não existe passo de remover, e isso é de propósito.** O teste vale por
-5 dias — **segunda a sexta**, porque no fim de semana a loja arma
-normal — e **expira sozinho**. Quando a lista da semana que vem chegar, a
-desta já venceu — não há nada para desfazer, e por isso não há como
-esquecer de desfazer. É a janela de tempo, e não a memória de quem opera,
-que impede uma loja de ficar silenciada para sempre.
+**Botão "religar todas"**: volta tudo ao normal sem depender de o Super
+Nosso mandar a lista. É a saída de emergência — use se desconfiar que
+alguma loja ficou desligada por engano.
 
-Só casa com contas dos grupos **Super Nosso e Apoio**. Isso não é
-detalhe: um número de filial solto casaria com qualquer conta da base que
-tivesse esse número no nome, e limitar o universo ao grupo que manda a
-lista impede um erro de digitação de alcançar a padaria da esquina.
-
-Detalhe técnico em [`CONTAS_TESTE.md`](CONTAS_TESTE.md).
+Detalhe técnico em [`AVISO_ARME.md`](AVISO_ARME.md).
 
 ### 5.3 O que o sistema escreve na PowerCentral
 
-**Uma coisa só: colocar conta em teste** (§5.2.11). Todo o resto —
-relatórios, BI, diagnóstico, catálogo de visitas, auditoria de horários —
-é leitura.
+**Uma coisa só: o aviso de "não armou"** (§5.2.11), via o campo
+`tol_nnyc` da tolerância da conta. Todo o resto — relatórios, BI,
+diagnóstico, catálogo de visitas, auditoria de horários — é leitura.
+
+Ela **não cega a conta**: o disparo continua chegando. Houve uma versão
+anterior que colocava a conta em teste, e essa calava tudo; foi
+descartada por isso.
 
 Vale saber por que isso é dito em voz alta: até 13/10/2026 o sistema
 tinha **zero** escrita, e essa era uma propriedade que se podia afirmar

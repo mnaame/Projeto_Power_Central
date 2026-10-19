@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}Lojas sem Arme{% endblock %}
+
+{% block content %}
+<div class="section">
+  <div class="section-title"><h2>Lojas sem Arme (Super Nosso)</h2></div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Desliga o aviso de <strong>"não armou"</strong> das lojas da lista
+    semanal, para o serviço noturno não gerar falha de arme.
+  </p>
+
+  <div class="banner banner-info" role="status">
+    <span>
+      <strong>O disparo continua ativo.</strong> Isto mexe só no aviso de
+      "não fechou ainda" (<code>tol_nnyc</code>). Se alguém entrar na loja,
+      o disparo chega normalmente — essa é a diferença para o mecanismo de
+      "conta em teste", que calava tudo e por isso foi descartado.
+    </span>
+  </div>
+
+  <div class="banner banner-warning" role="alert">
+    <span>
+      <strong>Nada expira sozinho aqui.</strong> A conta fica sem o aviso
+      até alguém religar. Rodar a lista da semana seguinte religa quem
+      saiu dela — se a lista parar de ser rodada, as lojas ficam sem
+      supervisão de arme por tempo indeterminado.
+    </span>
+  </div>
+</div>
+
+{% if desligadas %}
+<div class="section">
+  <div class="section-title">
+    <h2>Desligadas agora</h2>
+    <span class="muted">{{ desligadas|length }} conta(s)</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Conta</th><th>Cliente</th><th>Desde</th><th>Há</th><th>Religa com</th></tr>
+      </thead>
+      <tbody>
+        {% for linha in desligadas %}
+        {% set dias = linha.dias_desligado() %}
+        <tr>
+          <td class="is-numeric">{{ linha.conta }}</td>
+          <td>{{ linha.nome }}</td>
+          <td>{{ linha.desligado_em|data_local }}</td>
+          {# Sem janela que expira sozinha, este contador é o único
+             sintoma de que a lista parou de ser rodada. #}
+          <td class="is-numeric {{ 'is-critical' if dias >= dias_para_alertar }}">
+            {{ dias }} dia(s)
+            {% if dias >= dias_para_alertar %}<strong>⚠</strong>{% endif %}
+          </td>
+          <td class="is-numeric muted">tol_nnyc = {{ linha.nnyc_original }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <form method="post" action="{{ url_for('aviso_arme.religar_tudo') }}" class="card"
+        style="margin-top: var(--space-3);"
+        onsubmit="return confirm('Religar o aviso de arme de TODAS as {{ desligadas|length }} conta(s)?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field" style="max-width: 20rem;">
+      <label for="conf_tudo">Religar todas (saída de emergência)</label>
+      <input id="conf_tudo" type="text" name="confirmacao" autocomplete="off"
+             placeholder="digite {{ confirmacao }}">
+    </div>
+    <button type="submit" class="btn btn-ghost">Religar todas</button>
+    <span class="muted" style="margin-left: var(--space-2);">
+      Volta tudo ao normal sem depender da lista da semana.
+    </span>
+  </form>
+</div>
+{% endif %}
+
+<div class="section">
+  <div class="section-title"><h2>Lista da semana</h2></div>
+  <form method="post" action="{{ url_for('aviso_arme.preparar') }}" class="card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field">
+      <label for="mensagem">Cole a mensagem do Super Nosso</label>
+      <textarea id="mensagem" name="mensagem" rows="6" required
+                placeholder="420 SN. FLEMING&#10;688 SN. CASTELO&#10;530 AP. VENDA NOVA"></textarea>
+      <p class="muted" style="margin-top: var(--space-1);">
+        Pode colar o texto inteiro, com saudação e tudo — o sistema tira os
+        números de filial. Só casa com contas do grupo Super Nosso/Apoio, e
+        a tesouraria nunca entra.
+      </p>
+    </div>
+    <button type="submit" class="btn btn-primary">Preparar (só leitura)</button>
+    <span class="muted" style="margin-left: var(--space-2);">
+      Mostra o que seria feito. Não grava nada.
+    </span>
+  </form>
+</div>
+
+{% if preview %}
+<div class="section">
+  <div class="section-title"><h2>O que vai acontecer</h2></div>
+
+  {% if preview.desligar or preview.religar %}
+  <form method="post" action="{{ url_for('aviso_arme.aplicar') }}" class="card"
+        onsubmit="return confirm('Aplicar: {{ preview.desligar|length }} desligar, {{ preview.religar|length }} religar?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {% if preview.desligar %}
+    <h3>Desligar o aviso ({{ preview.desligar|length }})</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width: 3rem;"></th><th>Conta</th><th>Cliente</th></tr></thead>
+        <tbody>
+          {% for item in preview.desligar %}
+          <tr>
+            <td><input type="checkbox" name="desligar" value="{{ item.cue_iid }}" checked></td>
+            <td class="is-numeric">{{ item.numero }}</td>
+            <td>{{ item.nome }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if preview.religar %}
+    <h3 style="margin-top: var(--space-4);">Religar ({{ preview.religar|length }})</h3>
+    <p class="muted">Estavam na lista da semana passada e saíram desta.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th style="width: 3rem;"></th><th>Conta</th><th>Cliente</th><th>Desligada há</th></tr>
+        </thead>
+        <tbody>
+          {% for item in preview.religar %}
+          <tr>
+            <td><input type="checkbox" name="religar" value="{{ item.cue_iid }}" checked></td>
+            <td class="is-numeric">{{ item.numero }}</td>
+            <td>{{ item.nome }}</td>
+            <td class="is-numeric">{{ item.dias }} dia(s)</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    <div class="field" style="margin-top: var(--space-4);">
+      <label for="confirmacao">Confirmação</label>
+      <input id="confirmacao" type="text" name="confirmacao" autocomplete="off"
+             placeholder="digite {{ confirmacao }}">
+    </div>
+    <button type="submit" class="btn btn-primary">Aplicar</button>
+  </form>
+  {% else %}
+  <div class="card empty-state">
+    <h3>Nada a fazer</h3>
+    <p class="muted">A lista desta semana é igual ao que já está desligado.</p>
+  </div>
+  {% endif %}
+</div>
+
+{% if preview.ja_desligadas %}
+<div class="section">
+  <div class="section-title"><h2>Já estavam desligadas</h2></div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Continuam na lista e não são tocadas. Desligar de novo regravaria o
+    valor original como "desligado" — e aí o religar não teria mais o que
+    restaurar.
+  </p>
+  <div class="card">
+    {% for item in preview.ja_desligadas %}
+    <span class="chip chip-neutral">{{ item.numero }} {{ item.nome }}</span>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if preview.barradas %}
+<div class="section">
+  <div class="section-title"><h2>Nunca são desligadas</h2></div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    A <strong>tesouraria</strong> é conta separada da loja e arma
+    normalmente durante o serviço noturno — é barrada aqui mesmo que o
+    número bata. Esta lista existe para você ver que foi de propósito.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Conta</th><th>Cliente</th></tr></thead>
+      <tbody>
+        {% for item in preview.barradas %}
+        <tr><td class="is-numeric">{{ item.numero }}</td><td>{{ item.nome }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if preview.ambiguos %}
+<div class="section">
+  <div class="section-title"><h2>Ambíguas — mais de uma conta</h2></div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    O número bate com mais de uma conta, então o sistema <strong>não
+    escolhe</strong>. Resolva essas à mão na plataforma.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Filial</th><th>Contas que batem</th></tr></thead>
+      <tbody>
+        {% for item in preview.ambiguos %}
+        <tr>
+          <td class="is-numeric">{{ item.filial }}</td>
+          <td>
+            {% for c in item.candidatas %}{{ c.numero }} — {{ c.nome }}{{ "; " if not loop.last }}{% endfor %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if preview.nao_encontrados %}
+<div class="section">
+  <div class="section-title"><h2>Não encontradas</h2></div>
+  <p class="muted" style="margin-top: calc(-1 * var(--space-2));">
+    Estes números não casaram com nenhuma conta do grupo Super Nosso/Apoio.
+  </p>
+  <div class="card">
+    {% for filial in preview.nao_encontrados %}
+    <span class="chip chip-warning">{{ filial }}</span>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

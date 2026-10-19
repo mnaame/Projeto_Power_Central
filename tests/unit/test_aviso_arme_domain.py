@@ -1,16 +1,12 @@
-"""Ler a lista do Super Nosso e casar filial → conta.
+"""Ler a lista do Super Nosso e casar filial → conta, mais o diff semanal.
 
-O risco deste módulo não é falhar em casar — é casar ERRADO. Conta
-colocada em teste para de gerar falha de arme, então a filial trocada
-aqui é uma loja sem cobertura, e o sistema não tem como perceber. Por
-isso toda dúvida termina em "não casou" ou "ambígua", nunca num palpite.
+O risco deste módulo não é falhar em casar — é casar ERRADO: a filial
+trocada é uma loja sem o aviso de arme, e o sistema não tem como
+perceber. Por isso toda dúvida termina em "não casou" ou "ambígua", nunca
+num palpite.
 """
 
-from datetime import datetime
-
-import pytest
-
-from app.domain import contas_teste as dom
+from app.domain import aviso_arme as dom
 
 MENSAGEM_REAL = """Bom dia! Segue a relação da semana para serviço noturno:
 420 SN. FLEMING
@@ -116,19 +112,47 @@ def test_acento_e_caixa_no_nome_nao_atrapalham():
     assert dom.casar_filiais(["530"], cadastro)[0].conta.numero == "0030"
 
 
-# ---------- a janela ----------
+# ---------- o diff da semana ----------
 
 
-def test_janela_de_uma_semana():
-    inicio = datetime(2026, 10, 19, 18, 30)
-
-    _, fim = dom.janela(inicio, 7)
-
-    assert fim == datetime(2026, 10, 26, 18, 30)
+def _alvo(iid, numero):
+    return dom.ContaAlvo(cue_iid=iid, numero=numero, nome=f"SN {numero} FILIAL {numero}")
 
 
-def test_duracao_menor_que_um_dia_e_recusada():
-    """Seria um teste que não cobre nem a noite para a qual foi pedido —
-    e, pior, uma janela que não protege nada enquanto parece proteger."""
-    with pytest.raises(ValueError):
-        dom.janela(datetime(2026, 10, 19), 0)
+def test_conta_nova_na_lista_entra_para_desligar():
+    dif = dom.diferenca_da_semana([_alvo("1", "0001")], [])
+
+    assert [c.cue_iid for c in dif.desligar] == ["1"]
+
+
+def test_conta_que_saiu_da_lista_entra_para_religar():
+    """O passo que o mecanismo anterior dispensava: lá a janela expirava
+    sozinha, aqui alguém precisa religar."""
+    dif = dom.diferenca_da_semana([_alvo("1", "0001")], ["1", "2"])
+
+    assert dif.religar == ("2",)
+
+
+def test_conta_que_continua_na_lista_nao_e_tocada():
+    """Desligar de novo regravaria o ledger com `nnyc_original = 1`, ou
+    seja, perderia para sempre o valor que a conta tinha antes. É o erro
+    mais caro possível aqui."""
+    dif = dom.diferenca_da_semana([_alvo("1", "0001")], ["1"])
+
+    assert dif.desligar == ()
+    assert dif.religar == ()
+    assert [c.cue_iid for c in dif.ja_desligadas] == ["1"]
+
+
+def test_semana_sem_mudanca_nao_gera_nada():
+    dif = dom.diferenca_da_semana([], [])
+
+    assert dif.desligar == () and dif.religar == ()
+
+
+def test_lista_vazia_religa_tudo_o_que_estava_desligado():
+    """É o que acontece na semana em que o Super Nosso não manda
+    ninguém: tudo volta ao normal."""
+    dif = dom.diferenca_da_semana([], ["1", "2"])
+
+    assert dif.religar == ("1", "2")

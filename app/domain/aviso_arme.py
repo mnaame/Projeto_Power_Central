@@ -1,14 +1,18 @@
-"""Contas em teste: ler a lista do Super Nosso e casar filial → conta.
+"""Lojas sem arme: ler a lista do Super Nosso e casar filial → conta.
 
 Camada pura, sem rede e sem banco.
 
-**O que está em jogo.** Colocar uma conta "em teste" faz a central parar
-de tratar a falha de arme dela. Casar a filial errada aqui é alarme
-suprimido na loja errada, e ninguém descobre pelo sistema — descobre
-pelo arrombamento. Por isso este módulo prefere, em toda decisão
-duvidosa, **não casar**: filial sem conta vira "não encontrada", filial
-com duas contas vira "ambígua", e as duas listas vão para a tela em vez
-de virarem um palpite.
+**O que está em jogo.** Desligar o aviso de arme de uma conta faz a
+central parar de avisar que aquela loja não armou. Casar a filial errada
+aqui é uma loja sem essa supervisão, e ninguém descobre pelo sistema.
+
+(O disparo continua chegando — é a diferença entre este mecanismo e
+colocar a conta em teste, que calava tudo, inclusive invasão.)
+
+Por isso este módulo prefere, em toda decisão duvidosa, **não casar**:
+filial sem conta vira "não encontrada", filial com duas contas vira
+"ambígua", e as duas listas vão para a tela em vez de virarem um
+palpite.
 
 **De onde vem a lista.** O Super Nosso manda uma mensagem por semana,
 escrita por gente, com os números das filiais que não vão armar:
@@ -37,16 +41,12 @@ _RE_FILIAL = re.compile(r"\b\d{2,4}\b")
 # "FILIAL 688", "FILIAL688", "FILIAL: 688"
 _RE_FILIAL_NO_NOME = re.compile(r"FILIAL\s*:?\s*(\d{2,4})\b")
 
-# Segunda a sexta. O serviço noturno é de dia útil; sábado e domingo a
-# loja arma normal, e deixar a janela cobrir o fim de semana seria
-# suprimir alarme em dois dias nos quais ninguém pediu isso.
-DURACAO_PADRAO_DIAS = 5
-
-# Contas que NUNCA entram em teste, por mais que o número bata.
+# Contas que NUNCA são desligadas, por mais que o número bata.
 #
 # A tesouraria é conta separada da loja no cadastro ("SUPER NOSSO CASTELO
 # LOJA" e "SUPER NOSSO CASTELO TESOURARIA"), e ela não participa do
-# serviço noturno: fica armada, e tem que continuar sendo tratada.
+# serviço noturno: arma normalmente, e o aviso dela tem que continuar
+# funcionando.
 #
 # Hoje, na base real, nenhuma tesouraria tem número de filial no nome —
 # então, por sorte, o casamento por número nunca a alcançaria. Mas isso é
@@ -93,8 +93,8 @@ def filiais_do_nome(nome: str) -> set[str]:
     return {n.lstrip("0") or n for n in _RE_FILIAL.findall(normalizado)}
 
 
-def nunca_em_teste(nome: str) -> bool:
-    """Conta que não pode entrar em teste nem se o número bater."""
+def nunca_desligar(nome: str) -> bool:
+    """Conta que não pode ser desligada nem se o número bater."""
     normalizado = normalizar(nome)
     return any(padrao in normalizado for padrao in PADROES_NUNCA_EM_TESTE)
 
@@ -156,13 +156,36 @@ def casar_filiais(
     return resultado
 
 
-def janela(inicio: datetime, dias: int) -> tuple[datetime, datetime]:
-    """Início e fim do teste.
+@dataclass(frozen=True)
+class Diferenca:
+    """O que a lista desta semana muda em relação ao que está desligado.
 
-    A janela é o que torna este módulo seguro: ela expira sozinha, e por
-    isso não existe (nem precisa existir) um passo de remover. Duração
-    menor que um dia é recusada — seria um teste que não cobre nem a
-    noite para a qual foi pedido."""
-    if dias < 1:
-        raise ValueError("A duração do teste precisa ser de pelo menos 1 dia.")
-    return inicio, inicio + timedelta(days=dias)
+    São **dois sentidos**, e é isso que o mecanismo anterior dispensava:
+    lá a janela expirava sozinha, aqui o religar é um passo que alguém
+    precisa dar. Uma conta que saiu da lista e não for religada fica sem
+    o aviso indefinidamente."""
+
+    desligar: tuple[ContaAlvo, ...] = ()
+    religar: tuple[str, ...] = ()        # cue_iid das que saíram da lista
+    ja_desligadas: tuple[ContaAlvo, ...] = ()
+
+
+def diferenca_da_semana(
+    casadas: Sequence[ContaAlvo], desligadas_agora: Iterable[str]
+) -> Diferenca:
+    """Compara a lista nova com o que já está desligado.
+
+    - Está na lista e ligada → **desligar**.
+    - Está desligada e saiu da lista → **religar**.
+    - Está na lista e já desligada → não mexe. Reenviar o desligamento
+      regravaria o ledger com `nnyc_original = 1`, ou seja, perderia para
+      sempre o valor que a conta tinha antes. É o erro mais caro possível
+      aqui, e por isso a conta já desligada é tratada à parte."""
+    desligadas = {str(i) for i in desligadas_agora}
+    pedidas = {c.cue_iid for c in casadas}
+
+    return Diferenca(
+        desligar=tuple(c for c in casadas if c.cue_iid not in desligadas),
+        religar=tuple(sorted(desligadas - pedidas)),
+        ja_desligadas=tuple(c for c in casadas if c.cue_iid in desligadas),
+    )

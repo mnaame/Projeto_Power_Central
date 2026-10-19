@@ -21,19 +21,16 @@ TIMELINE_PATH = "/Rest/search/EventoTimeLineFull"
 EXPORT_HISTORICO_PATH = "/handler/ExportReporteHistoricoExcel"
 ZONA_PATH = "/Rest/Zona/"
 HORARIO_PATH = "/rest/search/Horario"
-# Estado da conta — "em teste" entra por aqui. A plataforma GRAVA POR GET
-# (confirmado no HAR 19/10): não é consulta, por mais que o verbo diga o
-# contrário, e o resto do código tem que tratar como escrita.
-ESTADO_UPD_PATH = "/Rest/search/EstadoUpd"
-ESTADO_PATH = "/Rest/Estado/"
-# `est_ntipo` do estado "em teste". É o único tipo que este sistema
-# escreve: os outros estados da plataforma significam outra coisa.
-TIPO_EM_TESTE = 3
+# Tolerância de horário da conta — desligar o aviso "não armou" entra
+# por aqui. Read-modify-write: GET devolve o registro inteiro, PUT manda
+# o registro inteiro de volta com UM campo trocado.
+TOLERANCIA_PATH = "/Rest/HorarioTolerancia/"
+# `tol_nnyc` = aviso de "não fechou/não armou ainda". 1 desliga o aviso;
+# o valor que religa é o que a conta TINHA, lido antes de desligar — e
+# nunca uma constante, porque não é a mesma coisa em toda conta.
+NNYC_DESLIGADO = 1
 # Escrita curta, mas é a que não pode ficar pela metade por impaciência.
-TIMEOUT_ESTADO_SEGUNDOS = 60
-# Formato das datas do EstadoUpd: ISO sem timezone, em hora LOCAL — é o
-# que a plataforma espera e o que o HAR mostra.
-FORMATO_DATA_ESTADO = "%Y-%m-%dT%H:%M:%S"
+TIMEOUT_TOLERANCIA_SEGUNDOS = 60
 # Uma conta tem poucas faixas de horário (abertura/fechamento por dia da
 # semana); 50 cobre com folga sem pedir página grande à toa.
 PAGE_SIZE_HORARIOS = 50
@@ -316,97 +313,72 @@ class SoftGuardClient:
     # Estado da conta — A ÚNICA ESCRITA DO SISTEMA
     # ------------------------------------------------------------------
 
-    def colocar_em_teste(
-        self,
-        cue_iid: str | int,
-        *,
-        inicio: datetime,
-        dias: int,
-        nota: str,
-        tipo: int = TIPO_EM_TESTE,
-    ) -> dict[str, Any]:
-        """Coloca a conta **em teste** por uma janela de tempo.
+    def ler_tolerancia(self, cue_iid: str | int) -> dict[str, Any]:
+        """O registro de tolerância inteiro da conta.
 
-        ⚠️ **Isto suprime o tratamento da falha de arme da conta.** Conta
-        errada aqui é alarme suprimido sem ninguém saber — por isso quem
-        chama tem que ter passado por pré-visualização e confirmação.
-
-        A segurança real deste módulo é a **janela**: `est_nduracion` em
-        dias e `est_dfechahasta` fazem o estado expirar sozinho. Não
-        existe desfazer porque não precisa existir — e é justamente por
-        isso que a janela nunca pode ser omitida nem indefinida.
-
-        A plataforma grava **por GET** (confirmado no HAR 19/10). O verbo
-        mente; o efeito é escrita, e o resto do sistema trata assim.
-
-        O `token` vai na query como o valor do cookie OAuth_Token, igual
-        ao export do histórico — lido DENTRO da tentativa, porque repetir
-        com o valor antigo depois de relogar falharia pelo mesmo motivo.
-        """
-        if dias < 1:
-            raise SoftGuardError(
-                "Duração do teste precisa ser de pelo menos 1 dia — uma janela "
-                "vazia deixaria a conta em teste sem previsão de voltar."
-            )
-        if not self._logged_in:
-            self.login()
-
-        fim = inicio + timedelta(days=dias)
-
-        def _gravar() -> requests.Response:
-            return self._request(
-                "GET",
-                urljoin(self._credentials.base_url, ESTADO_UPD_PATH),
-                params={
-                    "Id": cue_iid,
-                    "Name": " ",  # um espaço, como no HAR
-                    "est_iidcuenta": cue_iid,
-                    "est_nestado": 1,
-                    "est_ntipo": tipo,
-                    "est_dfechadesde": inicio.strftime(FORMATO_DATA_ESTADO),
-                    "est_nduracion": dias,
-                    "est_dfechahasta": fim.strftime(FORMATO_DATA_ESTADO),
-                    "est_mnota": nota,
-                    "est_cData": "",
-                    "token": self._session.cookies.get("OAuth_Token", ""),
-                },
-                timeout=TIMEOUT_ESTADO_SEGUNDOS,
-            )
-
-        try:
-            response = _gravar()
-        except SoftGuardAuthError:
-            logger.warning("Token vencido ao colocar em teste; relogando.")
-            self.login()
-            response = _gravar()
-
-        corpo = self._json(response)
-        # `success` falso é recusa da plataforma, e HTTP 200 vem junto —
-        # tratar só o status deixaria passar uma conta que NÃO entrou em
-        # teste como se tivesse entrado.
-        if not corpo.get("success"):
-            raise SoftGuardError(
-                f"A PowerCentral recusou colocar a conta {cue_iid} em teste: "
-                f"{str(corpo)[:200]}"
-            )
-        return corpo
-
-    def ler_estado(self, cue_iid: str | int) -> dict[str, Any]:
-        """Estado atual da conta (`est_nestado` 0 = fora de teste).
-
-        Só leitura, usada na pré-visualização para mostrar quem já está em
-        teste antes de gravar qualquer coisa."""
+        Só leitura, e é o primeiro passo obrigatório de qualquer escrita
+        aqui: o PUT manda o registro completo de volta, então é preciso
+        ter o original para não inventar os campos que não se quer
+        mexer."""
         response = self._request_reautenticando(
             "GET",
-            urljoin(self._credentials.base_url, f"{ESTADO_PATH}{cue_iid}"),
-            params={"est_iidcuenta": cue_iid, "id": cue_iid},
-            timeout=TIMEOUT_ESTADO_SEGUNDOS,
+            urljoin(self._credentials.base_url, f"{TOLERANCIA_PATH}{cue_iid}"),
+            timeout=TIMEOUT_TOLERANCIA_SEGUNDOS,
         )
         corpo = self._json(response)
         dados = corpo.get("data") or corpo.get("result") or corpo
         if isinstance(dados, list):
             dados = dados[0] if dados else {}
-        return dados if isinstance(dados, dict) else {}
+        if not isinstance(dados, dict) or "tol_nnyc" not in dados:
+            raise SoftGuardError(
+                f"Resposta sem a tolerância da conta {cue_iid}: {str(corpo)[:200]}"
+            )
+        return dados
+
+    def set_nao_armado(
+        self, cue_iid: str | int, *, gerar: bool, original: int | None = None
+    ) -> dict[str, Any]:
+        """Liga ou desliga o aviso de "não armou" da conta.
+
+        ⚠️ **Escrita em produção.** Mexe na supervisão de arme — mas,
+        diferente de colocar a conta em teste, **não cega a conta**: o
+        disparo (BUR) continua chegando normalmente. É essa a diferença
+        que justifica este mecanismo existir no lugar do outro.
+
+        `gerar=False` desliga o aviso (`tol_nnyc = 1`). `gerar=True`
+        restaura o valor que a conta tinha, que vem do ledger e **nunca**
+        de uma constante: "tipicamente 2" não é "sempre 2", e religar com
+        o número errado deixaria a conta com uma supervisão que ela nunca
+        teve.
+
+        O corpo do PUT é o registro lido, com UM campo trocado. Os demais
+        voltam exatamente como vieram, inclusive as datas no formato
+        `/Date(...)/` — reconstruí-los seria inventar estado."""
+        if gerar and original is None:
+            raise SoftGuardError(
+                "Religar o aviso exige o valor original da conta. Sem ele não "
+                "há o que restaurar, e chutar um valor é pior que não religar."
+            )
+
+        atual = self.ler_tolerancia(cue_iid)
+        corpo = dict(atual)
+        corpo["tol_nnyc"] = int(original) if gerar else NNYC_DESLIGADO
+
+        response = self._request_reautenticando(
+            "PUT",
+            urljoin(self._credentials.base_url, f"{TOLERANCIA_PATH}{cue_iid}"),
+            json=corpo,
+            timeout=TIMEOUT_TOLERANCIA_SEGUNDOS,
+        )
+        resposta = self._json(response)
+        # `success: false` chega com HTTP 200. Olhar só o status deixaria
+        # passar uma conta que NÃO mudou como se tivesse mudado.
+        if resposta.get("success") is False:
+            raise SoftGuardError(
+                f"A PowerCentral recusou a tolerância da conta {cue_iid}: "
+                f"{str(resposta)[:200]}"
+            )
+        return resposta
 
     def exportar_historico_html(
         self,

@@ -129,16 +129,6 @@ DEFAULTS: dict[str, str] = {
     # tem o confirmado em export real. Para o catálogo completo da
     # plataforma, use scripts/importar_catalogo_codigos.py.
     "diag_descricoes": "",
-    # --- Contas em teste (Super Nosso) ---
-    # Segunda a sexta: o serviço noturno é de dia útil, e no fim de semana
-    # a loja arma normal. Cobrir sábado e domingo seria suprimir alarme em
-    # dois dias nos quais ninguém pediu isso. Também não pode passar de 7,
-    # senão a lista de uma semana se sobrepõe à da seguinte.
-    "teste_duracao_dias": "5",
-    "teste_nota_padrao": "Serviço noturno durante a semana.",
-    # `est_ntipo` do estado "em teste", confirmado no HAR. É configurável
-    # só para não exigir deploy se a plataforma renumerar os tipos.
-    "teste_tipo": "3",
     # --- Auditoria de Horários ---
     # A varredura é uma consulta por conta, em toda a base. 0 = sem pausa;
     # subir só se o portal reclamar do ritmo.
@@ -652,18 +642,3 @@ def get_diag_codigos_todos() -> tuple[str, ...]:
         *get_diag_codigos_painel_tamper(),
     ]
     return tuple(dict.fromkeys(c.strip().upper() for c in codigos if c.strip()))
-
-
-# --- Contas em teste (Super Nosso) ---
-
-
-def get_teste_duracao_dias() -> int:
-    return int(get("teste_duracao_dias"))
-
-
-def get_teste_nota_padrao() -> str:
-    return get("teste_nota_padrao")
-
-
-def get_teste_tipo() -> int:
-    return int(get("teste_tipo"))

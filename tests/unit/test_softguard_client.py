@@ -477,91 +477,94 @@ def test_busca_de_contas_mantem_o_timeout_curto(requests_mock):
     assert capturado["timeout"] == 15
 
 
-# ---------- colocar em teste: A ÚNICA ESCRITA DO SISTEMA ----------
+# ---------- tolerância: A ÚNICA ESCRITA DO SISTEMA ----------
+#
+# Mexe no aviso de "não armou" da conta — e NÃO cega a conta: o disparo
+# continua chegando. Foi por isso que este mecanismo substituiu o de
+# colocar a conta em teste, que calava tudo.
 
 
-def _url_estado():
-    return f"{CREDS.base_url}/Rest/search/EstadoUpd"
+TOLERANCIA = {
+    "Id": 9383, "Name": "",
+    "tol_naperturaantes": 1, "tol_caperturaantesalarma": "_NG",
+    "tol_naperturadespues": 1, "tol_caperturadespuesalarma": "_NG",
+    "tol_ncierreantes": 1, "tol_ccierreantesalarma": "_NG",
+    "tol_ncierredespues": 1, "tol_ccierredespuesalarma": "_NG",
+    "tol_nnyo": 2, "tol_nnyc": 2, "tol_nControl": 2, "tol_nModo": 1,
+    "tol_nAPNYO": 2, "tol_nAPNYC": 1, "tol_iidcuenta": 9383,
+    "tol_dVacacionesHasta": "/Date(-2208988800000)/",
+    "tol_dVacacionesDesde": "/Date(-2208988800000)/",
+}
 
 
-def test_colocar_em_teste_manda_os_parametros_exatos(requests_mock):
-    """Os nomes e valores vieram do HAR da própria plataforma. Um
-    parâmetro errado aqui não dá erro: grava um estado diferente do
-    pedido, e a conta fica em teste pelo tempo errado (ou para sempre)."""
+def _url_tolerancia(cue_iid=9383):
+    return f"{CREDS.base_url}/Rest/HorarioTolerancia/{cue_iid}"
+
+
+def test_desligar_o_aviso_manda_nnyc_1(requests_mock):
     _mock_login_ok(requests_mock)
-    mock = requests_mock.get(_url_estado(), json={"success": True})
-    client = _client()
+    requests_mock.get(_url_tolerancia(), json=dict(TOLERANCIA))
+    put = requests_mock.put(_url_tolerancia(), json={"success": True})
 
-    client.colocar_em_teste(
-        "9383",
-        inicio=datetime(2026, 10, 19, 18, 30, 0),
-        dias=7,
-        nota="Serviço noturno durante a semana.",
-    )
+    _client().set_nao_armado(9383, gerar=False)
 
-    enviado = mock.last_request.qs
-    assert enviado["id"] == ["9383"]
-    assert enviado["est_iidcuenta"] == ["9383"]
-    assert enviado["est_nestado"] == ["1"]
-    assert enviado["est_ntipo"] == ["3"]
-    assert enviado["est_nduracion"] == ["7"]
-    assert enviado["est_dfechadesde"] == ["2026-10-19t18:30:00"]
-    assert enviado["est_dfechahasta"] == ["2026-10-26t18:30:00"]
-    assert enviado["est_mnota"] == ["serviço noturno durante a semana."]
-    assert enviado["token"] == ["abc123"]  # o mesmo cookie OAuth_Token
+    assert put.last_request.json()["tol_nnyc"] == 1
 
 
-def test_a_janela_fecha_no_inicio_mais_a_duracao(requests_mock):
-    """`dfechahasta` é o que faz o estado expirar sozinho. Calculado
-    errado, a conta fica em teste depois da semana acabar."""
+def test_o_put_devolve_o_registro_INTEIRO_com_um_campo_trocado(requests_mock):
+    """O PUT manda o registro completo de volta. Reconstruí-lo seria
+    inventar estado — inclusive as datas `/Date(...)/`, que voltam como
+    vieram."""
     _mock_login_ok(requests_mock)
-    mock = requests_mock.get(_url_estado(), json={"success": True})
+    requests_mock.get(_url_tolerancia(), json=dict(TOLERANCIA))
+    put = requests_mock.put(_url_tolerancia(), json={"success": True})
 
-    _client().colocar_em_teste(
-        "1", inicio=datetime(2026, 12, 29, 8, 0, 0), dias=7, nota=""
-    )
+    _client().set_nao_armado(9383, gerar=False)
 
-    assert mock.last_request.qs["est_dfechahasta"] == ["2027-01-05t08:00:00"]
+    enviado = put.last_request.json()
+    assert set(enviado) == set(TOLERANCIA)
+    for campo, valor in TOLERANCIA.items():
+        if campo != "tol_nnyc":
+            assert enviado[campo] == valor, campo
 
 
-def test_duracao_zero_e_recusada_antes_de_qualquer_chamada(requests_mock):
-    """Janela vazia deixaria a conta em teste sem previsão de voltar — e
-    a janela é a única coisa que torna este módulo seguro."""
+def test_religar_restaura_o_valor_original(requests_mock):
     _mock_login_ok(requests_mock)
-    mock = requests_mock.get(_url_estado(), json={"success": True})
+    requests_mock.get(_url_tolerancia(), json={**TOLERANCIA, "tol_nnyc": 1})
+    put = requests_mock.put(_url_tolerancia(), json={"success": True})
 
-    with pytest.raises(SoftGuardError, match="pelo menos 1 dia"):
-        _client().colocar_em_teste("1", inicio=datetime(2026, 1, 1), dias=0, nota="")
+    _client().set_nao_armado(9383, gerar=True, original=2)
 
-    assert not mock.called
+    assert put.last_request.json()["tol_nnyc"] == 2
+
+
+def test_religar_sem_o_valor_original_e_recusado(requests_mock):
+    """"Tipicamente 2" não é "sempre 2". Religar com o número errado
+    deixaria a conta com uma supervisão que ela nunca teve."""
+    _mock_login_ok(requests_mock)
+    put = requests_mock.put(_url_tolerancia(), json={"success": True})
+
+    with pytest.raises(SoftGuardError, match="valor original"):
+        _client().set_nao_armado(9383, gerar=True)
+
+    assert not put.called
+
+
+def test_ler_tolerancia_sem_o_campo_e_erro(requests_mock):
+    """Sem `tol_nnyc` não há o que guardar nem o que restaurar."""
+    _mock_login_ok(requests_mock)
+    requests_mock.get(_url_tolerancia(), json={"Id": 9383})
+
+    with pytest.raises(SoftGuardError, match="tolerância"):
+        _client().ler_tolerancia(9383)
 
 
 def test_success_falso_e_falha_mesmo_com_http_200(requests_mock):
-    """A plataforma recusa com 200 e `success:false`. Olhar só o status
-    deixaria passar uma conta que NÃO entrou em teste como se tivesse."""
+    """A plataforma recusa com 200. Olhar só o status deixaria passar uma
+    conta que NÃO mudou como se tivesse mudado."""
     _mock_login_ok(requests_mock)
-    requests_mock.get(
-        _url_estado(), json={"success": False, "message": "sem permissão"}
-    )
+    requests_mock.get(_url_tolerancia(), json=dict(TOLERANCIA))
+    requests_mock.put(_url_tolerancia(), json={"success": False, "msg": "nope"})
 
     with pytest.raises(SoftGuardError, match="recusou"):
-        _client().colocar_em_teste("1", inicio=datetime(2026, 1, 1), dias=7, nota="")
-
-
-def test_token_vencido_reloga_e_repete(requests_mock):
-    """O token viaja na query, então repetir com o valor antigo depois de
-    relogar falharia pelo mesmo motivo."""
-    _mock_login_ok(requests_mock)
-    requests_mock.get(
-        _url_estado(),
-        [
-            {"status_code": 500, "text": "Invalid Token"},
-            {"status_code": 200, "json": {"success": True}},
-        ],
-    )
-
-    resultado = _client().colocar_em_teste(
-        "1", inicio=datetime(2026, 1, 1), dias=7, nota=""
-    )
-
-    assert resultado["success"] is True
+        _client().set_nao_armado(9383, gerar=False)

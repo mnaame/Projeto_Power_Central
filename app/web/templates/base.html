@@ -128,12 +128,12 @@
           </svg>
           Visitas por Bairro
         </a>
-        <a class="sidebar-link {{ 'is-active' if request.path.startswith('/contas-teste') }}" href="{{ url_for('contas_teste.index') }}">
+        <a class="sidebar-link {{ 'is-active' if request.path.startswith('/aviso-arme') }}" href="{{ url_for('aviso_arme.index') }}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M9 3h6v5l4 9a2 2 0 0 1-1.8 2.9H6.8A2 2 0 0 1 5 17l4-9z"></path>
             <path d="M9 3v5M15 3v5M7.5 14h9"></path>
           </svg>
-          Contas em Teste
+          Lojas sem Arme
         </a>
         <a class="sidebar-link {{ 'is-active' if request.endpoint == 'admin.usuarios' }}" href="{{ url_for('admin.usuarios') }}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">

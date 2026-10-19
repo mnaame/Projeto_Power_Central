@@ -36,7 +36,7 @@ def register_blueprints(app) -> None:
     from app.web.auvo.routes import bp as auvo_bp
     from app.web.bi.routes import bp as bi_bp
     from app.web.central_cliente.routes import bp as central_cliente_bp
-    from app.web.contas_teste.routes import bp as contas_teste_bp
+    from app.web.aviso_arme.routes import bp as aviso_arme_bp
     from app.web.cofre.routes import bp as cofre_bp
     from app.web.dashboard.routes import bp as dashboard_bp
     from app.web.reports.routes import bp as reports_bp
@@ -56,4 +56,4 @@ def register_blueprints(app) -> None:
     app.register_blueprint(tarefas_bp)
     app.register_blueprint(auditoria_horarios_bp)
     app.register_blueprint(rotas_bp)
-    app.register_blueprint(contas_teste_bp)
+    app.register_blueprint(aviso_arme_bp)

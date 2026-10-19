@@ -2,6 +2,7 @@ from app.models.user import User
 from app.models.settings import Setting
 from app.models.cycle import CollectionCycle, CycleAccount, AlertSent
 from app.models.audit import AuditLog
+from app.models.aviso_arme import AvisoArmeDesligado
 from app.models.watchdog import WatchdogState
 from app.models.report import ReportRun
 from app.models.auvo import AuvoChamado, AuvoDepara
@@ -26,6 +27,7 @@ __all__ = [
     "CycleAccount",
     "AlertSent",
     "AuditLog",
+    "AvisoArmeDesligado",
     "WatchdogState",
     "ReportRun",
     "AuvoDepara",
