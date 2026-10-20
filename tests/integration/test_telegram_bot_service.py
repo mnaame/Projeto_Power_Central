@@ -1055,6 +1055,24 @@ def test_ajuda_lista_a_preventiva(app, autorizado):
     assert "/preventiva" in telegram.texto_completo
 
 
+def test_ajuda_diz_a_janela_configurada_da_preventiva(app, autorizado):
+    """A janela é ajustável nas Configurações. Se a ajuda continuar
+    dizendo 12, o técnico conta com uma janela que não é a que roda."""
+    settings_service.set("preventiva_horas", "6")
+
+    telegram, _ = _processar(app, "/ajuda")
+
+    assert "olha as últimas 6." in telegram.texto_completo
+
+
+def test_preventiva_usa_a_janela_configurada(app, autorizado):
+    settings_service.set("preventiva_horas", "6")
+
+    telegram, _ = _processar(app, "/preventiva 95", export=EXPORT_PREVENTIVA)
+
+    assert "Últimas 6h" in telegram.texto_completo
+
+
 def test_preventiva_conta_zona_de_evento_fora_do_catalogo(app, autorizado):
     """O parser do diagnóstico pula a linha cuja descrição não traduz
     para um código conhecido — e usá-lo aqui reportaria como FALTA um

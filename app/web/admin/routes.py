@@ -156,6 +156,7 @@ def configuracoes():
             tecnicos_ids=settings_service.get("bot_tecnicos_ids"),
             relatorio_dias_padrao=settings_service.get_bot_relatorio_dias_padrao(),
             relatorio_codigos=settings_service.get("bot_relatorio_codigos"),
+            preventiva_horas=settings_service.get_preventiva_horas(),
             cooldown_segundos=settings_service.get_bot_cooldown_segundos(),
         ),
         telegram_configurado=telegram_configurado,
@@ -358,6 +359,10 @@ def salvar_bot():
     settings_service.set(
         "bot_relatorio_codigos",
         _lista_normalizada(form.relatorio_codigos.data),
+        updated_by_id=current_user.id,
+    )
+    settings_service.set(
+        "preventiva_horas", str(form.preventiva_horas.data),
         updated_by_id=current_user.id,
     )
     settings_service.set(

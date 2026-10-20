@@ -194,6 +194,19 @@
       </div>
 
       <div class="field">
+        {{ bot_form.preventiva_horas.label }}
+        {{ bot_form.preventiva_horas() }}
+        {% for mensagem in bot_form.preventiva_horas.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}
+      </div>
+      <p class="muted" style="margin-top: calc(-1 * var(--space-3)); font-size: var(--font-size-xs);">
+        Quanto tempo para trás o <code>/preventiva</code> olha quando o técnico
+        não informa as horas. Precisa <strong>alcançar o começo dos testes</strong>:
+        se a janela for curta demais, o sensor acionado antes dela aparece como
+        se faltasse. O técnico pode passar outro valor na hora
+        (<code>/preventiva 95 4</code>) — isto é só o padrão.
+      </p>
+
+      <div class="field">
         {{ bot_form.cooldown_segundos.label }}
         {{ bot_form.cooldown_segundos() }}
         {% for mensagem in bot_form.cooldown_segundos.errors %}<div class="field-error">{{ mensagem }}</div>{% endfor %}

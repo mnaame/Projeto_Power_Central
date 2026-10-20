@@ -109,6 +109,7 @@ def _dados_bot(**overrides):
         "tecnicos_ids": "111, 222",
         "relatorio_dias_padrao": "7",
         "relatorio_codigos": "CLO, OPN",
+        "preventiva_horas": "12",
         "cooldown_segundos": "10",
     }
     dados.update(overrides)
@@ -129,6 +130,43 @@ def test_admin_salva_config_do_bot(app, admin_client):
     assert settings_service.get_bot_tecnicos_ids() == (111, 222)
     assert settings_service.get_bot_relatorio_codigos() == ("CLO", "OPN")
     assert settings_service.get_bot_cooldown_segundos() == 10
+
+
+def test_admin_troca_a_janela_padrao_da_preventiva(app, admin_client):
+    """A janela depende da hora em que o técnico começou os testes, então
+    precisa ser ajustável sem mexer no código."""
+    admin_client.post(
+        "/admin/configuracoes/bot",
+        data=_dados_bot(preventiva_horas="6"),
+        follow_redirects=True,
+    )
+
+    assert settings_service.get_preventiva_horas() == 6
+
+
+def test_janela_da_preventiva_aparece_na_tela_com_o_valor_salvo(app, admin_client):
+    """Campo que não mostra o valor atual faz o admin salvar o padrão por
+    cima do que ele mesmo configurou."""
+    settings_service.set("preventiva_horas", "30")
+
+    resposta = admin_client.get("/admin/configuracoes")
+
+    assert b'name="preventiva_horas"' in resposta.data
+    assert b'value="30"' in resposta.data
+
+
+def test_janela_da_preventiva_zero_e_recusada(app, admin_client):
+    """Zero hora não traria evento nenhum: toda zona apareceria como
+    faltando, e o técnico voltaria a uma loja pronta."""
+    settings_service.set("preventiva_horas", "12")
+
+    admin_client.post(
+        "/admin/configuracoes/bot",
+        data=_dados_bot(preventiva_horas="0"),
+        follow_redirects=True,
+    )
+
+    assert settings_service.get_preventiva_horas() == 12
 
 
 def test_bot_desliga_quando_checkbox_ausente(app, admin_client):

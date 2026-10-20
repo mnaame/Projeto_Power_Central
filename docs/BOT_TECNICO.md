@@ -535,11 +535,25 @@ mensagem não continua na seguinte.
 
 `bot_ativado` (false), `bot_tecnicos_ids` (vazio), `bot_relatorio_dias_padrao`
 (7), `bot_relatorio_codigos` (CLO,OPN,BUR,BYP,ROP,RCL — mesmos do Relatório
-do Técnico), `bot_cooldown_segundos` (10), `bot_update_offset` (confirmação
+do Técnico), `preventiva_horas` (12), `preventiva_prefixos_especiais`
+(SP,NO), `bot_cooldown_segundos` (10), `bot_update_offset` (confirmação
 do polling; persistida para não reprocessar comando antigo ao reiniciar).
 
 Config em **Configurações → Bot do Técnico (Telegram)**, só admin. Reusa o
 bot/token já cifrado do Telegram — sem segredo novo.
+
+### `preventiva_horas` é de ajustar, não de acertar uma vez
+
+A janela certa depende da hora em que o técnico **começou** os testes: 12h
+cobre uma visita da manhã conferida à tarde e não cobre a visita de ontem.
+Janela curta demais não dá erro — dá uma zona listada como faltando porque
+o disparo dela ficou para trás, que é o mesmo sintoma de sensor morto.
+
+Por isso o campo está na tela (limite de 1 a 168 horas; zero traria evento
+nenhum e reprovaria a loja inteira), o técnico pode passar outro valor na
+hora (`/preventiva 95 4`), e o `/ajuda` imprime o valor configurado em vez
+de um número fixo — ajuda que mente sobre a janela é pior que ajuda
+nenhuma. As três coisas têm teste de mutação.
 
 ## 6. Fases
 

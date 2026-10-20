@@ -106,6 +106,14 @@ class BotTecnicoForm(FlaskForm):
     relatorio_codigos = StringField(
         "Relatório: códigos de evento", validators=[DataRequired(), Length(max=200)]
     )
+    # Janela da conferência da preventiva. Depende da hora em que o
+    # técnico começou os testes: 12h cobre uma visita da manhã conferida à
+    # tarde, mas não a visita de ontem. O teto de uma semana existe para
+    # um dedo trocado não virar um export de meses.
+    preventiva_horas = IntegerField(
+        "Preventiva: horas padrão",
+        validators=[DataRequired(), NumberRange(min=1, max=168)],
+    )
     cooldown_segundos = IntegerField(
         "Cooldown por técnico (segundos)",
         validators=[DataRequired(), NumberRange(min=0, max=600)],
