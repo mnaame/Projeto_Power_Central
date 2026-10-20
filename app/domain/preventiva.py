@@ -290,6 +290,16 @@ def _hora_curta(quando: str) -> str:
     return ""
 
 
+def _secao(titulo: str, itens: Iterable[str]) -> list[str]:
+    """Um bloco: linha em branco, título, e **um item por linha**.
+
+    A primeira versão separava os itens por vírgula. Com 13 zonas isso
+    vira um parágrafo de oito linhas corridas no celular, e a lista que
+    importa — a do que falta — fica enterrada nele. A linha em branco faz
+    o Telegram mostrar os blocos como blocos."""
+    return ["", titulo, *(f"- {item}" for item in itens)]
+
+
 def formatar_preventiva(
     resultado: Resultado,
     *,
@@ -298,61 +308,68 @@ def formatar_preventiva(
     horas: int,
     com_horario: bool = False,
 ) -> str:
-    """Texto do Telegram. Curto de propósito: é lido no celular, dentro
-    da loja, com o técnico de pé."""
-    linhas = [
-        f"Preventiva — {numero_conta} {nome_cliente} (últimas {horas}h)".strip()
-    ]
+    """Texto do Telegram. É lido no celular, dentro da loja, com o
+    técnico de pé — daí o formato em blocos e uma zona por linha.
+
+    **O que falta vem primeiro.** É a única parte que o técnico usa para
+    agir; embaixo das que já deram OK ela só aparece rolando a tela."""
+    cabecalho = f"Preventiva — {numero_conta} {nome_cliente}".strip()
 
     if not resultado.total_fisicas:
-        linhas.append(
-            "Esta conta não tem zona física cadastrada — não há o que conferir."
-        )
+        linhas = [
+            cabecalho,
+            f"Últimas {horas}h",
+            "",
+            "Esta conta não tem zona física cadastrada — não há o que conferir.",
+        ]
         if resultado.ignoradas:
-            linhas.append(
-                "Especiais: " + ", ".join(z.rotulo for z in resultado.ignoradas)
+            linhas += _secao(
+                "Especiais (não se testa em rotina)",
+                (z.rotulo for z in resultado.ignoradas),
             )
         return "\n".join(linhas)
 
-    linhas.append(
-        f"Dispararam: {len(resultado.dispararam)} de "
-        f"{resultado.total_fisicas} zonas físicas"
-    )
+    linhas = [
+        cabecalho,
+        f"Últimas {horas}h · dispararam {len(resultado.dispararam)} de "
+        f"{resultado.total_fisicas} zonas físicas",
+    ]
+
+    if resultado.faltam:
+        linhas += _secao(
+            f"FALTAM ({len(resultado.faltam)})",
+            (z.rotulo for z in resultado.faltam),
+        )
+    else:
+        linhas += ["", "FALTAM: nenhuma — preventiva completa."]
 
     if resultado.dispararam:
         def _ok(zona: ZonaConferida) -> str:
             hora = _hora_curta(zona.quando) if com_horario else ""
             return f"{zona.rotulo} ({hora})" if hora else zona.rotulo
 
-        linhas.append("OK: " + ", ".join(_ok(z) for z in resultado.dispararam))
-
-    if resultado.faltam:
-        linhas.append(
-            f"FALTAM ({len(resultado.faltam)}): "
-            + ", ".join(z.rotulo for z in resultado.faltam)
+        linhas += _secao(
+            f"OK ({len(resultado.dispararam)})",
+            (_ok(z) for z in resultado.dispararam),
         )
-    else:
-        linhas.append("FALTAM: nenhuma — preventiva completa.")
 
     if resultado.ignoradas:
-        linhas.append(
-            "Especiais ignoradas: "
-            + ", ".join(z.rotulo for z in resultado.ignoradas)
+        linhas += _secao(
+            "Especiais ignoradas (não se testa em rotina)",
+            (z.rotulo for z in resultado.ignoradas),
         )
 
     if resultado.divergentes:
         # Casou pelo número, com nome diferente. Dar OK aqui é a única
         # aposta que este módulo faz — mostrá-la é o que permite desmenti-la.
-        linhas.append(
-            "Nome diferente do zoneamento (casou pelo número): "
-            + "; ".join(resultado.divergentes)
+        linhas += _secao(
+            "Nome diferente do zoneamento (casou pelo número)",
+            resultado.divergentes,
         )
 
     if resultado.extras:
         # Não é erro do técnico: é zoneamento desatualizado, e some da
         # tela se ninguém mostrar.
-        linhas.append(
-            "Dispararam e NÃO estão no zoneamento: " + ", ".join(resultado.extras)
-        )
+        linhas += _secao("Dispararam e NÃO estão no zoneamento", resultado.extras)
 
     return "\n".join(linhas)

@@ -165,6 +165,35 @@ relatório preenchido, com contagem, que reprova a loja inteira.
   Nome diferente do zoneamento (casou pelo número): 1 COORDENAÇÃO = (1) CORDENACAO
   ```
 
+### 3.3d O formato da resposta
+
+A primeira versão separava as zonas por vírgula. Numa loja de 17 zonas o
+"OK:" virou um parágrafo corrido de oito linhas no celular, e o `FALTAM`
+— a única parte que o técnico usa para agir — ficou enterrado embaixo
+dele.
+
+Agora: blocos separados por linha em branco, **uma zona por linha**, e
+**o que falta vem primeiro**.
+
+```
+Preventiva — 35 COLEGIO DONA CLARA UN 2
+Últimas 12h · dispararam 13 de 17 zonas físicas
+
+FALTAM (4)
+- 1 PORTÃO PRINCIPAL
+- 11 TECLADO
+...
+
+OK (13)
+- 2 PORTÃO PRACINHA (15:51)
+...
+```
+
+Texto simples, sem fonte monoespaçada: nomes como "13 1º ANDAR LD DIR/
+IVP FUNDOS 1º ANDAR" passam de 40 caracteres, e dentro de um `<pre>` o
+Telegram não quebra a linha — vira rolagem horizontal no celular. O
+`/zona`, que é tabela de verdade, continua monoespaçado.
+
 A auditoria passou a guardar as contagens de `extras` e `divergentes`
 (números, sem nome de zona): o defeito acima não gerou nenhum erro de
 log, e contagem é o que permite notar que o cruzamento parou de casar.

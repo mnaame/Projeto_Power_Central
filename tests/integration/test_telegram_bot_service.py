@@ -936,7 +936,7 @@ def test_preventiva_casa_a_zona_com_o_numero_entre_parenteses(app, autorizado):
     )
 
     corpo = telegram.texto_completo
-    assert "Dispararam: 1 de 1 zonas físicas" in corpo
+    assert "dispararam 1 de 1 zonas físicas" in corpo
     assert "FALTAM: nenhuma" in corpo
 
 
@@ -951,7 +951,7 @@ def test_preventiva_nao_repete_a_zona_em_faltam_e_em_extras(app, autorizado):
     assert "MAG PORTA SALA" not in corpo.split("Dispararam e NÃO")[-1]
     # A 26 não está no zoneamento de teste e deve aparecer com o rótulo do
     # relatório — é o que se procura na plataforma para arrumar.
-    assert "Dispararam e NÃO estão no zoneamento: (26) IVP ENTRADA NOVA" in corpo
+    assert "Dispararam e NÃO estão no zoneamento\n- (26) IVP ENTRADA NOVA" in corpo
 
 
 def test_preventiva_diz_o_que_disparou_e_o_que_falta(app, autorizado):
@@ -960,7 +960,7 @@ def test_preventiva_diz_o_que_disparou_e_o_que_falta(app, autorizado):
     )
 
     corpo = telegram.texto_completo
-    assert "Dispararam: 1 de 1 zonas físicas" in corpo
+    assert "dispararam 1 de 1 zonas físicas" in corpo
     assert "MAG PORTA SALA" in corpo
 
 
@@ -984,20 +984,47 @@ def test_preventiva_pede_os_codigos_do_relatorio_mais_os_da_zona(app, autorizado
     assert {"CLO", "OPN", "BUR"} <= pedidos  # os do relatório do bot
 
 
+EXPORT_SEM_DISPARO = (
+    b"<table>"
+    b"<tr><th>Data e hora do evento</th><th>Evento</th><th>Zona</th></tr>"
+    b"<tr><td>20/10 08:00:00</td><td>CLO - Alarme Armado</td><td></td></tr>"
+    b"</table>"
+)
+
+
+def _itens_da_secao(corpo: str, titulo: str) -> list[str]:
+    """Os itens de um bloco da resposta. A asserção precisa olhar o
+    conteúdo da seção: com uma zona por linha, procurar na linha do
+    título não prova mais nada."""
+    linhas = corpo.splitlines()
+    for i, linha in enumerate(linhas):
+        if not linha.startswith(titulo):
+            continue
+        itens = []
+        for seguinte in linhas[i + 1:]:
+            if not seguinte.startswith("- "):
+                break
+            itens.append(seguinte[2:])
+        return itens
+    return []
+
+
 def test_preventiva_ignora_a_zona_especial(app, autorizado):
-    """A SP1 do zoneamento de teste não pode virar pendência."""
-    telegram, _ = _processar(app, "/preventiva 95", export=EXPORT_PREVENTIVA)
+    """A SP1 do zoneamento de teste não pode virar pendência — senão todo
+    relatório termina com um "faltam" permanente, e alerta que nunca zera
+    é alerta que ninguém lê. Com o export sem disparo nenhum, a única
+    pendência tem que ser a zona física."""
+    telegram, _ = _processar(app, "/preventiva 95", export=EXPORT_SEM_DISPARO)
 
     corpo = telegram.texto_completo
-    assert "Especiais ignoradas: SP1 SENTINELLA: SOS" in corpo
-    faltam = [l for l in corpo.splitlines() if l.startswith("FALTAM")]
-    assert faltam and all("SP1" not in linha for linha in faltam)
+    assert _itens_da_secao(corpo, "FALTAM") == ["1 MAG PORTA SALA"]
+    assert "- SP1 SENTINELLA: SOS" in corpo
 
 
 def test_preventiva_aceita_a_janela_em_horas(app, autorizado):
     telegram, _ = _processar(app, "/preventiva 95 4", export=EXPORT_PREVENTIVA)
 
-    assert "últimas 4h" in telegram.texto_completo
+    assert "Últimas 4h" in telegram.texto_completo
 
 
 def test_preventiva_sem_conta_pede_a_conta(app, autorizado):
@@ -1047,5 +1074,5 @@ def test_preventiva_conta_zona_de_evento_fora_do_catalogo(app, autorizado):
     telegram, _ = _processar(app, "/preventiva 95", export=export)
 
     corpo = telegram.texto_completo
-    assert "Dispararam: 1 de 1" in corpo
+    assert "dispararam 1 de 1" in corpo
     assert "FALTAM: nenhuma" in corpo

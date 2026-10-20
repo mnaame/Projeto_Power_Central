@@ -145,10 +145,50 @@ def test_texto_traz_a_contagem_e_as_duas_listas():
         resultado, numero_conta="95", nome_cliente="LOJA X", horas=12
     )
 
-    assert "Dispararam: 2 de 4 zonas físicas" in texto
-    assert "OK: 1 PORTA SALA, 2 INFRA SALA" in texto
-    assert "FALTAM (2): 5 FUNDOS, 10 LATERAL" in texto
+    assert "dispararam 2 de 4 zonas físicas" in texto
+    assert "FALTAM (2)" in texto
+    assert "OK (2)" in texto
+    assert "- 1 PORTA SALA" in texto
+    assert "- 10 LATERAL" in texto
     assert "SP1 SOS-PANICO" in texto
+
+
+def test_o_que_falta_vem_antes_do_que_ja_deu_ok():
+    """É a única parte que o técnico usa para agir. Depois das treze que
+    já passaram, ela só aparece rolando a tela — que foi a reclamação da
+    primeira preventiva de verdade."""
+    resultado = dom.conferir(ZONAS, [_evento("PORTA SALA")])
+
+    texto = dom.formatar_preventiva(
+        resultado, numero_conta="95", nome_cliente="LOJA X", horas=12
+    )
+
+    assert texto.index("FALTAM (3)") < texto.index("OK (1)")
+
+
+def test_cada_zona_sai_na_propria_linha():
+    """Separadas por vírgula, treze zonas viram um parágrafo corrido de
+    oito linhas no celular."""
+    resultado = dom.conferir(ZONAS, [])
+
+    texto = dom.formatar_preventiva(
+        resultado, numero_conta="95", nome_cliente="LOJA X", horas=12
+    )
+
+    assert "- 1 PORTA SALA\n- 2 INFRA SALA\n- 5 FUNDOS\n- 10 LATERAL" in texto
+    assert ", " not in texto
+
+
+def test_as_secoes_sao_separadas_por_linha_em_branco():
+    """Sem isso o Telegram cola tudo num bloco só."""
+    resultado = dom.conferir(ZONAS, [_evento("PORTA SALA")])
+
+    texto = dom.formatar_preventiva(
+        resultado, numero_conta="95", nome_cliente="LOJA X", horas=12
+    )
+
+    assert "\n\nFALTAM (3)\n" in texto
+    assert "\n\nOK (1)\n" in texto
 
 
 def test_texto_diz_quando_a_preventiva_esta_completa():
