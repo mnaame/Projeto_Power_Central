@@ -87,6 +87,44 @@ exatamente o "zoneamento completo". `cue_iid` é o **mesmo** id interno já
 usado no export do histórico e no `CuentaByDealer`; aqui ele entra como
 `zon_iidcuenta`. Ordenação `orderCodigo ASC`, `limit=400` (como a tela).
 
+### 3.3b Conferência da preventiva (`/preventiva`)
+
+Cruza o **zoneamento cadastrado** com o que **chegou de evento** na
+janela da visita e diz o que falta testar — o técnico fecha a preventiva
+sem conferir sensor por sensor na mão.
+
+**O erro que este comando não pode cometer** é dizer FALTA para uma zona
+que disparou: manda o técnico voltar a uma loja pronta e ensina a equipe
+a desconfiar do relatório. Daí as quatro decisões, todas com teste de
+mutação:
+
+1. **Qualquer evento que carregue uma zona conta.** Não se filtra por
+   código: uma porta magnética gera `NYR`, não `BUR`.
+2. **Os códigos da consulta são os do relatório do bot UNIDOS aos
+   `zon_cAlarmaAGenerar` da própria conta.** Um código de fora da lista
+   não traria o evento, e a zona apareceria como pendente.
+3. **A extração da zona NÃO passa pelo catálogo.** `eventos_do_export`
+   pula a linha cuja descrição não traduz para um código conhecido — o
+   que é certo para o diagnóstico e seria errado aqui. `zonas_do_export`
+   pega a zona de toda linha que tiver uma.
+4. **Casamento por descrição normalizada** (sem acento, maiúsculas,
+   espaços colapsados): o cadastro grava "Infra Sala" e o evento pode
+   chegar "INFRA  SALA".
+
+**Zona especial fica fora do "faltam".** O critério é o código não ser
+numérico (`SP1`, `AX1`, `NO`), com `preventiva_prefixos_especiais` como
+rede de segurança. Contar pânico e incêndio faria todo relatório
+terminar com um "faltam 2" permanente — e um alerta que nunca zera é um
+alerta que ninguém lê.
+
+**Usa o export por conta, não o `buscar_historico`.** O ReporteHistorico
+não tem filtro de conta: puxá-lo aqui traria o histórico do dealer
+inteiro, em blocos de 100, para conferir uma loja. É o mesmo motivo pelo
+qual o `/relatorio` já usa o export, e tem teste travando isso.
+
+Zona que disparou e **não está no zoneamento** aparece à parte: é
+cadastro desatualizado, e some da tela se ninguém mostrar.
+
 ### 3.4 `app/integrations/telegram_client.py`
 
 - `buscar_updates(offset, timeout)` — o long polling. O timeout do HTTP é

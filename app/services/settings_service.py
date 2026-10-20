@@ -80,6 +80,13 @@ DEFAULTS: dict[str, str] = {
     "bot_tecnicos_ids": "",  # ids de usuário do Telegram, separados por vírgula
     "bot_relatorio_dias_padrao": "7",
     "bot_relatorio_codigos": "CLO,OPN,BUR,BYP,ROP,RCL",
+    # --- Conferência da preventiva ---
+    # A visita é no mesmo dia; 12h cobre uma jornada inteira com folga e
+    # evita arrastar o disparo de ontem para a conferência de hoje.
+    "preventiva_horas": "12",
+    # Zonas que não se aciona em rotina. O critério principal é o código
+    # não ser numérico; estes prefixos são a rede de segurança.
+    "preventiva_prefixos_especiais": "SP,NO",
     "bot_cooldown_segundos": "10",
     # Confirmação do long polling: último update já processado. Evita
     # reprocessar comando antigo quando o serviço reinicia.
@@ -642,3 +649,15 @@ def get_diag_codigos_todos() -> tuple[str, ...]:
         *get_diag_codigos_painel_tamper(),
     ]
     return tuple(dict.fromkeys(c.strip().upper() for c in codigos if c.strip()))
+
+
+# --- Conferência da preventiva ---
+
+
+def get_preventiva_horas() -> int:
+    return int(get("preventiva_horas"))
+
+
+def get_preventiva_prefixos_especiais() -> tuple[str, ...]:
+    bruto = get("preventiva_prefixos_especiais")
+    return tuple(p.strip().upper() for p in bruto.split(",") if p.strip())

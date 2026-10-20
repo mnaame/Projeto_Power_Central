@@ -29,6 +29,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.domain import bot_comandos as dom_bot
 from app.domain import diagnostico as dom_diag
+from app.domain import preventiva as dom_prev
 from app.domain import contas as dom_contas
 from app.domain import tecnico as dom_tecnico
 from app.domain import zoneamento as dom_zona
@@ -355,6 +356,75 @@ def _comando_diagnostico(argumentos, *, sessao, telegram, chat_id: str) -> str:
     return conta.numero
 
 
+def _comando_preventiva(argumentos, *, sessao, telegram, chat_id: str) -> str:
+    """Conferência da visita: o que já disparou e o que falta.
+
+    **Usa o export por conta, não o `buscar_historico`.** O
+    ReporteHistorico não tem filtro de conta — puxá-lo aqui traria o
+    histórico do dealer inteiro, em blocos de 100, para contar os eventos
+    de uma loja. É o mesmo motivo pelo qual `/relatorio` já usa o export,
+    e está escrito lá em cima do código.
+
+    Os códigos da consulta são os do relatório do bot **unidos aos
+    `zon_cAlarmaAGenerar` do zoneamento desta conta**: um sensor
+    magnético gera NYR, outro painel pode gerar outra coisa, e um código
+    de fora da lista viraria "falso faltou" — mandar o técnico de volta a
+    uma loja pronta."""
+    termo, horas_pedidas = dom_bot.separar_conta_e_dias(argumentos)
+    if not termo:
+        _responder(telegram, chat_id, "Faltou a conta. Ex.: /preventiva 95")
+        return ""
+
+    conta = _resolver_ou_avisar(
+        termo, sessao, telegram, chat_id, comando=dom_bot.COMANDO_PREVENTIVA
+    )
+    if conta is None:
+        return ""
+
+    horas = horas_pedidas or settings_service.get_preventiva_horas()
+    zonas = dom_zona.zonas_da_resposta(sessao.client().listar_zonas(conta.cue_iid))
+
+    codigos = set(settings_service.get_bot_relatorio_codigos())
+    codigos.update(z.alarme.strip().upper() for z in zonas if z.alarme.strip())
+
+    hasta = datetime.now(FUSO_HORARIO)
+    conteudo = sessao.client().exportar_historico_html(
+        cue_iid=conta.cue_iid,
+        numero_conta=conta.numero,
+        nome_cliente=conta.nome,
+        desde=hasta - timedelta(hours=horas),
+        hasta=hasta,
+        codigos_alarme=sorted(codigos),
+    )
+
+    resultado = dom_prev.conferir(
+        zonas,
+        dom_tecnico.zonas_do_export(conteudo),
+        prefixos_especiais=settings_service.get_preventiva_prefixos_especiais(),
+    )
+    texto = dom_prev.formatar_preventiva(
+        resultado,
+        numero_conta=conta.identificacao,
+        nome_cliente=conta.nome,
+        horas=horas,
+        com_horario=True,
+    )
+    _responder(telegram, chat_id, texto)
+    _responder(telegram, chat_id, dom_bot.aviso_uso_interno())
+
+    audit_service.registrar(
+        action="bot_preventiva",
+        result="success",
+        details={
+            "conta": conta.numero,
+            "horas": horas,
+            "dispararam": len(resultado.dispararam),
+            "faltam": len(resultado.faltam),
+        },
+    )
+    return conta.numero
+
+
 def _comando_relatorio(argumentos, *, sessao, telegram, chat_id: str) -> str:
     termo, dias_pedidos = dom_bot.separar_conta_e_dias(argumentos)
     if not termo:
@@ -526,6 +596,7 @@ def processar_update(update: dict, *, config, sessao, telegram) -> None:
             dom_bot.formatar_ajuda(
                 dias_padrao=settings_service.get_bot_relatorio_dias_padrao(),
                 cooldown_segundos=settings_service.get_bot_cooldown_segundos(),
+                preventiva_horas=settings_service.get_preventiva_horas(),
             ),
         )
         return
@@ -542,12 +613,14 @@ def processar_update(update: dict, *, config, sessao, telegram) -> None:
         dom_bot.COMANDO_CLIENTES: "bot_clientes_pedido",
         dom_bot.COMANDO_RELATORIO: "bot_relatorio_pedido",
         dom_bot.COMANDO_DIAGNOSTICO: "bot_diagnostico_pedido",
+        dom_bot.COMANDO_PREVENTIVA: "bot_preventiva_pedido",
     }[comando.nome]
     executores = {
         dom_bot.COMANDO_ZONA: _comando_zona,
         dom_bot.COMANDO_CLIENTES: _comando_clientes,
         dom_bot.COMANDO_RELATORIO: _comando_relatorio,
         dom_bot.COMANDO_DIAGNOSTICO: _comando_diagnostico,
+        dom_bot.COMANDO_PREVENTIVA: _comando_preventiva,
     }
     executor = executores[comando.nome]
     try:

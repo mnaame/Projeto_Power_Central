@@ -764,6 +764,21 @@ Comandos (o técnico manda direto pro bot ou num grupo onde ele esteja):
   relatório de 15 dias de uma loja com milhares de disparos pode passar
   de 20 MB, e o Telegram não aceita acima de 50 MB. Nesse caso, peça
   menos dias: `/relatorio 61 5`.
+- **`/preventiva <conta> [horas]`** — **a conferência da visita**:
+  quantas zonas já dispararam e **quais faltam**. Serve para o técnico
+  fechar a preventiva sem conferir sensor por sensor na central.
+
+  Pânico, incêndio e afins ficam de fora da conta — não se aciona em
+  rotina. Zona que disparou e não está no zoneamento aparece à parte
+  (cadastro desatualizado). Sem informar as horas, olha as últimas 12.
+  Ex.: `/preventiva 95` ou `/preventiva 95 4`.
+
+  > **Na primeira visita real, confira na mão.** O cruzamento é pelo
+  > NOME da zona: se o cadastro escrever "INFRA SALA" e o evento chegar
+  > "INFRAVERMELHO SALA", a zona vai aparecer como faltando mesmo tendo
+  > disparado. Se isso acontecer, me avise com os dois textos — o ajuste
+  > é na normalização.
+
 - **`/zona <conta ou nome>`** — zoneamento completo do cliente: número da
   zona, descrição e o alarme que ela gera.
 - **`/diagnostico <conta> [dias]`** — **o que está errado na conta, em

@@ -486,3 +486,48 @@ def eventos_do_export(
             }
         )
     return eventos
+
+
+def zonas_do_export(conteudo: bytes | str) -> list[dict[str, str]]:
+    """`[{"zona", "quando"}]` de TODA linha do export que traga uma zona.
+
+    Diferente de `eventos_do_export`, aqui **não se exige o catálogo**.
+    Aquela função pula a linha cuja descrição não traduz para um código
+    conhecido, o que é certo para o diagnóstico (que raciocina sobre
+    códigos) e seria errado aqui: a conferência da preventiva só precisa
+    saber que *alguma coisa* chegou daquela zona. Descartar a linha por
+    não reconhecer o nome do evento reportaria como "FALTA" um sensor que
+    disparou — o pior erro possível neste relatório, porque manda o
+    técnico voltar a uma loja que já estava pronta.
+
+    Linha sem zona (arme, desarme, teste periódico) é ignorada: ela não
+    tem o que conferir."""
+    linhas = linhas_do_export(conteudo)
+    cabecalho = next((l for l in linhas if linha_e_cabecalho(l)), None)
+    if cabecalho is None:
+        return []
+
+    col_data = _indice_coluna(cabecalho, _COLUNA_DATA)
+    usados = [i for i in (col_data,) if i is not None]
+    col_evento = _indice_coluna(cabecalho, _COLUNA_EVENTO, ignorar=usados)
+    usados += [i for i in (col_evento,) if i is not None]
+    col_zona = _indice_coluna(cabecalho, _COLUNA_ZONA, ignorar=usados)
+    if col_zona is None:
+        return []
+
+    def _celula(linha: Sequence[CelulaExport], indice: int | None) -> str:
+        if indice is None or indice >= len(linha):
+            return ""
+        return linha[indice].texto
+
+    achados: list[dict[str, str]] = []
+    for linha in linhas:
+        if linha_e_cabecalho(linha):
+            continue
+        zona = _celula(linha, col_zona).strip()
+        if not zona:
+            continue
+        achados.append(
+            {"zona": zona, "quando": _data_iso_do_export(_celula(linha, col_data))}
+        )
+    return achados

@@ -21,12 +21,14 @@ COMANDO_ZONA = "zona"
 COMANDO_AJUDA = "ajuda"
 COMANDO_CLIENTES = "clientes"
 COMANDO_DIAGNOSTICO = "diagnostico"
+COMANDO_PREVENTIVA = "preventiva"
 COMANDOS_CONHECIDOS = (
     COMANDO_RELATORIO,
     COMANDO_ZONA,
     COMANDO_AJUDA,
     COMANDO_CLIENTES,
     COMANDO_DIAGNOSTICO,
+    COMANDO_PREVENTIVA,
 )
 
 # Quantos clientes listar quando o nome é ambíguo — a resposta tem que
@@ -214,7 +216,9 @@ def aviso_uso_interno() -> str:
     return "Uso interno — não repassar ao cliente."
 
 
-def formatar_ajuda(*, dias_padrao: int, cooldown_segundos: int = 0) -> str:
+def formatar_ajuda(
+    *, dias_padrao: int, cooldown_segundos: int = 0, preventiva_horas: int = 12
+) -> str:
     """Referência completa, escrita para ser lida no celular: um bloco por
     comando, exemplo em toda linha. `dias_padrao` vem da configuração —
     escrever "7" fixo aqui viraria mentira no dia em que mudarem."""
@@ -233,6 +237,13 @@ def formatar_ajuda(*, dias_padrao: int, cooldown_segundos: int = 0) -> str:
         "  (abre no PC, com as cores da plataforma) e .pdf (no celular).",
         f"  Sem informar os dias, usa {dias_padrao}.",
         "  Ex.: /relatorio 95        /relatorio 95 15",
+        "",
+        "/preventiva <conta> [horas]",
+        "  Conferência da visita: quantas zonas já dispararam e QUAIS",
+        "  FALTAM. Pânico e incêndio ficam de fora da conta — não se",
+        "  aciona em rotina.",
+        f"  Sem informar as horas, olha as últimas {preventiva_horas}.",
+        "  Ex.: /preventiva 95        /preventiva 95 4",
         "",
         "/zona <conta ou nome>",
         "  Zoneamento do cliente: número da zona, descrição e o alarme",

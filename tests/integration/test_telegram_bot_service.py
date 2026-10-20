@@ -135,9 +135,9 @@ def autorizado(app):
     return 111
 
 
-def _processar(app, texto, *, sessao=None, telegram=None, user_id=111):
+def _processar(app, texto, *, sessao=None, telegram=None, user_id=111, export=None):
     telegram = telegram or FakeTelegram()
-    sessao = sessao or SessaoFake(FakeSoftGuard())
+    sessao = sessao or SessaoFake(FakeSoftGuard(export=export))
     svc.processar_update(
         _update(texto, user_id=user_id), config=app.config, sessao=sessao, telegram=telegram
     )
@@ -900,3 +900,113 @@ def test_falha_no_xls_nao_impede_o_pdf(app, autorizado):
     _processar(app, "/relatorio 95", telegram=telegram)
 
     assert [d[1] for d in telegram.documentos] == ["0095_AUTO MECANICA CENTRO.pdf"]
+
+
+# ---------- /preventiva ----------
+
+
+EXPORT_PREVENTIVA = (
+    b"<table>"
+    b"<tr><th>Data e hora do evento</th><th>Evento</th><th>Zona</th></tr>"
+    b"<tr><td>20/10 14:30:00</td><td>NYR - Nao armou</td><td>MAG PORTA SALA</td></tr>"
+    b"<tr><td>20/10 14:10:00</td><td>NYR - Nao armou</td><td>mag porta sala</td></tr>"
+    b"<tr><td>20/10 08:00:00</td><td>CLO - Alarme Armado</td><td></td></tr>"
+    b"</table>"
+)
+
+
+def test_preventiva_diz_o_que_disparou_e_o_que_falta(app, autorizado):
+    telegram, sessao = _processar(
+        app, "/preventiva 95", export=EXPORT_PREVENTIVA
+    )
+
+    corpo = telegram.texto_completo
+    assert "Dispararam: 1 de 1 zonas físicas" in corpo
+    assert "MAG PORTA SALA" in corpo
+
+
+def test_preventiva_nao_usa_buscar_historico(app, autorizado):
+    """`buscar_historico` não filtra por conta — usá-lo aqui puxaria o
+    histórico do dealer inteiro para conferir uma loja. É o mesmo motivo
+    pelo qual o /relatorio já usa o export."""
+    _, sessao = _processar(app, "/preventiva 95", export=EXPORT_PREVENTIVA)
+
+    assert sessao.client().historicos == 0
+    assert sessao.client().exports == 1
+
+
+def test_preventiva_pede_os_codigos_do_relatorio_mais_os_da_zona(app, autorizado):
+    """Um sensor magnético gera NYR. Restringir a BUR reportaria como
+    "falta" um sensor que disparou."""
+    _, sessao = _processar(app, "/preventiva 95", export=EXPORT_PREVENTIVA)
+
+    pedidos = set(sessao.client().codigos_pedidos)
+    assert "NYR" in pedidos  # veio do zon_cAlarmaAGenerar da zona 1
+    assert {"CLO", "OPN", "BUR"} <= pedidos  # os do relatório do bot
+
+
+def test_preventiva_ignora_a_zona_especial(app, autorizado):
+    """A SP1 do zoneamento de teste não pode virar pendência."""
+    telegram, _ = _processar(app, "/preventiva 95", export=EXPORT_PREVENTIVA)
+
+    corpo = telegram.texto_completo
+    assert "Especiais ignoradas: SP1 SENTINELLA: SOS" in corpo
+    faltam = [l for l in corpo.splitlines() if l.startswith("FALTAM")]
+    assert faltam and all("SP1" not in linha for linha in faltam)
+
+
+def test_preventiva_aceita_a_janela_em_horas(app, autorizado):
+    telegram, _ = _processar(app, "/preventiva 95 4", export=EXPORT_PREVENTIVA)
+
+    assert "últimas 4h" in telegram.texto_completo
+
+
+def test_preventiva_sem_conta_pede_a_conta(app, autorizado):
+    telegram, _ = _processar(app, "/preventiva")
+
+    assert "Faltou a conta" in telegram.texto_completo
+
+
+def test_preventiva_e_auditada_sem_nada_sensivel(app, autorizado):
+    _processar(app, "/preventiva 95", export=EXPORT_PREVENTIVA)
+
+    entrada = AuditLog.query.filter_by(action="bot_preventiva").one()
+    assert entrada.details["conta"] == "95"
+    assert entrada.details["dispararam"] == 1
+    assert "MAG PORTA" not in str(entrada.details)
+
+
+def test_preventiva_nao_escreve_na_plataforma(app, autorizado):
+    """Só leitura: o client do bot não tem nem como escrever aqui."""
+    _, sessao = _processar(app, "/preventiva 95", export=EXPORT_PREVENTIVA)
+
+    assert not hasattr(sessao.client(), "puts")
+
+
+def test_ajuda_lista_a_preventiva(app, autorizado):
+    telegram, _ = _processar(app, "/ajuda")
+
+    assert "/preventiva" in telegram.texto_completo
+
+
+def test_preventiva_conta_zona_de_evento_fora_do_catalogo(app, autorizado):
+    """O parser do diagnóstico pula a linha cuja descrição não traduz
+    para um código conhecido — e usá-lo aqui reportaria como FALTA um
+    sensor que disparou, mandando o técnico de volta a uma loja pronta.
+    A conferência só precisa saber que alguma coisa chegou da zona.
+
+    A descrição aqui é SEM código na frente, que é como o export real
+    vem: ele traz o texto em português, e o catálogo é que traduz."""
+    export = (
+        b"<table>"
+        b"<tr><th>Data e hora do evento</th><th>Evento</th><th>Zona</th></tr>"
+        b"<tr><td>20/10 14:30:00</td><td>Violacao de zona que ninguem mapeou</td>"
+        b"<td>MAG PORTA SALA</td></tr>"
+        b"</table>"
+    )
+
+    telegram, _ = _processar(app, "/preventiva 95", export=export)
+
+    corpo = telegram.texto_completo
+    assert "Dispararam: 1 de 1" in corpo
+    assert "FALTAM: nenhuma" in corpo
