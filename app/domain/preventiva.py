@@ -20,10 +20,19 @@ a equipe a desconfiar do relatório. Daí duas decisões:
    INCÊNDIO` não se aciona em rotina; contá-las como pendência faria todo
    relatório terminar com um "faltam 2" permanente, e um alerta que nunca
    zera é um alerta que ninguém lê.
+3. **O código entra no cruzamento, não só o nome.** O relatório escreve a
+   zona como `(26) IVP ENTRADA NOVA` — número e descrição no mesmo
+   texto — enquanto o cadastro guarda `26` e `IVP ENTRADA NOVA` em campos
+   separados. Comparar os textos crus não casa **nenhuma** zona: a
+   primeira preventiva real saiu "0 de 9 dispararam" com as mesmas nove
+   zonas listadas logo abaixo como "dispararam e não estão no
+   zoneamento". É o modo de falhar mais caro que este módulo tem, porque
+   parece um relatório preenchido.
 """
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from dataclasses import dataclass, field
 from typing import Iterable, Mapping, Sequence
@@ -32,6 +41,15 @@ from typing import Iterable, Mapping, Sequence
 # **não-numérico** — o cadastro usa 1..N para os sensores e letras para o
 # resto; os prefixos são a rede de segurança configurável.
 PREFIXOS_ESPECIAIS_PADRAO: tuple[str, ...] = ("SP", "NO")
+
+# "(26) IVP ENTRADA NOVA" -> código "26", descrição "IVP ENTRADA NOVA".
+#
+# **Só dígito.** O relatório escreve o número da zona entre parênteses, e
+# aceitar qualquer texto curto ali custaria caro: uma zona cadastrada como
+# "(FUNDOS) PORTA" passaria a casar com uma zona chamada só "PORTA", dando
+# OK para um sensor que ninguém acionou. Zona especial não se parte — ela é
+# ignorada de qualquer forma.
+_RE_CODIGO_ENTRE_PARENTESES = re.compile(r"^\(\s*(\d{1,6})\s*\)\s*(.*)$")
 
 
 def normalizar(texto: str) -> str:
@@ -46,6 +64,31 @@ def normalizar(texto: str) -> str:
         if unicodedata.category(c) != "Mn"
     )
     return " ".join(sem_acento.split())
+
+
+def partir_zona(texto: str) -> tuple[str, str]:
+    """Separa `"(26) IVP ENTRADA NOVA"` em `("26", "IVP ENTRADA NOVA")`.
+
+    Sem parênteses na frente, devolve `("", texto)` — o texto inteiro é a
+    descrição."""
+    limpo = (texto or "").strip()
+    casou = _RE_CODIGO_ENTRE_PARENTESES.match(limpo)
+    if not casou:
+        return "", limpo
+    return casou.group(1).strip(), casou.group(2).strip()
+
+
+def _chave_descricao(texto: str) -> str:
+    """A descrição normalizada por que um texto de zona casa: o texto sem
+    o `(NN) ` da frente.
+
+    A mesma regra vale nos dois lados, e é o que torna o cruzamento
+    simétrico sem precisar saber de antemão qual deles escreve o número.
+    Também garante que isto nunca é **menos** generoso que comparar os
+    textos crus: dois textos iguais continuam iguais depois de tirar o
+    mesmo prefixo."""
+    _, resto = partir_zona(texto)
+    return normalizar(resto)
 
 
 def e_especial(
@@ -99,6 +142,11 @@ class Resultado:
     # zoneamento desatualizado, e aparecer na tela é o que faz alguém
     # arrumar.
     extras: list[str] = field(default_factory=list)
+    # Zona que casou pelo NÚMERO mas com nome diferente do cadastrado. É o
+    # único casamento deste módulo que pode estar errado (se o número entre
+    # parênteses não for o código da zona), então ele não passa calado: sai
+    # na mensagem para alguém olhar.
+    divergentes: list[str] = field(default_factory=list)
 
     @property
     def total_fisicas(self) -> int:
@@ -121,45 +169,117 @@ def conferir(
     descrição); `eventos` são dicionários com `zona` e `quando` — o que
     `tecnico.zonas_do_export` devolve.
 
-    O casamento é pela **descrição normalizada**, não pelo código: o
-    evento traz o nome da zona, não o número dela."""
-    primeiro_evento: dict[str, str] = {}
-    for evento in eventos:
-        descricao = normalizar(str(evento.get("zona") or ""))
-        if not descricao:
-            continue
-        quando = str(evento.get("quando") or "")
-        # O export vem em ordem decrescente de data, então a última linha
-        # vista de cada zona é a mais antiga — o PRIMEIRO disparo dela.
-        if descricao not in primeiro_evento or (
-            quando and quando < primeiro_evento[descricao]
-        ):
-            primeiro_evento[descricao] = quando
+    **O casamento é por código OU por descrição**, qualquer um dos dois
+    bastando. O relatório escreve `(26) IVP ENTRADA NOVA` num só campo e
+    o cadastro guarda `26` e `IVP ENTRADA NOVA` separados: exigir os dois
+    não casaria nada, e olhar só a descrição foi o que fez a primeira
+    preventiva real reprovar as nove zonas que haviam disparado.
+
+    Código igual é sinal forte o bastante sozinho — zona 3 é zona 3,
+    mesmo que alguém tenha renomeado a descrição e o zoneamento esteja
+    desatualizado."""
+    disparos = _agrupar_disparos(eventos)
+
+    # Índices para o cruzamento. `set` de chaves, e não uma chave só, para
+    # não perder um disparo quando dois rótulos diferentes apontam para a
+    # mesma descrição.
+    por_codigo: dict[str, set[str]] = {}
+    por_descricao: dict[str, set[str]] = {}
+    for chave, dado in disparos.items():
+        if dado["codigo"]:
+            por_codigo.setdefault(dado["codigo"], set()).add(chave)
+        for descricao in dado["descricoes"]:
+            por_descricao.setdefault(descricao, set()).add(chave)
 
     resultado = Resultado()
-    vistas: set[str] = set()
+    casadas: set[str] = set()
 
     for zona in zonas_cadastro:
         codigo = str(getattr(zona, "codigo", "")).strip()
         descricao = str(getattr(zona, "descricao", "")).strip()
-        chave = normalizar(descricao)
-        quando = primeiro_evento.get(chave, "")
-        if chave:
-            vistas.add(chave)
+
+        chave_cadastro = _chave_descricao(descricao)
+        candidatas = set(por_codigo.get(normalizar(codigo), ()))
+        if chave_cadastro:
+            candidatas |= por_descricao.get(chave_cadastro, set())
+        casadas |= candidatas
+
+        # Entre os disparos que casaram, vale o mais antigo: é a hora em
+        # que o técnico acionou o sensor.
+        quando = min(
+            (disparos[c]["quando"] for c in candidatas if disparos[c]["quando"]),
+            default="",
+        )
 
         conferida = ZonaConferida(codigo=codigo, descricao=descricao, quando=quando)
         if e_especial(codigo, prefixos=prefixos_especiais):
             resultado.ignoradas.append(conferida)
-        elif quando or chave in primeiro_evento:
+        elif candidatas:
             resultado.dispararam.append(conferida)
+            if not any(chave_cadastro in disparos[c]["descricoes"] for c in candidatas):
+                rotulos = ", ".join(sorted(disparos[c]["rotulo"] for c in candidatas))
+                resultado.divergentes.append(f"{conferida.rotulo} = {rotulos}")
         else:
             resultado.faltam.append(conferida)
 
-    resultado.extras = sorted(set(primeiro_evento) - vistas)
+    # Sobra do cruzamento: zona que disparou e o cadastro não conhece.
+    # Mostra-se o rótulo como veio do relatório, que é o que se procura na
+    # plataforma para arrumar o zoneamento.
+    resultado.extras = [
+        dado["rotulo"]
+        for chave, dado in sorted(
+            disparos.items(), key=lambda par: _ordem_disparo(par[1])
+        )
+        if chave not in casadas
+    ]
 
     for lista in (resultado.dispararam, resultado.faltam, resultado.ignoradas):
         lista.sort(key=lambda z: z.ordem)
     return resultado
+
+
+def _agrupar_disparos(eventos: Iterable[Mapping[str, object]]) -> dict[str, dict]:
+    """Uma entrada por zona vista nos eventos, com o primeiro horário.
+
+    Agrupa pelo **código**, quando o rótulo traz um: `(4) RECEPÇÃO` e
+    `(4) RECEPCAO` são o mesmo sensor e não podem virar duas linhas de
+    "disparou e não está no zoneamento"."""
+    disparos: dict[str, dict] = {}
+    for evento in eventos:
+        rotulo = str(evento.get("zona") or "").strip()
+        if not rotulo:
+            continue
+        codigo, _ = partir_zona(rotulo)
+        codigo = normalizar(codigo)
+        descricao = _chave_descricao(rotulo)
+        if not codigo and not descricao:
+            continue
+
+        # O `#` impede que um código colida com uma descrição homônima.
+        chave = f"#{codigo}" if codigo else descricao
+        atual = disparos.setdefault(
+            chave,
+            {"rotulo": rotulo, "codigo": codigo, "quando": "", "descricoes": set()},
+        )
+        if descricao:
+            atual["descricoes"].add(descricao)
+
+        # O export vem em ordem decrescente de data, mas não se depende
+        # disso: guarda-se o menor horário preenchido, que é o PRIMEIRO
+        # disparo da zona.
+        quando = str(evento.get("quando") or "")
+        if quando and (not atual["quando"] or quando < atual["quando"]):
+            atual["quando"] = quando
+    return disparos
+
+
+def _ordem_disparo(dado: Mapping[str, object]) -> tuple[int, int, str]:
+    """Mesma régua de `ZonaConferida.ordem`: numéricas em ordem numérica,
+    o resto no fim. Sem isso a zona 30 sai antes da 4."""
+    codigo = str(dado.get("codigo") or "")
+    if codigo.isdigit():
+        return (0, int(codigo), "")
+    return (1, 0, normalizar(str(dado.get("rotulo") or "")))
 
 
 def _hora_curta(quando: str) -> str:
@@ -218,6 +338,14 @@ def formatar_preventiva(
         linhas.append(
             "Especiais ignoradas: "
             + ", ".join(z.rotulo for z in resultado.ignoradas)
+        )
+
+    if resultado.divergentes:
+        # Casou pelo número, com nome diferente. Dar OK aqui é a única
+        # aposta que este módulo faz — mostrá-la é o que permite desmenti-la.
+        linhas.append(
+            "Nome diferente do zoneamento (casou pelo número): "
+            + "; ".join(resultado.divergentes)
         )
 
     if resultado.extras:

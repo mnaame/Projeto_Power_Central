@@ -420,6 +420,12 @@ def _comando_preventiva(argumentos, *, sessao, telegram, chat_id: str) -> str:
             "horas": horas,
             "dispararam": len(resultado.dispararam),
             "faltam": len(resultado.faltam),
+            # Contagens, sem nome de zona: é o que permite perceber depois
+            # que o cruzamento parou de casar — o defeito que fez a
+            # primeira preventiva real sair "0 de 9" não deu erro nenhum,
+            # só um número errado.
+            "extras": len(resultado.extras),
+            "divergentes": len(resultado.divergentes),
         },
     )
     return conta.numero

@@ -915,6 +915,45 @@ EXPORT_PREVENTIVA = (
 )
 
 
+# O formato que o portal realmente escreve na coluna Zona: número da zona
+# entre parênteses antes do nome. A primeira preventiva real saiu
+# "Dispararam: 0 de 9" com as nove zonas repetidas abaixo como "não estão
+# no zoneamento" — e o fixture acima, sem o prefixo, não pegava isso.
+EXPORT_PREVENTIVA_PREFIXADO = (
+    b"<table>"
+    b"<tr><th>Data e hora do evento</th><th>Evento</th><th>Zona</th></tr>"
+    b"<tr><td>20/10 14:38:00</td><td>BUR - Alarme de roubo</td><td>(1) MAG PORTA SALA</td></tr>"
+    b"<tr><td>20/10 14:42:00</td><td>BUR - Alarme de roubo</td><td>(26) IVP ENTRADA NOVA</td></tr>"
+    b"</table>"
+)
+
+
+def test_preventiva_casa_a_zona_com_o_numero_entre_parenteses(app, autorizado):
+    """O caso que quebrou em produção, pelo caminho inteiro: HTML do
+    portal -> zonas do export -> conferência -> texto do Telegram."""
+    telegram, _ = _processar(
+        app, "/preventiva 95", export=EXPORT_PREVENTIVA_PREFIXADO
+    )
+
+    corpo = telegram.texto_completo
+    assert "Dispararam: 1 de 1 zonas físicas" in corpo
+    assert "FALTAM: nenhuma" in corpo
+
+
+def test_preventiva_nao_repete_a_zona_em_faltam_e_em_extras(app, autorizado):
+    """O sintoma que denunciou o defeito: a mesma zona nas duas listas, o
+    que faz a resposta trazer a própria prova de que está errada."""
+    telegram, _ = _processar(
+        app, "/preventiva 95", export=EXPORT_PREVENTIVA_PREFIXADO
+    )
+
+    corpo = telegram.texto_completo
+    assert "MAG PORTA SALA" not in corpo.split("Dispararam e NÃO")[-1]
+    # A 26 não está no zoneamento de teste e deve aparecer com o rótulo do
+    # relatório — é o que se procura na plataforma para arrumar.
+    assert "Dispararam e NÃO estão no zoneamento: (26) IVP ENTRADA NOVA" in corpo
+
+
 def test_preventiva_diz_o_que_disparou_e_o_que_falta(app, autorizado):
     telegram, sessao = _processar(
         app, "/preventiva 95", export=EXPORT_PREVENTIVA

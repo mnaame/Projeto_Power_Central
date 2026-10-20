@@ -184,6 +184,182 @@ def test_horario_sai_curto_quando_pedido():
     assert "(14:32)" in texto
 
 
+# ---------- "(NN) DESCRIÇÃO": o formato real do relatório ----------
+#
+# A primeira preventiva real saiu "Dispararam: 0 de 9" com as MESMAS nove
+# zonas listadas logo abaixo como "dispararam e não estão no zoneamento".
+# O relatório escreve número e nome juntos — "(26) IVP ENTRADA NOVA" — e o
+# cadastro guarda "26" e "IVP ENTRADA NOVA" em campos separados.
+
+
+def test_zona_do_relatorio_vem_com_o_numero_na_frente():
+    """O caso que quebrou em produção, com os textos exatos dos dois
+    lados."""
+    zonas = [Zona("26", "IVP ENTRADA NOVA", "BUR")]
+
+    resultado = dom.conferir(zonas, [_evento("(26) IVP ENTRADA NOVA")])
+
+    assert [z.codigo for z in resultado.dispararam] == ["26"]
+    assert resultado.faltam == []
+
+
+def test_zona_prefixada_nao_aparece_tambem_como_extra():
+    """O sintoma que denunciou o defeito: a mesma zona nas duas listas.
+    Ficar só em "FALTAM" seria errado; ficar nas duas é errado E confuso,
+    porque a resposta traz a prova de que ela disparou."""
+    zonas = [Zona("26", "IVP ENTRADA NOVA", "BUR")]
+
+    resultado = dom.conferir(zonas, [_evento("(26) IVP ENTRADA NOVA")])
+
+    assert resultado.extras == []
+
+
+def test_preventiva_completa_com_os_dados_reais_da_conta_36():
+    zonas = [
+        Zona("2", "BRINQUEDOTECA", "BUR"),
+        Zona("3", "PORTÃO ENTRADA", "BUR"),
+        Zona("4", "RECEPÇÃO", "BUR"),
+        Zona("26", "IVP ENTRADA NOVA", "BUR"),
+        Zona("30", "IVP CORREDOR", "BUR"),
+    ]
+    eventos = [
+        _evento("(2) BRINQUEDOTECA"),
+        _evento("(3) PORTÃO ENTRADA"),
+        _evento("(4) RECEPÇÃO"),
+        _evento("(26) IVP ENTRADA NOVA"),
+        _evento("(30) IVP CORREDOR"),
+    ]
+
+    resultado = dom.conferir(zonas, eventos)
+
+    assert len(resultado.dispararam) == 5
+    assert resultado.completa
+
+
+def test_casa_pelo_numero_quando_o_nome_nao_bate():
+    """"(1) CORDENACAO" no painel, "COORDENAÇÃO" no cadastro: zona 1 é
+    zona 1. Reprovar por causa da grafia manda o técnico voltar."""
+    resultado = dom.conferir(
+        [Zona("1", "COORDENAÇÃO", "BUR")], [_evento("(1) CORDENACAO")]
+    )
+
+    assert len(resultado.dispararam) == 1
+    assert resultado.extras == []
+
+
+def test_casamento_que_veio_so_do_numero_e_reportado():
+    """É a única aposta deste módulo — se o número entre parênteses não
+    for o código da zona, este é um OK errado. Mostrar é o que permite
+    desmentir."""
+    resultado = dom.conferir(
+        [Zona("1", "COORDENAÇÃO", "BUR")], [_evento("(1) CORDENACAO")]
+    )
+
+    assert resultado.divergentes == ["1 COORDENAÇÃO = (1) CORDENACAO"]
+    texto = dom.formatar_preventiva(
+        resultado, numero_conta="36", nome_cliente="LOJA X", horas=36
+    )
+    assert "casou pelo número" in texto
+
+
+def test_nome_igual_nao_e_reportado_como_divergente():
+    """Senão a linha apareceria em toda preventiva e ninguém a leria."""
+    resultado = dom.conferir(
+        [Zona("26", "IVP ENTRADA NOVA", "BUR")], [_evento("(26) IVP ENTRADA NOVA")]
+    )
+
+    assert resultado.divergentes == []
+
+
+def test_cadastro_prefixado_casa_com_evento_sem_prefixo():
+    """O cruzamento é simétrico: não se sabe de antemão qual dos dois
+    lados escreve o número."""
+    resultado = dom.conferir(
+        [Zona("26", "(26) IVP ENTRADA NOVA", "BUR")], [_evento("IVP ENTRADA NOVA")]
+    )
+
+    assert len(resultado.dispararam) == 1
+
+
+def test_nomes_diferentes_do_mesmo_numero_sao_um_sensor_so():
+    """O número é a identidade do sensor. Se a zona 4 aparecer com dois
+    nomes — renomeada no meio da janela — contá-la duas vezes faz a lista
+    de "não está no zoneamento" parecer inventada."""
+    resultado = dom.conferir(
+        [], [_evento("(4) RECEPÇÃO"), _evento("(4) RECEPCAO CAIXA")]
+    )
+
+    assert len(resultado.extras) == 1
+
+
+def test_extra_prefixado_sai_com_o_rotulo_do_relatorio():
+    """É o texto que se procura na plataforma para arrumar o zoneamento —
+    normalizado, ele não é mais encontrável."""
+    resultado = dom.conferir([], [_evento("(26) IVP ENTRADA NOVA")])
+
+    assert resultado.extras == ["(26) IVP ENTRADA NOVA"]
+
+
+def test_extras_saem_em_ordem_numerica():
+    """Como texto, "(30)" vem antes de "(4)"."""
+    eventos = [_evento("(30) IVP CORREDOR"), _evento("(4) RECEPÇÃO"), _evento("(2) X")]
+
+    resultado = dom.conferir([], eventos)
+
+    assert resultado.extras == ["(2) X", "(4) RECEPÇÃO", "(30) IVP CORREDOR"]
+
+
+def test_so_numero_entre_parenteses_e_tratado_como_codigo():
+    """Uma zona cadastrada "(FUNDOS) PORTA" não pode dar OK para a zona
+    chamada só "PORTA". Se "(FUNDOS)" fosse descartado como se fosse
+    código, as duas virariam a mesma coisa e um sensor que ninguém acionou
+    sairia como testado — o pior erro deste relatório."""
+    zonas = [Zona("7", "(FUNDOS) PORTA", "BUR"), Zona("1", "PORTA", "BUR")]
+
+    resultado = dom.conferir(zonas, [_evento("(FUNDOS) PORTA")])
+
+    assert [z.codigo for z in resultado.dispararam] == ["7"]
+    assert [z.codigo for z in resultado.faltam] == ["1"]
+
+
+def test_numero_do_relatorio_nao_casa_com_outra_zona():
+    """Casar pelo número não pode virar casar com qualquer número: zona 3
+    não dá OK porque a zona 30 disparou."""
+    resultado = dom.conferir(
+        [Zona("3", "PORTÃO ENTRADA", "BUR")], [_evento("(30) IVP CORREDOR")]
+    )
+
+    assert [z.codigo for z in resultado.faltam] == ["3"]
+
+
+def test_partir_zona():
+    assert dom.partir_zona("(26) IVP ENTRADA NOVA") == ("26", "IVP ENTRADA NOVA")
+    assert dom.partir_zona("  (26)   IVP  ") == ("26", "IVP")
+    assert dom.partir_zona("IVP ENTRADA NOVA") == ("", "IVP ENTRADA NOVA")
+    assert dom.partir_zona("(SP1) PANICO") == ("", "(SP1) PANICO")
+    assert dom.partir_zona("(5)") == ("5", "")
+    assert dom.partir_zona("") == ("", "")
+
+
+def test_zona_sem_nome_no_relatorio_casa_pelo_numero():
+    """Painel que manda só "(5)". Sem o número, essa linha não casaria com
+    nada e a zona 5 sairia como pendente."""
+    resultado = dom.conferir([Zona("5", "FUNDOS", "BUR")], [_evento("(5)")])
+
+    assert len(resultado.dispararam) == 1
+
+
+def test_primeiro_disparo_mesmo_quando_a_primeira_linha_nao_tem_hora():
+    """Linha com data que não se conseguiu interpretar não pode apagar a
+    hora das outras."""
+    resultado = dom.conferir(
+        [Zona("1", "PORTA", "")],
+        [_evento("(1) PORTA", ""), _evento("(1) PORTA", "2026-10-20T14:10:00")],
+    )
+
+    assert resultado.dispararam[0].quando == "2026-10-20T14:10:00"
+
+
 def test_codigo_nao_numerico_e_especial_mesmo_fora_dos_prefixos():
     """O critério principal é ser não-numérico; os prefixos são a rede de
     segurança, não a regra. Uma zona "AX1" é tão não-física quanto uma

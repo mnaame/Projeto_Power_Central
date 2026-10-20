@@ -107,9 +107,8 @@ mutação:
    pula a linha cuja descrição não traduz para um código conhecido — o
    que é certo para o diagnóstico e seria errado aqui. `zonas_do_export`
    pega a zona de toda linha que tiver uma.
-4. **Casamento por descrição normalizada** (sem acento, maiúsculas,
-   espaços colapsados): o cadastro grava "Infra Sala" e o evento pode
-   chegar "INFRA  SALA".
+4. **Casamento por código OU por descrição normalizada**, qualquer um dos
+   dois bastando. Ver §3.3c — é onde a primeira versão errou.
 
 **Zona especial fica fora do "faltam".** O critério é o código não ser
 numérico (`SP1`, `AX1`, `NO`), com `preventiva_prefixos_especiais` como
@@ -124,6 +123,57 @@ qual o `/relatorio` já usa o export, e tem teste travando isso.
 
 Zona que disparou e **não está no zoneamento** aparece à parte: é
 cadastro desatualizado, e some da tela se ninguém mostrar.
+
+### 3.3c `(NN) DESCRIÇÃO` — o formato que custou a primeira preventiva
+
+A primeira versão casava só pela descrição, e a primeira preventiva real
+saiu assim:
+
+```
+Dispararam: 0 de 9 zonas físicas
+FALTAM (9): 1 CORDENAÇÃO, 2 BRINQUEDOTECA, 26 IVP ENTRADA NOVA, ...
+Dispararam e NÃO estão no zoneamento: (1) CORDENACAO, (2) BRINQUEDOTECA,
+(26) IVP ENTRADA NOVA, ...
+```
+
+As **mesmas nove zonas** nas duas listas. O relatório do portal escreve a
+zona como `(26) IVP ENTRADA NOVA` — número e nome num campo só — e o
+cadastro guarda `zon_ccodigo = 26` e `zon_cdescripcion = IVP ENTRADA
+NOVA` separados. Nenhum texto batia, então **nada** casava.
+
+É o pior modo de falhar que este comando tem, porque não dá erro: dá um
+relatório preenchido, com contagem, que reprova a loja inteira.
+
+**Como ficou:**
+
+- `partir_zona("(26) IVP ENTRADA NOVA")` → `("26", "IVP ENTRADA NOVA")`.
+- Casa se o **código** bater **ou** se a **descrição** bater. Zona 3 é
+  zona 3 mesmo que alguém tenha renomeado a descrição no painel.
+- A mesma regra roda nos dois lados, então isto nunca é *menos* generoso
+  que comparar os textos crus: dois textos iguais continuam iguais depois
+  de tirar o mesmo prefixo.
+- **Só dígito entre parênteses conta como código.** Aceitar qualquer
+  texto curto faria uma zona cadastrada `(FUNDOS) PORTA` casar com outra
+  chamada só `PORTA` — OK para um sensor que ninguém acionou.
+- Os disparos são agrupados **pelo número**: `(4) RECEPÇÃO` e
+  `(4) RECEPCAO CAIXA` são um sensor só, não dois "fora do zoneamento".
+- Casar pelo número com nome diferente é a **única aposta** do módulo (se
+  o número entre parênteses não for o código da zona, é um OK errado).
+  Então ela não passa calada — sai na mensagem:
+
+  ```
+  Nome diferente do zoneamento (casou pelo número): 1 COORDENAÇÃO = (1) CORDENACAO
+  ```
+
+A auditoria passou a guardar as contagens de `extras` e `divergentes`
+(números, sem nome de zona): o defeito acima não gerou nenhum erro de
+log, e contagem é o que permite notar que o cruzamento parou de casar.
+
+O fixture de integração tinha zona sem o prefixo — por isso a suíte
+passava com o defeito em pé. Agora há um export com o formato real
+atravessando o caminho inteiro (HTML → `zonas_do_export` → `conferir` →
+texto do Telegram), e ele reproduz o sintoma exato quando as guardas são
+desligadas.
 
 ### 3.4 `app/integrations/telegram_client.py`
 
