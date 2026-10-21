@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone
 from app.domain.central_cliente import formatar_telefone_exibicao
 from app.domain.dates import FUSO_HORARIO
 from app.domain.formatting import formatar_duracao
+from app.domain.graficos import formatar_numero
 from app.domain.tarefas import esta_atrasada
 
 
@@ -32,6 +33,14 @@ def registrar_filtros(app) -> None:
         if not valor:
             return "—"
         return formatar_telefone_exibicao(valor)
+
+    @app.template_filter("numero")
+    def numero(valor, casas: int = 2) -> str:
+        """Vírgula decimal. `'%.2f'|format(...)` espalhado pelos templates
+        escreveria ponto — e a tela é lida em português."""
+        if valor is None:
+            return "—"
+        return formatar_numero(float(valor), casas)
 
     @app.template_filter("tarefa_atrasada")
     def tarefa_atrasada(tarefa, hoje: date) -> bool:

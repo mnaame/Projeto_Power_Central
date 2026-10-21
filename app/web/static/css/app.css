@@ -594,37 +594,255 @@ summary.btn::-webkit-details-marker {
   fill: var(--color-accent);
 }
 
-.chart-bar-antes {
-  fill: var(--color-text-muted);
-  opacity: 0.55;
+/* ---------- Gráfico de colunas (BI) ----------
+ *
+ * O SVG vem montado do servidor (`domain/graficos.py`); aqui só a pele.
+ * Duas regras valem para tudo abaixo:
+ *   - a marca usa a cor da série/status, o TEXTO nunca usa. Valor, eixo e
+ *     rótulo ficam em tom de tinta; a identidade vem da marca colorida ao
+ *     lado, não de pintar a letra (amarelo claro como texto é ilegível).
+ *   - grade e eixo são hairline sólidos, um passo fora da superfície.
+ *     Tracejado lê como "projeção" quando é só grade.
+ */
+
+.grafico {
+  position: relative;
 }
 
-.chart-bar-depois {
-  fill: var(--color-accent);
+.grafico svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
 }
 
-.chart-bar-label {
+.grafico-grade line,
+.grafico-base {
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.grafico-base {
+  stroke: var(--color-border-strong);
+}
+
+.grafico-eixo {
   fill: var(--color-text-muted);
   font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.grafico-eixo.is-valor { text-anchor: end; }
+.grafico-eixo.is-categoria { text-anchor: middle; }
+
+.grafico-valor {
+  fill: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
   text-anchor: middle;
 }
 
-.chart-legend {
-  display: flex;
-  gap: var(--space-4);
-  margin-top: var(--space-2);
+.grafico-coluna {
+  transition: opacity var(--transition-fast);
+}
+
+.grafico-coluna.is-neutro { fill: var(--chart-neutro); }
+.grafico-coluna.is-melhora { fill: var(--chart-melhora); }
+.grafico-coluna.is-piora { fill: var(--chart-piora); }
+.grafico-coluna.is-serie { fill: var(--chart-serie); }
+
+/* Alvo de hover: a faixa inteira, não a barra. Acertar uma coluna de 8px
+   de largura no celular é impossível; a faixa tem a largura do slot. */
+.grafico-banda {
+  fill: transparent;
+  cursor: default;
+}
+
+/* Apontar uma coluna apaga as outras — o realce é por contraste, sem
+   mudar a cor de ninguém (recolorir no hover faria a barra trocar de
+   significado). */
+.grafico.is-apontando .grafico-coluna { opacity: 0.4; }
+.grafico.is-apontando .grafico-coluna.is-ativa { opacity: 1; }
+
+/* Crosshair: some até o ponteiro chegar. */
+.grafico-mira {
+  stroke: var(--color-border-strong);
+  stroke-width: 1;
+  opacity: 0;
+}
+
+.grafico.is-apontando .grafico-mira.is-ativa {
+  opacity: 1;
+}
+
+.grafico-dica {
+  position: absolute;
+  z-index: 5;
+  min-width: 9rem;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
   font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.grafico-dica[data-visivel="1"] { opacity: 1; }
+
+.grafico-dica strong {
+  display: block;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grafico-coluna,
+  .grafico-dica { transition: none; }
+}
+
+/* ---------- Painel: ler antes de olhar ---------- */
+
+/* A frase que traduz o painel inteiro. Vem ANTES dos cartões porque é o
+   que responde "e aí, como foi?" — o resto é detalhamento dela. */
+.resumo-frase {
+  border-left: 3px solid var(--color-accent);
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-normal);
+  color: var(--color-text-primary);
+}
+
+/* O "?" do jargão. Nativo (title) de propósito: funciona em teclado,
+   leitor de tela e celular sem JS nenhum. */
+.termo-ajuda {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  margin-left: var(--space-1);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-full);
+  font-size: 0.625rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-muted);
+  cursor: help;
+  vertical-align: middle;
+}
+
+.termo-ajuda:hover,
+.termo-ajuda:focus-visible {
+  color: var(--color-text-primary);
+  border-color: var(--color-text-secondary);
+}
+
+/* Contexto do cartão: o "de quantos" que nunca pode faltar ao lado de um
+   percentual. */
+.stat-tile-contexto {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.stat-tile-value.is-compacto { font-size: var(--font-size-2xl); }
+
+/* Cartão que leva a algum lugar — o de crônicos termina em ação. */
+a.stat-tile {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+a.stat-tile:hover {
+  border-color: var(--color-border-strong);
+  transform: translateY(-1px);
+}
+
+a.stat-tile:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* De onde vêm os números. Só um bloco de linhas; o recuo faz o desconto
+   parecer desconto. */
+.funil {
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+}
+
+.funil-linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+}
+
+.funil-linha.is-desconto {
+  padding-left: var(--space-4);
   color: var(--color-text-muted);
 }
 
-.chart-legend-swatch {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  margin-right: var(--space-1);
-  vertical-align: middle;
+.funil-linha.is-subtotal,
+.funil-linha.is-total {
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
 }
+
+.funil-linha.is-total { border-top: 0; }
+
+.funil-linha.is-resultado {
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.funil-valor {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Situação: ícone + palavra SEMPRE. A cor é reforço, nunca o portador do
+   significado. */
+.situacao {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  white-space: nowrap;
+  font-weight: var(--font-weight-medium);
+}
+
+.situacao.is-melhora { color: var(--chart-melhora); }
+.situacao.is-piora { color: var(--chart-piora); }
+.situacao.is-estavel { color: var(--color-text-secondary); }
+.situacao.is-sem-base { color: var(--color-text-muted); }
+
+.situacao-icone { font-size: 0.75em; }
+
+/* Tabela ordenável: o cabeçalho é botão de verdade (teclado, foco). */
+.tabela-ordenavel th[data-ordenar] {
+  cursor: pointer;
+  user-select: none;
+}
+
+.tabela-ordenavel th[data-ordenar]:hover { color: var(--color-text-primary); }
+
+.tabela-ordenavel th[data-ordenar]::after {
+  content: "↕";
+  margin-left: var(--space-1);
+  opacity: 0.35;
+  font-size: 0.75em;
+}
+
+.tabela-ordenavel th[aria-sort="ascending"]::after { content: "↑"; opacity: 1; }
+.tabela-ordenavel th[aria-sort="descending"]::after { content: "↓"; opacity: 1; }
 
 /* ---------- Utilidades ---------- */
 
@@ -876,4 +1094,12 @@ tr.is-visitado > td:nth-child(3) { text-decoration: line-through; }
 
 @media (max-width: 720px) {
   #mapa-rotas { height: 420px; }
+
+  /* Dois gráficos lado a lado viram duas colunas de 170px no celular —
+     ilegíveis as duas. Empilhados, cada um fica com a largura toda. */
+  .grafico-par { grid-template-columns: 1fr !important; }
+
+  /* A dica acompanha o dedo e sai da tela; presa na largura do cartão,
+     não sai. */
+  .grafico-dica { max-width: calc(100% - 8px); }
 }

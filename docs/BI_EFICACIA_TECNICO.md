@@ -153,6 +153,110 @@ Rotas: `index` (GET, lê o último run ou o `run_id` da query), `recalcular`
 Técnico". Drilldown de cliente aponta para `tecnico.index` (mesma conta),
 não duplica export de histórico.
 
+### 4.5 `app/domain/bi_painel.py` + `app/domain/graficos.py` (a tela)
+
+Camadas puras entre o cálculo e o template. `bi_painel` decide **o que a
+tela diz** (frase, funil, lojas por resultado, série semanal);
+`graficos` decide **onde cada barra fica**. Nenhum número novo nasce
+aqui — e a geometria sai do template para poder ser testada (gráfico
+errado não dá exceção, dá uma barra do tamanho errado em que o leitor
+acredita).
+
+## 4.6 O painel confundia — e por quê
+
+Os três números do topo pareciam falar da mesma coisa e tinham
+**denominadores diferentes**: "133 intervenções", "40% que melhorou" e
+"506,4 disparos evitados". O 40% era **4 de 10** — só dez visitas tinham
+base de comparação. Número grande sobre amostra pequena não é detalhe de
+apresentação: é o número ser lido como se valesse para as 133. Além
+disso, com **um técnico só** na operação, o gráfico "por técnico" era uma
+barrinha e o "ranking de técnicos" era uma linha.
+
+As decisões que resolveram, todas com teste de mutação:
+
+1. **Uma frase em português no topo**, gerada dos mesmos números dos
+   cartões: _"No período, Alfredo fez 133 manutenções. Nas 10 lojas que
+   dava para comparar, os disparos caíram em 4, pioraram em 2 e ficaram
+   iguais em 4. Estima-se ~506 disparos a menos. 6 lojas seguem
+   crônicas."_ Se a frase e um cartão discordarem, é bug, não
+   arredondamento.
+2. **Percentual nunca anda sozinho.** "4 de 10" grande, "40%" pequeno ao
+   lado. E um bloco "De onde vêm os números" com a conta inteira —
+   ordens concluídas → sem vínculo → sem base → com base → lojas →
+   melhoraram. É o que faz "133" e "4 de 10" conviverem sem parecer
+   contradição.
+3. **A unidade da manchete é a LOJA, não a visita.** Uma loja visitada
+   cinco vezes contava cinco vezes em "melhorou" — e a loja mais visitada
+   é justamente a mais problemática, então ela dominava a estatística. O
+   funil faz a ponte entre as duas unidades às claras.
+4. **Visita sem base não entra na média da loja.** Incluí-la como
+   "antes = 0" puxaria o antes para baixo e faria uma loja que **piorou**
+   aparecer como melhorada. É o erro mais caro do módulo e tem teste
+   próprio.
+5. **O "depois" da loja é ponderado pelos dias medidos.** Uma visita de
+   ontem tem 1 dia de evidência e uma de um mês atrás tem 15; média
+   simples deixaria a mais recente — a com menos evidência — decidir a
+   classificação.
+6. **Sem falsa precisão.** "506,4" vira "~506", com a frase "estimativa
+   de quantos disparos a menos ocorreram depois das visitas".
+7. **Estado vazio é tratado.** Sem lojas comparáveis, o cartão diz
+   "ainda sem lojas comparáveis no período" em vez de um "0%" seco, que
+   leria como fracasso do técnico.
+8. **O cartão de crônicas é clicável** e leva à lista — é o número mais
+   acionável do painel.
+9. **Jargão com "?"**: sem vínculo, sem base, estável, crônico e
+   "disparos evitados" têm uma frase de explicação (`GLOSSARIO`).
+
+### 4.7 Regras de gráfico
+
+- **Uma escala por gráfico.** Nunca dois eixos Y.
+- **Forma segue função.** Saíram o "antes × depois por técnico" (uma
+  barra) e o "ranking" (uma linha); entraram o **antes × depois geral**
+  (duas barras) e a **lista de lojas por resultado**, ordenável, que é
+  onde se age. O técnico virou um cartão simples.
+- **Tendência por semana, em barras.** Não existe série diária de
+  disparos persistida — só o que foi medido em volta de cada visita.
+  133 pontos numa linha de 660px viram borrão, e uma linha ligando
+  visitas esparsas sugere uma continuidade que o dado não tem. Semana sem
+  visita aparece **sem barra**: barra zerada diria "zero disparos", que é
+  diferente de "ninguém foi medido". A contagem de visitas da semana sai
+  no hover.
+- **Hover com mira e dica** (data, valor, nº de visitas), com alvo do
+  tamanho da faixa e não da barra — acertar uma coluna de 8px no celular
+  é impossível. É melhoria, não o único caminho: o `<title>` nativo
+  continua lá e todo número está na tabela abaixo.
+- **Eixo justo.** `eixo()` testa 4, 5 e 3 divisões e fica com o teto mais
+  apertado. Com divisão fixa em 4, um máximo de 1,20 fechava em 2,00 e
+  jogava fora 40% da altura — foi o que a primeira renderização mostrou.
+- **Marcas finas**: coluna de no máximo 24px, ponta arredondada de 4px e
+  **base quadrada** (`rx` arredondaria os quatro cantos e a barra
+  descolaria do eixo), grade e eixo em hairline **sólido**.
+- **Cor por função, nunca por enfeite.** `--chart-neutro` (antes),
+  `--chart-melhora`, `--chart-piora`, `--chart-serie` (medição sem
+  julgamento). Status nunca vira "série 3" e **sempre** sai com ícone +
+  palavra. Texto — valores, eixos, rótulos — usa tom de tinta, nunca a
+  cor da série.
+
+### 4.8 As cores dos gráficos nos quatro temas
+
+Os `--chart-*` são desenhados tema a tema, não o mesmo valor invertido:
+um verde que lê bem no branco some no #000, e o cinza quente do sépia
+encosta no verde dele.
+
+Conferidos com o validador de paleta do guia de dataviz, **par a par,
+contra a superfície de cada tema** — só os pares que dividem o mesmo
+gráfico (neutro × melhora, neutro × piora). Dois achados reais:
+
+- No **tema claro**, o cinza esverdeado natural da paleta ficava a
+  ΔE 12,1 do verde institucional (piso de visão normal é 15) — e essas
+  duas barras ficam lado a lado. O cinza do gráfico virou **frio**
+  (`#7a7f85`, ΔE 15,5).
+- No **sépia**, o cinza quente encostava no verde (12,2) e no âmbar
+  (13,4); virou um cinza mais escuro (`#7d7670`, ΔE 20,1 / 21,5).
+
+Verde × âmbar nunca dividem um gráfico (a barra "depois" é um ou outro) e,
+na tabela, andam com ícone + rótulo.
+
 ## 5. Settings novas (`bi_*`)
 
 `bi_janela_dias` (15), `bi_limiar_melhora` (20), `bi_limiar_piora` (20),

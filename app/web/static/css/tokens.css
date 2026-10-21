@@ -90,7 +90,40 @@
   --color-accent-text: #ffffff;
 
   --color-focus-ring: #256e34;
+
+  /* Marcas de gráfico — ver o bloco de comentário mais abaixo.
+     O cinza do "antes" é FRIO de propósito: o cinza esverdeado do tema
+     ficava a ΔE 12,1 do verde institucional, e as duas barras ficam lado
+     a lado. */
+  --chart-neutro: #7a7f85;
+  --chart-melhora: #15803d;
+  --chart-piora: #b45309;
+  --chart-serie: #2563a8;
 }
+
+/*
+ * Cores de MARCA DE GRÁFICO (`--chart-*`)
+ * ---------------------------------------
+ * Separadas das de status de propósito, e desenhadas tema a tema — não
+ * é o mesmo valor com um filtro de inversão por cima. Um verde que lê
+ * bem sobre branco some no #000, e o cinza quente do sépia encosta no
+ * verde dele.
+ *
+ * O que cada uma significa (cor por função, nunca por enfeite):
+ *   --chart-neutro   "antes" / referência — não é bom nem ruim
+ *   --chart-melhora  caiu (reservada: nunca vira "série 3")
+ *   --chart-piora    subiu (idem)
+ *   --chart-serie    medição sem julgamento (a tendência semanal), numa
+ *                    matiz que NÃO é verde nem âmbar, para a série não
+ *                    ser lida como "bom" ou "ruim"
+ *
+ * Conferidas com o validador de paleta do guia de dataviz, par a par,
+ * contra a superfície de cada tema — só os pares que dividem o MESMO
+ * gráfico (neutro × melhora, neutro × piora). Todos passam no piso de
+ * visão normal (ΔE ≥ 15) e em contraste ≥ 3:1. Verde × âmbar nunca
+ * dividem um gráfico (a barra "depois" é um ou outro) e, na tabela,
+ * andam com ícone + rótulo.
+ */
 
 /* Tema escuro — cuidado igual ao claro (uso principal é noturno) */
 @media (prefers-color-scheme: dark) {
@@ -120,6 +153,11 @@
     --color-status-ok-bg: #10271a;
     --color-status-neutral: #94a89a;
     --color-status-neutral-bg: #18251c;
+
+    --chart-neutro: #8c949a;
+    --chart-melhora: #4ade80;
+    --chart-piora: #fbbf24;
+    --chart-serie: #6aa9e9;
   }
 }
 
@@ -149,6 +187,11 @@
   --color-status-ok-bg: #10271a;
   --color-status-neutral: #94a89a;
   --color-status-neutral-bg: #18251c;
+
+  --chart-neutro: #8c949a;
+  --chart-melhora: #4ade80;
+  --chart-piora: #fbbf24;
+  --chart-serie: #6aa9e9;
 }
 
 /* Tema PRETO (AMOLED) — fundo #000 de verdade.
@@ -183,6 +226,11 @@
   --color-status-ok-bg: #0d2617;
   --color-status-neutral: #9aa0a6;
   --color-status-neutral-bg: #17191c;
+
+  --chart-neutro: #868c91;
+  --chart-melhora: #4ade80;
+  --chart-piora: #ffc14d;
+  --chart-serie: #74b4f0;
 }
 
 /* Tema SÉPIA — quente e de baixo contraste, para leitura longa à noite.
@@ -217,6 +265,14 @@
   --color-status-ok-bg: #202a18;
   --color-status-neutral: #a8977f;
   --color-status-neutral-bg: #292118;
+
+  /* O cinza do sépia é mais escuro que o dos outros temas: o cinza
+     quente da paleta encostava no verde (ΔE 12,2) e no âmbar (13,4)
+     dela — justo as duas barras que dividem o gráfico de antes × depois. */
+  --chart-neutro: #7d7670;
+  --chart-melhora: #8fb96a;
+  --chart-piora: #d9a441;
+  --chart-serie: #9fb3cf;
 }
 
 /* Utilitário para números em tabelas/contadores (RF 7.1) */

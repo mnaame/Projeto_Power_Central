@@ -110,7 +110,10 @@ def test_recalcular_fluxo_completo_mostra_kpis_e_graficos(app, operador_client, 
     assert resposta.status_code == 200
     assert b"BI recalculado" in resposta.data or "intervenção".encode("utf-8") in resposta.data
     assert b"CLIENTE 95" in resposta.data
-    assert b"MELHOROU" in resposta.data
+    # "Melhorou", não "MELHOROU": a constante do domínio não é texto de
+    # tela. Jargão em caixa alta é parte do que tornava o painel ilegível.
+    assert "Melhorou".encode("utf-8") in resposta.data
+    assert b"MELHOROU" not in resposta.data
 
     run = BiRun.query.order_by(BiRun.id.desc()).first()
     assert run.status == "success"
@@ -179,6 +182,131 @@ def test_exportar_tabela_invalida_404(operador_client):
 
 def test_run_detalhe_inexistente_404(operador_client):
     assert operador_client.get("/bi/run/999999").status_code == 404
+
+
+# ---------- a tela: clareza antes de bonito ----------
+#
+# A reclamação que gerou esta reformulação: os três números do topo
+# pareciam falar da mesma coisa e tinham denominadores diferentes. O
+# "40% que melhorou" era 4 de 10 — só dez visitas tinham base.
+
+
+def _run_com_dados(app, operador_client, monkeypatch, lojas=3, tranquilas=5):
+    """Um run real pelo caminho do serviço, com lojas que disparavam
+    antes (comparáveis) e lojas que não disparavam (sem base)."""
+    tarefas, eventos = [], []
+    for n in range(lojas):
+        conta, id_auvo = f"{n + 10}", 13804900 + n
+        _depara(conta=conta, id_auvo=id_auvo, nome=f"LOJA COMPARAVEL {n}")
+        tarefas.append(_tarefa(id_auvo, MARCO_FECHADO))
+        eventos += _eventos_melhorou(conta=conta.zfill(4), marco=MARCO_FECHADO)
+    for n in range(tranquilas):
+        conta, id_auvo = f"{n + 50}", 13805000 + n
+        _depara(conta=conta, id_auvo=id_auvo, nome=f"LOJA TRANQUILA {n}")
+        tarefas.append(_tarefa(id_auvo, MARCO_FECHADO))
+
+    monkeypatch.setattr(auvo_service, "criar_cliente", lambda config: FakeAuvoClient(tarefas))
+    monkeypatch.setattr(
+        bi_service, "_criar_cliente_softguard", lambda config: FakeSoftGuardClient(eventos)
+    )
+    operador_client.post("/bi/recalcular", data={"periodo": "padrao", "tecnico": "Alfredo Silva"})
+    run = BiRun.query.order_by(BiRun.id.desc()).first()
+    assert run.status == "success"
+    return run, operador_client.get(f"/bi/run/{run.id}").get_data(as_text=True)
+
+
+def test_tela_abre_com_a_frase_em_portugues(app, operador_client, monkeypatch):
+    """O item mais importante: o painel traduzido antes de qualquer
+    gráfico."""
+    _, html = _run_com_dados(app, operador_client, monkeypatch)
+
+    assert "resumo-frase" in html
+    assert "No período, Alfredo Silva fez 8 manutenções." in html
+
+
+def test_percentual_nunca_aparece_sem_o_de_quantos(app, operador_client, monkeypatch):
+    """Número grande sobre amostra pequena foi o nó a desfazer: "40%"
+    sozinho é lido como se valesse para as 133."""
+    _, html = _run_com_dados(app, operador_client, monkeypatch)
+
+    assert "de 3" in html  # 3 lojas comparáveis
+    assert "das lojas que dava para comparar" in html
+
+
+def test_funil_mostra_por_que_os_denominadores_diferem(app, operador_client, monkeypatch):
+    _, html = _run_com_dados(app, operador_client, monkeypatch)
+
+    assert "De onde vêm os números" in html
+    assert "sem base de comparação" in html
+    assert "Lojas distintas" in html
+
+
+def test_disparos_evitados_sai_arredondado_e_explicado(app, operador_client, monkeypatch):
+    """"506,4" é precisão que a conta não tem."""
+    _, html = _run_com_dados(app, operador_client, monkeypatch)
+
+    assert "estimativa de quantos disparos a menos" in html
+    assert "~" in html.split("Disparos evitados")[1][:400]
+
+
+def test_cartao_de_cronicas_leva_para_a_lista(app, operador_client, monkeypatch):
+    """O número mais acionável do painel termina em ação."""
+    _, html = _run_com_dados(app, operador_client, monkeypatch)
+
+    assert 'href="#lojas-cronicas"' in html
+    assert 'id="lojas-cronicas"' in html
+
+
+def test_tela_tem_a_lista_de_lojas_por_resultado(app, operador_client, monkeypatch):
+    """É onde ele age — e ordenável, porque a pergunta muda."""
+    _, html = _run_com_dados(app, operador_client, monkeypatch)
+
+    assert "Lojas por resultado" in html
+    assert "data-ordenavel" in html
+    assert "LOJA COMPARAVEL 0" in html
+
+
+def test_ranking_de_tecnicos_saiu_da_tela(app, operador_client, monkeypatch):
+    """Com um técnico só, "ranking" era uma linha e o gráfico por técnico
+    era uma barrinha — nenhum dos dois dizia nada."""
+    _, html = _run_com_dados(app, operador_client, monkeypatch)
+
+    assert "Ranking de técnicos" not in html
+    assert "Antes × depois, por técnico" not in html
+    assert "Alfredo Silva" in html  # vira cartão simples
+
+
+def test_situacao_nunca_depende_so_da_cor(app, operador_client, monkeypatch):
+    """Daltonismo, impressão, tema preto: a palavra sempre acompanha."""
+    _, html = _run_com_dados(app, operador_client, monkeypatch)
+
+    assert "Melhorou" in html
+    assert "situacao-icone" in html
+
+
+def test_jargao_vem_com_explicacao(app, operador_client, monkeypatch):
+    _, html = _run_com_dados(app, operador_client, monkeypatch)
+
+    assert "termo-ajuda" in html
+    assert "sem conta não há disparo para comparar" in html
+
+
+def test_graficos_usam_token_de_tema_e_nao_cor_fixa(app, operador_client, monkeypatch):
+    """Cor fixa no SVG sumiria no tema preto."""
+    _, html = _run_com_dados(app, operador_client, monkeypatch)
+
+    marcacao = html[html.find("grafico-coluna"):]
+    assert "is-neutro" in marcacao
+    assert "#" not in marcacao[: marcacao.find("</svg>")].replace("&#", "")
+
+
+def test_sem_base_de_comparacao_diz_isso_em_vez_de_zero(app, operador_client, monkeypatch):
+    """Estado vazio tratado: "0%" seco pareceria fracasso do técnico,
+    quando o certo é "não dá para comparar"."""
+    _, html = _run_com_dados(app, operador_client, monkeypatch, lojas=0, tranquilas=4)
+
+    assert "ainda sem lojas comparáveis no período" in html
+    assert "não houve base de comparação" in html
 
 
 # ---------- configuração (admin) ----------

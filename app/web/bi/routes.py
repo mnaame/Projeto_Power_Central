@@ -16,6 +16,8 @@ from flask import (
 )
 from flask_login import current_user, login_required
 
+from app.domain import bi_painel as dom_painel
+from app.domain import graficos as dom_graficos
 from app.domain.dates import FUSO_HORARIO
 from app.extensions import db
 from app.models.bi import BiRun
@@ -27,9 +29,13 @@ from app.web.bi.forms import ConfiguracaoBiForm
 bp = Blueprint("bi", __name__, url_prefix="/bi")
 
 HISTORICO_RUNS_LIMITE = 15
-GRAFICO_LARGURA = 640
-GRAFICO_ALTURA = 220
-GRAFICO_MARGEM = 30
+
+# Dois gráficos de tamanhos diferentes de propósito: o antes × depois tem
+# duas colunas e não precisa de largura, a tendência tem uma por semana.
+ANTES_DEPOIS_LARGURA = 300
+ANTES_DEPOIS_ALTURA = 210
+TENDENCIA_LARGURA = 660
+TENDENCIA_ALTURA = 210
 
 
 def _periodo_do_form() -> tuple[datetime, datetime]:
@@ -63,75 +69,51 @@ def _filtros_padrao() -> dict:
     }
 
 
-def _barras_antes_depois(resumo_tecnicos) -> list[dict]:
-    """Barras agrupadas (antes/depois) por técnico — mesma ideia do
-    gráfico de linha do dashboard, mas em Python: calcula posições, o
-    template só desenha `<rect>`."""
-    if not resumo_tecnicos:
-        return []
-    maximo = max(
-        max(r.antes_medio_por_dia, r.depois_medio_por_dia) for r in resumo_tecnicos
-    ) or 1.0
-    altura_util = GRAFICO_ALTURA - 2 * GRAFICO_MARGEM - 20
-    largura_util = GRAFICO_LARGURA - 2 * GRAFICO_MARGEM
-    n = len(resumo_tecnicos)
-    grupo_largura = largura_util / n
-    barra_largura = min(grupo_largura * 0.3, 36)
-    base_y = GRAFICO_ALTURA - GRAFICO_MARGEM - 20
+def _grafico_antes_depois(geral):
+    """Duas colunas: a base comparável inteira, antes e depois.
 
-    barras = []
-    for indice, resumo in enumerate(resumo_tecnicos):
-        centro = GRAFICO_MARGEM + grupo_largura * (indice + 0.5)
-        altura_antes = (resumo.antes_medio_por_dia / maximo) * altura_util
-        altura_depois = (resumo.depois_medio_por_dia / maximo) * altura_util
-        barras.append(
-            {
-                "tecnico": resumo.tecnico,
-                "x_antes": round(centro - barra_largura - 2, 1),
-                "x_depois": round(centro + 2, 1),
-                "largura": round(barra_largura, 1),
-                "y_antes": round(base_y - altura_antes, 1),
-                "h_antes": round(max(altura_antes, 0.5), 1),
-                "y_depois": round(base_y - altura_depois, 1),
-                "h_depois": round(max(altura_depois, 0.5), 1),
-                "label_x": round(centro, 1),
-                "label_y": round(base_y + 14, 1),
-                "antes_valor": resumo.antes_medio_por_dia,
-                "depois_valor": resumo.depois_medio_por_dia,
-            }
-        )
-    return barras
+    A cor do "depois" é função, não enfeite — verde se caiu, âmbar se
+    subiu — e vem sempre com o rótulo da situação ao lado, porque cor
+    sozinha não carrega significado (daltonismo, impressão, tema preto)."""
+    if geral is None:
+        return None
+    classe_depois = "is-melhora" if geral.melhorou else "is-piora"
+    return dom_graficos.montar_colunas(
+        [
+            ("Antes", geral.antes_por_dia, "is-neutro", "disparos/dia antes da visita"),
+            ("Depois", geral.depois_por_dia, classe_depois, "disparos/dia depois da visita"),
+        ],
+        largura=ANTES_DEPOIS_LARGURA,
+        altura=ANTES_DEPOIS_ALTURA,
+        margem_esquerda=46,
+        margem_direita=16,
+    )
 
 
-def _serie_tendencia(intervencoes) -> list[dict]:
-    """Disparos/dia DEPOIS de cada visita, em ordem cronológica — cada
-    ponto já é, por definição, um marco de visita (não precisamos de uma
-    série semanal contínua, que exigiria persistir os eventos crus; ver
-    docs/BI_EFICACIA_TECNICO.md)."""
-    ordenadas = sorted(intervencoes, key=lambda i: i.marco)
-    if not ordenadas:
-        return []
-    maximo = max(i.depois_por_dia for i in ordenadas) or 1.0
-    n = len(ordenadas)
-    passo = (GRAFICO_LARGURA - 2 * GRAFICO_MARGEM) / max(n - 1, 1)
-
-    serie = []
-    for indice, item in enumerate(ordenadas):
-        x = GRAFICO_MARGEM + indice * passo
-        y = GRAFICO_ALTURA - GRAFICO_MARGEM - (item.depois_por_dia / maximo) * (
-            GRAFICO_ALTURA - 2 * GRAFICO_MARGEM
-        )
-        serie.append(
-            {
-                "x": round(x, 1),
-                "y": round(y, 1),
-                "valor": round(item.depois_por_dia, 3),
-                "quando": item.marco,
-                "loja": item.nome_loja,
-                "tecnico": item.tecnico_nome,
-            }
-        )
-    return serie
+def _grafico_tendencia(semanas):
+    """Uma coluna por semana. Série única: sem caixa de legenda — o
+    título nomeia o que está plotado."""
+    if not semanas:
+        return None
+    return dom_graficos.montar_colunas(
+        [
+            (
+                semana.rotulo,
+                semana.disparos_por_dia,
+                "is-serie" if semana.visitas else "is-vazio",
+                (
+                    f"{semana.visitas} visita" + ("s" if semana.visitas > 1 else "")
+                    if semana.visitas
+                    else "nenhuma visita nesta semana"
+                ),
+            )
+            for semana in semanas
+        ],
+        largura=TENDENCIA_LARGURA,
+        altura=TENDENCIA_ALTURA,
+        margem_esquerda=46,
+        margem_direita=16,
+    )
 
 
 def _renderizar(run: BiRun | None):
@@ -142,40 +124,55 @@ def _renderizar(run: BiRun | None):
         "resumo_tecnicos": [],
         "cronicos": [],
         "intervencoes": [],
-        "barras": [],
-        "tendencia": [],
-        "pontos_tendencia": "",
-        "grafico_largura": GRAFICO_LARGURA,
-        "grafico_altura": GRAFICO_ALTURA,
+        "lojas": [],
+        "placar": None,
+        "funil": [],
+        "frase": "",
+        "evitados": None,
+        "grafico_antes_depois": None,
+        "grafico_tendencia": None,
+        "glossario": dom_painel.GLOSSARIO,
+        "rotulos_situacao": dom_painel.ROTULO_SITUACAO,
+        "icones_situacao": dom_painel.ICONE_SITUACAO,
         **_filtros_padrao(),
     }
     if run is None or run.status != "success":
         return render_template("bi/index.html", **contexto)
 
-    resumo_tecnicos = bi_service.resumo_por_tecnico(run)
     cronicos = bi_service.clientes_cronicos(run)
     intervencoes = list(run.intervencoes)
     resumo = run.resumo or {}
 
-    com_base = resumo.get("melhorou", 0) + resumo.get("piorou", 0) + resumo.get("estavel", 0)
-    pct_melhorou = (resumo.get("melhorou", 0) / com_base * 100) if com_base else None
+    lojas = dom_painel.lojas_por_resultado(
+        intervencoes,
+        limiar_melhora_pct=run.limiar_melhora_pct,
+        limiar_piora_pct=run.limiar_piora_pct,
+    )
+    evitados = dom_painel.disparos_evitados(resumo.get("disparos_evitados_estimados", 0.0))
 
-    tendencia = _serie_tendencia(intervencoes)
     contexto.update(
         kpis={
             "total_intervencoes": resumo.get("total_intervencoes", 0),
-            "pct_melhorou": pct_melhorou,
-            "disparos_evitados": resumo.get("disparos_evitados_estimados", 0.0),
             "clientes_cronicos": len(cronicos),
             "sem_vinculo": resumo.get("sem_vinculo", 0),
             "sem_data": resumo.get("sem_data", 0),
         },
-        resumo_tecnicos=resumo_tecnicos,
+        resumo_tecnicos=bi_service.resumo_por_tecnico(run),
         cronicos=cronicos,
         intervencoes=intervencoes,
-        barras=_barras_antes_depois(resumo_tecnicos),
-        tendencia=tendencia,
-        pontos_tendencia=" ".join(f"{p['x']},{p['y']}" for p in tendencia),
+        lojas=lojas,
+        placar=dom_painel.placar(lojas),
+        funil=dom_painel.funil(resumo, lojas=lojas),
+        frase=dom_painel.frase_resumo(
+            tecnico=run.tecnico_filtro or "",
+            total_intervencoes=resumo.get("total_intervencoes", 0),
+            lojas=lojas,
+            evitados=evitados,
+            cronicos=len(cronicos),
+        ),
+        evitados=evitados,
+        grafico_antes_depois=_grafico_antes_depois(dom_painel.antes_depois_geral(lojas)),
+        grafico_tendencia=_grafico_tendencia(dom_painel.semanas(intervencoes)),
     )
     return render_template("bi/index.html", **contexto)
 
